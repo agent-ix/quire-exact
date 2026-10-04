@@ -20,7 +20,7 @@ Scope: FR-090-AC-11.
 
 ## Expected Results
 
-- Step 1 finds no a `PreconditionFalse` variant.
+- Step 1 finds no `PreconditionFalse` variant.
 
 ## Status
 

@@ -20,7 +20,7 @@ Scope: FR-090-AC-12.
 
 ## Expected Results
 
-- Step 1 finds no an `AbsentKey` variant.
+- Step 1 finds no `AbsentKey` variant.
 
 ## Status
 

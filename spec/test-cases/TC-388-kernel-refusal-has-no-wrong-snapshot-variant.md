@@ -20,7 +20,7 @@ Scope: FR-090-AC-7.
 
 ## Expected Results
 
-- Step 1 finds no a variant whose payload is a wrong-snapshot cause.
+- Step 1 finds no variant whose payload is a wrong-snapshot cause.
 
 ## Status
 
