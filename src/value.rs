@@ -303,7 +303,8 @@ pub enum Value {
     Quantity(Quantity),
     /// A text value of its declared type.
     Text(Text),
-    /// A bare enum member identity and its canonical rank.    Enum(EnumMember),
+    /// A bare enum member identity and its canonical rank.
+    Enum(EnumMember),
     /// An opaque population admission identity (FR-089): never the population binding itself, which
     /// stays a caller's model type.
     Population(PopulationId),
