@@ -527,7 +527,7 @@ mod tests {
 
         let text = TextType::new(1, 8, TextProfile::Nfc).unwrap();
         assert!(
-            matches!(&Refusal::TextLengthOutOfDomain { target: text.clone() }, Refusal::TextLengthOutOfDomain { target } if *target == text)
+            matches!(&Refusal::TextLengthOutOfDomain { target: text }, Refusal::TextLengthOutOfDomain { target } if *target == text)
         );
 
         let flags = IeeeFlags::EMPTY;
