@@ -76,3 +76,4 @@ or by narrowing the AC to what is tested. FND-004 and FND-005 are low.
 | FND-004 | fixed | 02bd366 |
 | FND-005 | fixed | 02bd366 |
 | FND-006 | still-open | New this round: the tautological target test and its AC clause need deleting, or an explicit accept from the lead. |
+| FND-006 | fixed | b68b2f3 |

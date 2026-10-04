@@ -73,3 +73,4 @@ because they touch the workflow.
 | FND-004 | deferred | Awaiting owner: confirm clearance for the ci.yml edit. Not a merge blocker under the no-CI policy (local make ci is the gate). |
 | FND-005 | deferred | Closes when QSL's Part B of IR-582 lands (same PR series): QSL takes the git dependency and deletes quire-exact/. Verify by a 404 at QSL's quire-exact/ path. |
 | FND-006 | still-open | New this round: the three broken comments at accounting.rs:266-267,623 and value.rs:25 need rejoining. |
+| FND-006 | fixed | b68b2f3 |
