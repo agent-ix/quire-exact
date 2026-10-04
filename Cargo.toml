@@ -7,15 +7,36 @@ description = "The exact-value kernel: checked identity, typestate, outcome and 
 authors = ["Agent IX <peter@agent-ix.ai>"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/agent-ix/quire-exact"
+publish = false
 
 [lib]
 name = "quire_exact"
 path = "src/lib.rs"
 
+[features]
+# The ordered charge log (`Meter::admitted_charges`). A production
+# meter keeps a count only; tests that assert exact charge sequences enable
+# this through a dev-dependency, which resolver 2 turns on only for test
+# builds. A normal or build dependency must never enable it.
+test-support = []
+
 [dependencies]
+num-bigint = { version = "0.4.8", default-features = false }
+num-integer = { version = "0.1.47", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }
+thiserror = { version = "2.0.20", default-features = false }
+unicode-normalization = { version = "0.1.25", default-features = false }
 
 [dev-dependencies]
+ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", branch = "main" }
 
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "deny"
