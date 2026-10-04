@@ -547,8 +547,8 @@ mod tests {
         ));
 
         let domain = DecimalType::new(
-            Integer::from(-100),
-            Integer::from(100),
+            Integer::from(-100_i64),
+            Integer::from(100_i64),
             0,
             2,
             crate::decimal::RoundingMode::Exact,

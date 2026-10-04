@@ -1995,7 +1995,10 @@ mod tests {
         on_small_stack(|| {
             let (_, value) = deep_value();
             let clone = value.clone();
-            assert!(value == clone);
+            assert_eq!(
+                crate::key::compare_keys(&value, &clone),
+                Some(core::cmp::Ordering::Equal)
+            );
             drop(value);
             drop(clone);
         });
