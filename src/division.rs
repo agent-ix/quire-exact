@@ -3,15 +3,10 @@
 //! `mod`, and atomic pair admission with the named integer-division and
 //! integer-modulus charges.
 //!
-//! Ported from QSL `value::division`, dropping the I13 negotiation surface
-//! entirely: `IntegerDivisionBounds`/`IntegerDivisionConsumer`/
-//! `IntegerDivisionDisposition`/`negotiate_integer_division` decide, ahead
-//! of and independent of evaluation, whether a *backend* can execute a
-//! division item at all -- a QSL `definition`-package capability-negotiation
-//! concept, not a kernel operation. [`divide`]'s signature is adapted to
-//! match: it takes the selected [`DivisionProfile`] directly, in place of
-//! the original `&AdmittedIntegerDivision` (a QSL `definition` type wrapping
-//! that same profile plus the now-dropped negotiation state).
+//! Whether a *backend* can execute a division item at all is decided ahead of
+//! and independent of evaluation; that capability negotiation is not a kernel
+//! operation and is not here. [`divide`] takes the selected [`DivisionProfile`]
+//! directly.
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::integer::{Integer, IntegerDomain, IntegerInterval};

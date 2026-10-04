@@ -1,23 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! O-13/T-6 bare quantity values: a magnitude in a unit, with no unit graph.
+//! Bare quantity values: a magnitude in a unit, with no unit graph.
 //!
-//! ADR-013 T-6: "Quantity payload→magnitude+UnitId, with no reference to
-//! quantity declarations." This is a **fresh, minimal design**, not a port
-//! of QSL `value::quantity`: the original `QuantityUnit`/`Quantity` carry a
-//! unit graph (dimension, composed conversion factors and offsets, edge
-//! traversal for `convert_quantity`) so that quantities in *different but
-//! compatible* units can be added, compared or converted. None of that graph
-//! is a kernel type -- it is QSL's own unit declarations. The kernel
-//! `Quantity` therefore only supports operations between quantities already
-//! in the *same* unit; converting first to a common unit, when the units
-//! differ but are compatible, is QSL's job, done above this module with the
-//! unit graph it holds and the kernel isn't given.
+//! A quantity is a `(magnitude, UnitId)` pair with no reference to quantity
+//! declarations. No unit graph (dimension, composed conversion factors and
+//! offsets, edge traversal) is a kernel type; it belongs to the caller's unit
+//! declarations. The kernel `Quantity` therefore only supports operations
+//! between quantities already in the *same* unit; converting first to a common
+//! unit, when the units differ but are compatible, is the caller's job, done
+//! above this module with the unit graph it holds.
 //!
-//! This is a real capability loss at the kernel boundary (no
-//! cross-unit arithmetic, comparison or equality), not an oversight --
-//! flagged for review alongside the identical Enum-ordering and
-//! Reference-identity cuts in `crate::value`'s and `crate::key`'s module doc
-//! comments.
+//! This is a deliberate capability limit at the kernel boundary (no cross-unit
+//! arithmetic, comparison or equality), mirroring the Enum-ordering and
+//! Reference-identity limits in `crate::value`'s and `crate::key`'s module docs.
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::comparison::{ComparisonOperator, IllTyped, IllTypedCause};
@@ -100,7 +94,7 @@ pub enum QuantityArithmetic<'a> {
 }
 
 /// Compare two quantities in the same unit: `ordering.operands`,
-/// `ordering.arithmetic`, then `ordering.result-retain` (H-5: this is the
+/// `ordering.arithmetic`, then `ordering.result-retain` (the
 /// same metered shape as `crate::numeric::order_numbers`'s `Rationals` arm,
 /// over the same magnitude comparison -- comparing two quantities is
 /// otherwise an unmetered `Rational::cmp`, whose cross-multiplication cost
@@ -203,8 +197,8 @@ mod tests {
 
     /// same-unit quantities compare under a generous meter, and a
     /// meter with no `integer_bits` left cannot admit `ordering.operands`,
-    /// so the same comparison returns `Outcome::Incomplete` instead (H-5's
-    /// added metering, proved end to end).
+    /// so the same comparison returns `Outcome::Incomplete` instead
+    /// (the metering, proved end to end).
     #[trace("QSpec-TC-187", "QSpec-FR-142-AC-7")]
     #[test]
     fn tc_345_compare_quantity_charges_and_a_tight_meter_is_incomplete() {

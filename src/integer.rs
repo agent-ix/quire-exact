@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Mathematical integers and explicit inclusive integer domains (AD-005, FR-147).
+//! Mathematical integers and explicit inclusive integer domains (QSpec FR-147).
 //!
 //! `Integer` is unbounded. A finite consumer never narrows it: membership in an
 //! [`IntegerInterval`] is an explicit admission that either returns a
 //! [`BoundedInteger`] or refuses.
 //!
-//! Ported verbatim from QSL `value::integer` as part of QSL#213 S-1
-//! (ADR-011 X-1); no edge needed cutting.
-//!
-//! 17 `Integer`/`IntegerInterval` methods are widened from
-//! `pub(crate)` to `pub`: [`abs`](Integer::abs), [`pow`](Integer::pow),
+//! Seventeen `Integer`/`IntegerInterval` methods are `pub` so a caller above this
+//! crate can use them: [`abs`](Integer::abs), [`pow`](Integer::pow),
 //! [`split_factor_two`](Integer::split_factor_two),
 //! [`shifted_left`](Integer::shifted_left), [`add`](Integer::add),
 //! [`sub`](Integer::sub), [`mul`](Integer::mul), [`neg`](Integer::neg),
@@ -19,24 +16,7 @@
 //! [`power_of_ten`](Integer::power_of_ten),
 //! [`power_product_bits`](Integer::power_product_bits),
 //! [`spanning`](IntegerInterval::spanning), [`from_big`](Integer::from_big)
-//! and [`as_big`](Integer::as_big), since QSL's own byte-identical
-//! `value::integer` is deleted and its callers repointed at this module,
-//! now a separate crate from theirs. Each was verified against a real call
-//! site by reverting it alone to `pub(crate)` and recompiling
-//! `quire-spec-language` `--workspace --all-targets --all-features`: 151
-//! real `E0624` errors across the 17, one compile per method in isolation
-//! so no error could be a cascade from another reverted method in the same
-//! expression. The complete caller set, one compile's error locations
-//! unioned across all 17 isolated reverts: `model::population`,
-//! `value::accounting`, `value::collection`, `value::composite`,
-//! `value::decimal`, `value::division`, `value::equality`,
-//! `value::expression::check`, `value::expression::evaluate`,
-//! `value::expression::facts`, `value::ieee`, `value::numeric`,
-//! `value::quantity`, `value::rational` and `value::unit` -- 15 modules.
-//! (`forms::syntax`, `model::conformance`, `value::semantic_node`,
-//! `value::expression::ir` and `value::expression::refusal` also import
-//! `Integer`/`IntegerInterval`, but only as a type, never calling one of
-//! these 17 methods, so reverting any of the 17 alone never errors there.)
+//! and [`as_big`](Integer::as_big).
 
 use core::fmt;
 use core::num::NonZeroU32;
@@ -467,7 +447,7 @@ mod tests {
 
     /// `IntegerInterval::admit` accepts a value inside the declared
     /// domain, and `BoundedInteger` reports back the exact value and domain
-    /// that admitted it (ADR-013 O-21 kernel bound value type).
+    /// that admitted it.
     #[test]
     fn tc_329_bounded_integer_admits_within_domain() {
         let domain = IntegerInterval::new(Integer::zero(), Integer::from(10_u64)).unwrap();

@@ -2,10 +2,10 @@
 //! Bounded collection kinds: metered construction and the canonical order.
 //!
 //! A collection type `K<T>[min, max]` includes its bound, and `K<T>` with no
-//! bound is a different, unbounded type (ADR-014 N-3, QSpec FR-144). An
+//! bound is a different, unbounded type. An
 //! unbounded collection's construction never refuses for cardinality: it
 //! still charges `collection.bound`, and stops only when the caller's meter
-//! does (ADR-014 §8). Construction
+//! does. Construction
 //! charges the `quire.value.accounting/v1` collection family: one
 //! `collection.element` before each element expression; for a set, bag or
 //! ordered set, one `collection.member-walk` and `collection.member-test`
@@ -16,23 +16,19 @@
 //! ascending canonical-key order (a bag listing each occurrence), which is
 //! its canonical representation and visiting order.
 //!
-//! Ported from QSL `value::collection` with imports repointed at this
-//! crate's modules; [`from_admitted`] is widened from `pub(crate)` to `pub`
-//! since its caller (QSL's own `model::population::all_instances`, which
-//! this comment used to name directly) is now a separate crate.
+//! [`from_admitted`] is `pub` for a caller that has already admitted its
+//! members.
 //!
-//! Two more trusted, no-recheck primitives are widened
-//! from `pub(crate)` to `pub`, each as an `Outcome`-returning wrapper around its
-//! existing `Stop`-based body (the same split [`form_grouped`] already used):
-//! [`form`] (QSL's `value::expression::evaluate` `Machine` builds occurrences
-//! from a checked, already-typed expression and forms them with no
-//! re-admission check) and [`member_equal`] (the same `Machine` needs one
-//! charged membership comparison for `Contains`, under these same
-//! `collection.member-walk`/`collection.member-test` charge points). Neither
-//! kernel `Stop` (this crate's own private early-exit carrier) nor
+//! Two more trusted, no-recheck primitives are `pub`, each an
+//! `Outcome`-returning wrapper around its `Stop`-based body (the same split
+//! [`form_grouped`] uses): [`form`] (an evaluator builds occurrences from a
+//! checked, already-typed expression and forms them with no re-admission check)
+//! and [`member_equal`] (one charged membership comparison for `Contains`, under
+//! the same `collection.member-walk`/`collection.member-test` charge points).
+//! Neither kernel `Stop` (this crate's private early-exit carrier) nor
 //! `bound_and_retain`/`coalesce`/`sort_by_key` (their private helpers) are
-//! exposed: QSL adapts the `Outcome` return with its own `value::stop`
-//! helpers, the same way it already adapts [`form_grouped`].
+//! exposed: a caller adapts the `Outcome` return with its own helpers, the same
+//! way it adapts [`form_grouped`].
 
 use alloc::sync::Arc;
 use alloc::{boxed::Box, vec::Vec};
@@ -137,7 +133,7 @@ impl CardinalityBound {
 /// and bound are all equal, so bound presence is part of type identity
 /// (QSpec FR-144-AC-13).
 ///
-/// An absent bound means unbounded (ADR-014 §2), never "unspecified".
+/// An absent bound means unbounded, never "unspecified".
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CollectionType {
     kind: CollectionKind,
@@ -325,7 +321,7 @@ pub fn form_collection(
 /// `collection_type`'s element type; nothing here re-checks it. An
 /// occurrence outside the element type is kept as it is, and a sequence's
 /// occurrences are not compared at all. [`form_collection`] is the checked
-/// alternative. `pub`: QSL's expression evaluator's `Machine` forms
+/// alternative. `pub` so an evaluator can form
 /// occurrences of a checked, already-evaluated expression.
 pub fn form(
     collection_type: &CollectionType,
@@ -359,7 +355,7 @@ fn form_stop(
 /// (for a set or ordered set) or grouped equal occurrences (for a bag), so
 /// no membership comparison is charged: `collection.bound`, the bound
 /// check, canonical order and `collection.result-retain`. `pub`, not
-/// `pub(crate)`: its caller (QSL's own expression evaluator, which decides
+/// `pub(crate)`: its caller (an evaluator, which decides
 /// *when* occurrences are already grouped -- e.g. a comprehension's own
 /// iteration order) is a separate crate from this one.
 pub fn form_grouped(
@@ -389,8 +385,8 @@ fn bound_and_retain(
     meter.charge(
         Charge::new(ChargePoint::CollectionBound).size(LimitKind::ValueOccurrences, count),
     )?;
-    // An unbounded collection type has no cardinality to violate (ADR-014
-    // §8, QSpec FR-144-AC-12); the charge above still applies.
+    // An unbounded collection type has no cardinality to violate (QSpec
+    // FR-144-AC-12); the charge above still applies.
     if let Some(bound) = collection_type.bound {
         if let Some(violation) = bound.violation(count) {
             return Err(Stop::Refused(Refusal::CardinalityOutOfBound {
@@ -454,7 +450,7 @@ fn coalesce(
 
 /// One charged membership comparison of candidate `c` with member `m`,
 /// under `collection.member-walk`/`collection.member-test`. `pub`, not
-/// `pub(crate)`: its caller (QSL's own expression evaluator's `Machine`,
+/// `pub(crate)`: its caller (an evaluator,
 /// for `Contains`) is a separate crate from this one.
 pub fn member_equal(candidate: &Value, member: &Value, meter: &mut Meter) -> Outcome<bool> {
     Outcome::from_stop(member_equal_stop(candidate, member, meter))
@@ -565,7 +561,7 @@ mod tests {
             .collect()
     }
 
-    /// TC-441 (ADR-014 N-3, §8; QSpec FR-144-AC-12, AC-13): an unbounded
+    /// TC-441: an unbounded
     /// `Sequence<Integer>` admits a collection of any size with no
     /// cardinality refusal, where the same elements under `[0, 1]` refuse;
     /// `K<T>` and `K<T>[0, u64::MAX]` are different types.
@@ -608,7 +604,7 @@ mod tests {
         ));
     }
 
-    /// TC-441 (ADR-014 §8, B-2): an unbounded collection still charges
+    /// TC-441: an unbounded collection still charges
     /// `collection.bound`, and stops with `Incomplete` naming that charge
     /// point only when the caller's meter runs out, never with a
     /// cardinality refusal.

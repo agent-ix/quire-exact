@@ -7,32 +7,21 @@
 //! `unicode-normalization` table version. No locale, case folding, collation
 //! or grapheme segmentation is applied.
 //!
-//! Ported from QSL `value::text` as part of QSL#213 S-1 (ADR-011 X-1). One
-//! cut (M-6): `TextPayload::from_source_literal`/`InvalidTextLiteral`,
-//! which decoded a complete quoted source literal's JSON string escapes,
-//! are dropped. Decoding a source-lexer literal spelling is a source-stage
-//! concern, not an O-13 value concern, and nothing in this crate called it
-//! (only its own now-removed tests did) -- QSL's own lexer/parser is
-//! already the right place to decode a literal's escapes before handing
-//! this crate the resulting scalar sequence via [`TextPayload::from_utf8`].
-//! [`TextProvenance::SourceLiteral`] itself is unaffected and still directly
-//! constructible: recording that a payload came from a source literal, and
-//! which one, is a real kernel-observable fact; only the JSON-based decode
-//! convenience was QSL's job, not the kernel's.
-//!
-//! QSL's own `value::text` engine copy (`admit_text`,
-//! `compare_text`, `Text`, `TextPayload` all port verbatim, unchanged from
-//! S-1) is deleted. Its test-only JSON decode helper still needs to tag a decoded
-//! literal with `SourceLiteral` provenance, and `TextPayload`'s fields are
-//! private, so [`TextPayload::from_source_literal`] adds that one
-//! constructor back -- infallible, over an already-decoded `text`, with no
-//! JSON dependency in this crate.
+//! Decoding a source-lexer literal spelling's escapes is a source-stage
+//! concern, not a value concern, so it is not here: the caller decodes a
+//! literal's escapes before handing this crate the resulting scalar sequence
+//! via [`TextPayload::from_utf8`]. [`TextProvenance::SourceLiteral`] is still
+//! directly constructible: recording that a payload came from a source
+//! literal, and which one, is a kernel-observable fact.
+//! [`TextPayload::from_source_literal`] tags an already-decoded `text` with
+//! `SourceLiteral` provenance -- infallible, with no JSON dependency in this
+//! crate.
 //!
 //! [`TextProfile::length`], [`TextProfile::order`], [`TextType::admits`] and
 //! [`NormalizationForm::apply`] are `pub`. Each is a pure predicate or
 //! streaming decode over an already-retained/admitted sequence; none charges
 //! or materializes anything unmetered, so exposing them exposes no
-//! unmetered-arithmetic risk (the #330 precedent). `apply` returns `impl Iterator<Item = char>`, not
+//! unmetered-arithmetic risk. `apply` returns `impl Iterator<Item = char>`, not
 //! its concrete `Normalized` enum: that enum stays private to this module,
 //! so `unicode_normalization`'s own `Recompositions`/`Decompositions` types
 //! never appear in this crate's public API.
@@ -297,11 +286,10 @@ impl TextPayload {
     /// literal `spelling` it came from.
     ///
     /// Decoding a source-lexer literal's escapes (JSON string
-    /// grammar) stays a QSL source-stage concern, per this module's own
+    /// grammar) stays a source-stage concern, per this module's own
     /// doc -- this constructor takes the already-decoded `text`, so no
-    /// decode step or fallible path exists here. `quire_spec_language`'s
-    /// test-only decode helper calls this after it validates and decodes a
-    /// literal's escapes itself.
+    /// decode step or fallible path exists here. A caller calls this after it validates and decodes a literal's escapes
+    /// itself.
     pub fn from_source_literal(text: impl Into<Box<str>>, spelling: impl Into<Box<str>>) -> Self {
         Self {
             text: text.into(),

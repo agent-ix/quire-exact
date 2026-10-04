@@ -10,17 +10,12 @@
 //! sticky bit for `sqrt`) and rounds exactly once. No host floating-point
 //! value or operation exists anywhere on this path.
 //!
-//! Cut from QSL `value::ieee`: package admission (`AdmittedIeeeProfile`,
-//! `DefinitionLock::admit_ieee_profile`, `invalid_package`) and I13 backend
-//! negotiation (`IeeeBackendCapabilities`/`IeeeItemRequirement`/
-//! `IeeeUnsupportedCause`/`IeeeDisposition`/`negotiate_ieee`) both depend on
-//! QSL's `definition` package-catalog module, not a kernel type, and both
+//! Package admission of an IEEE profile and backend capability negotiation both
 //! decide something ahead of and independent of evaluation (which profile a
-//! checked package retains; whether a backend can execute an item at all) --
-//! not a kernel operation. [`evaluate_ieee`]/[`compare_ieee`]/
-//! [`convert_ieee_width`]/[`ieee_to_exact`]/[`exact_to_ieee`] each dropped
-//! their now-meaningless `_profile: &AdmittedIeeeProfile` parameter; every
-//! other item ports verbatim.
+//! checked package retains; whether a backend can execute an item at all), so
+//! neither is a kernel operation and neither is here. [`evaluate_ieee`],
+//! [`compare_ieee`], [`convert_ieee_width`], [`ieee_to_exact`] and
+//! [`exact_to_ieee`] take no profile parameter.
 
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::cmp::Ordering;
@@ -41,7 +36,7 @@ pub const IEEE_DEFINITION: &str = "quire.value.ieee754-2019-default/v1";
 
 /// A declared `Float32[mode]`/`Float64[mode]` type: the interchange width and
 /// the rounding spelling that is part of the type (QSpec FR-322 pins
-/// `rounding` for `float32`/`float64` by operand type; FR-091-OQ-4). A bare
+/// `rounding` for `float32`/`float64` by operand type). A bare
 /// `Float32`/`Float64` is strict [`RoundingMode::Exact`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FloatType {
@@ -1739,7 +1734,7 @@ mod tests {
         assert!(!one.is_nan());
     }
 
-    /// (H-7/H-8): `1.0 + 1.0` under `NearestEven` completes to the
+    /// `1.0 + 1.0` under `NearestEven` completes to the
     /// canonical binary64 `2.0` bit pattern with no flags raised
     /// (`evaluate_ieee` had no test before this).
     #[test]
@@ -1757,7 +1752,7 @@ mod tests {
         assert_eq!(result.flags(), IeeeFlags::EMPTY);
     }
 
-    /// (H-7/H-8): `compare_ieee` finds two identical bit patterns
+    /// `compare_ieee` finds two identical bit patterns
     /// `NumericEqual`, and cross-width operands are ill-typed before any
     /// charge (`compare_ieee` had no test before this).
     #[test]
@@ -1773,7 +1768,7 @@ mod tests {
         assert!(compare_ieee(IeeeComparison::NumericEqual, one64, one32, &mut meter).is_err());
     }
 
-    /// (H-7/H-8): explicitly converting binary64 `1.0` to binary32
+    /// Explicitly converting binary64 `1.0` to binary32
     /// under `NearestEven` produces the canonical binary32 `1.0` bit
     /// pattern with no flags raised (`convert_ieee_width` had no test
     /// before this).
@@ -1792,7 +1787,7 @@ mod tests {
         assert_eq!(result.flags(), IeeeFlags::EMPTY);
     }
 
-    /// (H-7/H-8): converting finite binary64 `1.0` to a generous
+    /// Converting finite binary64 `1.0` to a generous
     /// `Rational[..]` target produces the exact `1/1`, and a NaN is
     /// undefined rather than converted (`ieee_to_exact` had no test before
     /// this).

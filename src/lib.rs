@@ -1,100 +1,53 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `quire-exact`: the QSL kernel row (QSL#213 S-1, ADR-011 X-1, ADR-013 §7
-//! S-1).
+//! `quire-exact`: the exact-value kernel, a `no_std` + `alloc` leaf that
+//! depends on no other crate in the quire ecosystem.
 //!
-//! This crate is the AD-016/ADR-011 module-DAG leaf layer `K`: checked
-//! identity ([`NodeKey`] and the seven opaque digest identities, such as
-//! [`EffectiveId`]), provenance ([`Location`]), kernel outcomes and refusals
-//! ([`Outcome`], [`Refusal`]), bounds and accounting ([`Meter`],
-//! [`BoundedInteger`], [`CardinalityBound`]), and the exact semantic value
-//! kernel ([`Value`]/[`ValueType`] and every value-family module it
-//! composes: `numeric`, `rational`, `decimal`, `text`, `ieee`, `division`,
-//! `comparison`, `equality`, `key`, `quantity`, `reference`). Every
-//! submodule is private; this crate's public surface is exactly this page's
-//! curated `pub use` facade (H-5, mirroring `src/value/mod.rs`'s own
-//! private-submodules-behind-re-exports pattern), so the module names above
-//! are plain text, not links.
+//! The crate holds checked identity ([`NodeKey`] and the seven opaque digest
+//! identities, such as [`EffectiveId`]), provenance ([`Location`]), kernel
+//! outcomes and refusals ([`Outcome`], [`Refusal`]), bounds and accounting
+//! ([`Meter`], [`BoundedInteger`], [`CardinalityBound`]), and the exact
+//! semantic value kernel ([`Value`]/[`ValueType`] and every value-family
+//! module it composes: `numeric`, `rational`, `decimal`, `text`, `ieee`,
+//! `division`, `comparison`, `equality`, `key`, `quantity`, `reference`).
+//! Every submodule is private; the public surface is exactly the curated
+//! `pub use` facade on this page, so the module names above are plain text,
+//! not links.
 //!
-//! It depends on nothing else in the `quire-spec-language` workspace (ADR-011
-//! §6.1, §7.1: every crate-DAG edge points *into* this crate, never out of
-//! it), and on no wire format, hashing or JCS canonicalization crate: every
-//! digest identity here ([`NodeKey`] and the seven digest identities,
-//! [`EffectiveId`], [`UniverseId`], [`ObjectId`], [`UnitId`], [`VariantId`],
-//! [`MemberId`], [`PopulationId`]) is minted by wrapping an already-computed
-//! digest -- through its one public `from_digest` constructor, or for the
-//! two-domain [`UnitId`] through its one constructor per domain (ADR-013
-//! T-6, QC-22) -- never by hashing internally.
+//! It depends on no wire format, hashing or canonicalization crate. Every
+//! digest identity ([`NodeKey`], [`EffectiveId`], [`UniverseId`],
+//! [`ObjectId`], [`UnitId`], [`VariantId`], [`MemberId`], [`PopulationId`])
+//! is minted by wrapping an already-computed digest, through its one public
+//! `from_digest` constructor (the two-domain [`UnitId`] has one constructor
+//! per domain), and never by hashing internally.
 //!
 //! [`Value`]/[`ValueType`]: `ValueType::admits` never pairs
 //! `ValueType::Population(Option<u64>)` with `Value::Population(PopulationId)`
-//! (ADR-013 O-13 Population row, QC-21, FR-089). This is not a capability
-//! loss: FR-089-AC-5's declared-maximum comparison is a QSL-layer check --
-//! the model/evaluator resolves a `PopulationId` to its binding and compares
-//! the binding's own declared maximum there, work this leaf crate has no way
-//! to do -- so kernel `admits` refuses every population pair outright,
-//! falling through to its catch-all and returning `false` (the
-//! `ValueType::Enum` shape, by contrast, carries its variant set inline per
-//! ADR-013 O-14, so it needs no declaration lookup at all).
+//! (FR-089-AC-6). A population identity resolves to its declared maximum only
+//! in a layer that holds the correspondence, which this leaf does not, so
+//! kernel `admits` refuses every population pair outright. The
+//! `ValueType::Enum` shape, by contrast, carries its variant set inline, so it
+//! needs no declaration lookup at all.
 //!
-//! Several real, deliberate capability losses at this kernel boundary are
-//! documented where they occur rather than silently absorbed:
+//! Some capabilities are deliberately left out of the kernel and documented
+//! where they occur:
 //! - the `key` and `equality` modules: `Value::Population` has no key and
-//!   compares under neither -- a population binding is a direct operand of
-//!   `allInstances`/`lookup` only, never an equality or key operand. (A
-//!   same-enum check *is* still available: `ValueType::Enum(EnumShape)`'s
-//!   admission already guarantees both operands share one enum's variant
-//!   set before either module ever runs, per ADR-013 O-14.)
+//!   compares under neither; a population binding is a direct operand of
+//!   `allInstances`/`lookup` only, never an equality or key operand. A
+//!   same-enum check is still available: `ValueType::Enum(EnumShape)`'s
+//!   admission already guarantees both operands share one enum's variant set
+//!   before either module runs.
 //! - [`Quantity`]: no cross-unit arithmetic, comparison or equality; only
 //!   same-unit operations.
 //! - the `equality` module: the top-level text/enum/quantity schedule
 //!   selection and the closed equality-conversion table are dropped along
 //!   with the declaration registry and unit graph they need.
 //!
-//! **The ADR-011 §2.3 kernel proof gate does not exist yet.** This crate
-//! ships with zero discharged propositions and no claimed-module list.
-//! `cargo kani` cannot run against this workspace at all today: Kani 0.67.0's
-//! bundled toolchain is `rustc 1.93.0-nightly`, while this workspace declares
-//! `rust-version = "1.98"`, and `cargo kani` separately fails on a
-//! dependency's own fixture `Cargo.toml`. Building the gate is tracked
-//! separately (QSL-130) and left to ADR-011 §2.3's own named enforcer, #219.
-//!
-//! **H-9: the kernel's value-semantics requirements are QSpec's,
-//! not this repo's `spec/`.** PR #254's review flagged that most of this
-//! crate's own tests trace to no requirement, and named the choice of
-//! home -- QSpec or this repo's `spec/` -- as undecided. It is decided now,
-//! and it was not really open: the FRs this crate's own module docs already
-//! cite for value semantics (`FR-140` decimals, `FR-141` text and
-//! enumerations, `FR-142` quantities and units, `FR-147` integer division,
-//! `FR-148` IEEE profiles) are `agent-ix/quire-specification` ids, and this
-//! repo already treats that crate as the owner: `Task-048`
-//! (`plan/Plan-013-complete-v1-delivery`) references exactly `FR-140`,
-//! `FR-141`, `FR-142`, `FR-147` and `FR-148`, and their QSpec `TC-185`
-//! through `TC-187`/`TC-192`/`TC-193`, as the acceptance evidence for this
-//! same scalar/numeric/text/enum/unit/IEEE kernel, and QSpec, not QSL's
-//! `spec/`, owns `FR-131` through `FR-153` outright (`spec/tests.md`,
-//! Requirements Traceability).
-//! Authoring a parallel FR/TC set in this repo's `spec/` for behavior QSpec
-//! already normatively defines would duplicate that ownership rather than
-//! resolve the gap (QSL never vendors specs -- graph by reference).
-//!
-//! What was actually missing is narrower than "no requirement": it is that
-//! most of *this crate's own* tests do not yet carry the two-argument
-//! `#[trace("QSpec-TC-NNN", "QSpec-FR-NNN-AC-n")]` form naming the QSpec id they verify,
-//! even where the module doc above them already names the owning FR. This is
-//! not the first binding against these QSpec FRs in this repo:
-//! `qsl-semantics/tests/it/integer_division.rs` (`DIV-01` to `DIV-13`)
-//! already traces `FR-147`'s division/modulus law and accounting ACs in
-//! depth, and `tests/it/text_enum_identity.rs` already traces `FR-141`'s
-//! text-profile and enumeration ACs in depth, both against central
-//! `TC-192`/`TC-186`. What is new here is only this crate's own kernel-level
-//! slice: `division`'s `tc_323_division_by_zero_is_undefined` now also
-//! carries `#[trace("QSpec-TC-192", "QSpec-FR-147-AC-2")]`, verified to fail (panic on
-//! an unguarded zero divisor) when the zero-divisor check is removed. A test
-//! carries a QSpec AC tag only where its own assertions, not merely its
-//! module doc's FR citation, distinguish the AC's claim from a wrong
-//! implementation (H1/H2). `division`'s Euclidean-`mod` test and `text`'s
-//! two bound tests do not (a floor-law `mod` and a byte-counted length both
-//! pass them too), so they carry no tag.
+//! Value-semantics requirements (decimals, text and enumerations, quantities
+//! and units, integer division, IEEE profiles) are owned by
+//! `agent-ix/quire-specification`. A test carries a `QSpec-` tagged AC only
+//! where its own assertions, not merely its module doc's citation, tell the
+//! AC's claim from a wrong implementation. The requirements this repository
+//! owns are in `spec/`.
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -127,36 +80,21 @@ mod reference;
 mod text;
 mod value;
 
-// H-5: every submodule above is private and its public surface is exposed
-// only through this curated facade, mirroring `src/value/mod.rs`'s pattern
-// (private `mod`s behind selective `pub use` re-exports) rather than
-// `pub mod` wholesale. `key::compare_keys` is `pub` and exported below:
-// QSL's evaluator groups adjacent equal elements with the kernel's own key,
-// so grouping and canonical sort cannot drift apart. `rational::
+// Every submodule above is private and its public surface is exposed only
+// through this curated facade (private `mod`s behind selective `pub use`
+// re-exports) rather than `pub mod` wholesale. `key::compare_keys` is `pub`
+// so a caller that groups adjacent equal elements uses the kernel's own key,
+// and grouping and canonical sort cannot drift apart. The decimal, rational,
+// numeric and equality helpers exported below (`rational::
 // divided_by_power_of_ten`/`divided_by_power_of_two`, `decimal::
 // DecimalRepresentation::to_rational`, `decimal::compare_shifted`,
 // `decimal::power_of_ten_bits`/`sbits`/`sdigits`, `decimal::DecimalType::
-// placement` with `Placement`/`Placed`/`Admitted`, `numeric::rational_arithmetic_bits`,
-// `decimal::DecimalLoss::exact`/`exact_denominator` and
-// `equality::plan_equality` are all `pub`
-// and exported below: each is unmetered exact arithmetic or comparison --
-// the same discipline `Integer`'s own arithmetic carries -- so a caller
-// charges or bounds its inputs before calling any of them.
-//
-// The ledger also moves the other direction: 17 `Integer`/
-// `IntegerInterval` inherent methods (`integer.rs`'s own module doc names
-// them) go from `pub(crate)` to `pub`, each verified against a real
-// cross-crate call site in `quire_spec_language` (revert each in isolation,
-// recompile `--workspace --all-targets --all-features`, confirm a genuine
-// `E0624` at that method's own real callers -- 151 across the 17, not the
-// 137 a first, non-isolated pass under-counted by masking 14 real call
-// sites across six methods behind a cascading error earlier in the same
-// expression (`add` +5, `neg` +3, `sub` +2, `mul` +2, `exact_div` +1,
-// `shifted_left` +1). `Integer`
-// and `IntegerInterval` were already exported below (this facade only
-// gates the type; an inherent method's own `pub`/`pub(crate)` is not listed
-// here separately) -- what changed is that their methods are now reachable
-// through that existing export, not merely from inside this crate.
+// placement` with `Placement`/`Placed`/`Admitted`,
+// `numeric::rational_arithmetic_bits`, `decimal::DecimalLoss::exact`/
+// `exact_denominator` and `equality::plan_equality`) are each unmetered exact
+// arithmetic or comparison, the same discipline `Integer`'s own arithmetic
+// carries, so a caller charges or bounds its inputs before calling any of
+// them.
 pub use accounting::{
     length_amount, Charge, ChargePoint, Incomplete, InjectedDenial, LimitKind, Meter, ScalarLimits,
 };

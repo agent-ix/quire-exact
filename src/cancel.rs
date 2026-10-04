@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Cancellation of a lifecycle operation (ADR-029 LC-3, FR-276).
+//! Cancellation of a lifecycle operation.
 //!
 //! [`Cancel`] is a cloneable handle the caller owns. Any clone can cancel it
 //! from any thread, with a [`CancelCause`]. The library reads no clock: a

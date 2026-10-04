@@ -7,13 +7,10 @@
 //! unavailable counter, in the order written in its definition row, returns
 //! [`Incomplete`] and nothing is consumed.
 //!
-//! Ported from QSL `value::accounting` as part of QSL#213 S-1 (ADR-011 X-1).
-//! This module has no cut relative to the source: every type here references
-//! only [`crate::integer::Integer`], which is itself a kernel type, so no
-//! edge needed cutting. The one adaptation is that `ScalarLimits` no longer
-//! derives `serde::Serialize`/`Deserialize` here: the kernel takes no wire
-//! dependency (ADR-011 layer K is a leaf), and its fields are `pub`, so the
-//! FR-323 wire-to-`ScalarLimits` conversion stays entirely QSL's job.
+//! Every type here references only [`crate::integer::Integer`], which is itself
+//! a kernel type. `ScalarLimits` does not derive `serde::Serialize`/`Deserialize`:
+//! the kernel takes no wire dependency, and its fields are `pub`, so a wire to
+//! `ScalarLimits` conversion is the caller's job.
 
 use crate::cancel::Cancel;
 use crate::integer::Integer;
@@ -270,14 +267,12 @@ pub enum ChargePoint {
     /// (FR-151, TC-196 D06).
     DispatchSelect,
     /// `declaration.check`: one checked-family declaration's own checking
-    /// work (PR #302 review finding 3) -- distinct from
+    /// work -- distinct from
     /// `FunctionCall`, which charges one *evaluated* call, not one
     /// *checked* declaration. Sized by the declaration's own preimage
-    /// field-write count (`crate::check::family::IdentityPreimageMetrics::
-    /// work_budget` in `quire-spec-language`); denied into a `Limit`
+    /// field-write count (a caller's identity-preimage metrics); denied into a `Limit`
     /// outcome naming the work-budget stage limit, never `Incomplete`
-    /// (`check` never returns `Incomplete`, ADR-012 §2's structured-outcome
-    /// row).
+    /// (`check` never returns `Incomplete`).
     DeclarationCheck,
     /// `graph.expand` (FR-107): one node enqueued by a `reaches`
     /// walk, its source included.
@@ -467,13 +462,8 @@ pub struct InjectedDenial {
 
 /// One exact `{ counter: amount }` charge vector.
 ///
-/// **`pub`.** Was `pub(crate)`: every consumer of this vector
-/// lived inside this crate until QSL's own `value::accounting` copy (the
-/// byte-identical duplicate this type replaces) was deleted and its call
-/// sites repointed here across the `quire-spec-language` crate boundary. Widened together with [`Meter::charge`]/[`Meter::charge_plan`]
-/// and [`length_amount`], each verified against real cross-crate call
-/// sites, the same standard established for the kernel's other
-/// widenings.
+/// **`pub`** so a caller outside this crate can read it, together with
+/// [`Meter::charge`]/[`Meter::charge_plan`] and [`length_amount`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Charge {
     point: ChargePoint,
@@ -666,12 +656,8 @@ impl Meter {
     /// Atomically admit `charge` or return the first unavailable counter in
     /// `ScalarLimitsV1` field order.
     ///
-    /// **`pub` (an export gap).** Was `pub(crate)`: QSL's own
-    /// `value::accounting::Meter::charge` call sites in `quire-spec-language`
-    /// now call this one directly, across the crate boundary, after `value::accounting` was deleted as a duplicate.
-    /// This closes FR-062-AC-5's `Incomplete`-half export gap:
-    /// `ValueFunctionFamily::evaluate` (`qsl-eval/src/value/expression/family.rs`)
-    /// charges its own `meter` parameter through this method, its one real
+    /// **`pub`**, so a caller outside this crate can charge its own `meter`
+    /// parameter through this method, its one real
     /// cross-crate caller for that purpose.
     pub fn charge(&mut self, mut charge: Charge) -> Result<(), Incomplete> {
         let point = charge.point;
@@ -777,11 +763,10 @@ mod tests {
     }
 
     /// a charge within every limit is admitted, and the high-water
-    /// counter it names records the charged size. L-1: also proves a
+    /// counter it names records the charged size. Also proves a
     /// cumulative counter (`work_units`) accumulates across charges rather
-    /// than only ever recording one charge's amount, the one H-8 sub-claim
-    /// that had not landed -- every other counter assertion in this crate is
-    /// single-charge high-water.
+    /// than only ever recording one charge's amount, every other counter assertion
+    /// in this crate is single-charge high-water.
     #[test]
     fn tc_327_charge_within_limits_is_admitted() {
         let mut meter = Meter::new(tight_limits());

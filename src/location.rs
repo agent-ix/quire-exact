@@ -1,41 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! O-07/T-5 source occurrence identity: `Origin` and `Location`.
+//! Source occurrence identity: `Origin` and `Location`.
 //!
-//! ADR-013 T-5 states the kernel provenance shape plainly: `Origin`/
-//! `Location` "names a node id and occurrence key and carries no bytes".
-//! ADR-013 O-07 gives the occurrence key itself: `(NodeKey, role, ordinal)`.
-//!
-//! This is a **fresh design**, not a port. The existing QSL type of the same
-//! name (`value::expression::refusal::{Origin, Location}`) is an
-//! expression-tree path used to report where inside an expression evaluation
-//! went wrong; it is unrelated to this one and stays in `value::expression`.
-//! This module's `Origin`/`Location` are the kernel provenance pair O-07/T-5
-//! actually describe: which source occurrence of which checked node a value
-//! or outcome traces back to.
+//! The kernel provenance shape names a node id and an occurrence key and carries
+//! no bytes. The occurrence key is `(NodeKey, role, ordinal)`. `Origin` and
+//! `Location` say which source occurrence of which checked node a value or
+//! outcome traces back to.
 //!
 //! `Role` is a lexical-string newtype rather than a closed enum: the set of
-//! occurrence roles ("declaration", "reference", "default", ...) is QSL's
-//! preimage schema's to define and extend, and the kernel takes no position
-//! on which roles exist -- it only carries the role QSL attached.
+//! occurrence roles ("declaration", "reference", "default", ...) is the caller's
+//! preimage schema's to define and extend, and the kernel takes no position on
+//! which roles exist -- it only carries the role the caller attached.
 //!
-//! **M-3: `Role`'s `String` has no length bound.** This is deliberate, not
-//! an oversight left alongside the other `pub(crate)`-or-metered H-5
-//! findings: a role's spelling is a small, fixed vocabulary word that
-//! QSL's own preimage schema names at check time (`node-identity-
-//! preimage.schema.json`), not a value materialized from caller-supplied,
-//! runtime-metered evaluation input the way a `Decimal`'s scale or a
-//! `Text`'s bytes are. Nothing on any evaluation path constructs a `Role`
-//! from adversarial input, so it takes no charge and needs no bound the way
-//! [`crate::Meter`]-charged materializations do.
+//! **`Role`'s `String` has no length bound.** This is deliberate: a role's
+//! spelling is a small, fixed vocabulary word that the caller's preimage schema
+//! names at check time (`node-identity-preimage.schema.json`), not a value
+//! materialized from caller-supplied, runtime-metered evaluation input the way a
+//! `Decimal`'s scale or a `Text`'s bytes are. Nothing on any evaluation path
+//! constructs a `Role` from adversarial input, so it takes no charge and needs no
+//! bound the way [`crate::Meter`]-charged materializations do.
 
 use alloc::string::String;
 use core::fmt;
 
 use crate::node::NodeKey;
 
-/// A source occurrence's role, as QSL's preimage schema names it (e.g.
+/// A source occurrence's role, as the caller's preimage schema names it (e.g.
 /// `"declaration"`, `"reference"`). The kernel does not enumerate roles; it
-/// carries whichever lexical role string QSL attached to the occurrence.
+/// carries whichever lexical role string the caller attached to the occurrence.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Role(String);
 
@@ -69,7 +60,7 @@ impl From<String> for Role {
     }
 }
 
-/// A source occurrence key within one checked node (ADR-013 O-07): a role
+/// A source occurrence key within one checked node: a role
 /// and an ordinal disambiguating repeated occurrences of that role on the
 /// same node (e.g. the third `"reference"` occurrence).
 ///
@@ -98,7 +89,7 @@ impl Origin {
     }
 }
 
-/// A full source location (ADR-013 T-5): which checked node, and which
+/// A full source location: which checked node, and which
 /// occurrence within it. Names a node id and an occurrence key; carries no
 /// bytes of its own.
 ///
@@ -139,7 +130,7 @@ mod tests {
 
     /// two locations naming the same node and the same
     /// `(role, ordinal)` occurrence are equal; a different ordinal makes
-    /// them distinct (ADR-013 O-07).
+    /// them distinct.
     #[test]
     fn tc_305_location_equality_follows_node_and_occurrence() {
         let node = NodeKey::from_digest(digest(1));
@@ -150,7 +141,7 @@ mod tests {
         assert_ne!(a, c);
     }
 
-    /// (H-7/H-8, strengthened): `Origin`'s derived `Ord` orders
+    /// `Origin`'s derived `Ord` orders
     /// first by role, then by ordinal within the same role -- the field
     /// order the derive relies on, exercised rather than merely round-
     /// tripped through the accessors.

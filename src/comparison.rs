@@ -5,9 +5,6 @@
 //! An [`IllTyped`] comparison is `refused { code: ill_typed }` at type checking;
 //! it is not a peer [`crate::outcome::Outcome`] and consumes no charge.
 //!
-//! Ported verbatim from QSL `value::comparison` as part of QSL#213 S-1
-//! (ADR-011 X-1); no edge needed cutting.
-//!
 //! [`ComparisonOperator::holds`] is `pub`: it is a pure decision over an
 //! already-computed `Ordering`, so exposing it exposes no unmetered
 //! computation.

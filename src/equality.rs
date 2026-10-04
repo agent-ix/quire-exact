@@ -1,31 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! O-13 occurrence-pair equality planning.
+//! Occurrence-pair equality planning.
 //!
-//! Ported from QSL `value::equality`, trimmed to the operand-agnostic
-//! occurrence-pair plan: [`plan_pairs`], [`plan_equality`], `planned_equality`
-//! and [`EqualityPlan`]. Everything the original module built on top of that
-//! plan is dropped, because it needs the declaration registry
-//! (`TypeEnvironment::check_equality`, `contains_ieee`), the original
-//! declaration-aware `EnumValue`'s ordering/case lookup (`compare_enum` --
-//! superseded here by `ValueType::Enum`'s inline `EnumShape` set, see
-//! `crate::value`'s module doc comment, which needs no declaration lookup)
-//! or the unit graph (`operand_value`'s Quantity conversion arm,
-//! `admits_equality_conversion`'s Quantity row): `EqualityOperator`/
-//! `EqualityOperand`/`EqualitySchedule`/`CheckedEquality`/`check_equality`/
-//! `operand_value`/`admits_equality_conversion`/`integer_to_decimal`/
-//! `decimal_to_rational`. Selecting and running the top-level text/enum/
-//! quantity schedules ahead of the generic occurrence-pair plan is therefore
-//! QSL's job, done above the kernel with the registry and unit graph it
-//! holds.
+//! The module holds the operand-agnostic occurrence-pair plan: [`plan_pairs`],
+//! [`plan_equality`], `planned_equality` and [`EqualityPlan`]. Anything that
+//! needs a declaration registry or a unit graph is the caller's, not the
+//! kernel's: selecting and running the top-level text/enum/quantity schedules
+//! ahead of the generic occurrence-pair plan is done above the kernel with the
+//! registry and unit graph the caller holds. An enum's ordering and case lookup
+//! needs no declaration here, since `ValueType::Enum` carries its inline
+//! `EnumShape` set (see `crate::value`'s module doc comment).
 //!
-//! The leaf comparison inside `plan_pairs` is adapted for the kernel's bare
+//! The leaf comparison inside `plan_pairs` works on the kernel's bare
 //! `Value::Enum` payload: two enum values compare equal exactly when their
 //! `VariantId` digests are equal. A checked program guarantees both operands
-//! share one declared `ValueType::Enum(EnumShape)` before this ever runs --
-//! the same invariant every other leaf type here relies on (an `Integer`
-//! carries no declared bound either) -- so this needs no same-enum check of
-//! its own, exactly as before. A quantity pair compares equal only in the
-//! same unit.
+//! share one declared `ValueType::Enum(EnumShape)` before this ever runs -- the
+//! same invariant every other leaf type here relies on (an `Integer` carries no
+//! declared bound either) -- so this needs no same-enum check of its own. A
+//! quantity pair compares equal only in the same unit.
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::integer::Integer;
@@ -43,7 +34,7 @@ impl EqualityPlan {
     /// Wrap an already-computed pair count. `pub`, not merely a private
     /// struct literal: `EqualityPlan` is a plain data holder with no
     /// invariant beyond "this many pairs were planned", so it carries no
-    /// accounting charge of its own; QSL's own occurrence-pair walk (over its
+    /// accounting charge of its own; a caller's own occurrence-pair walk (over its
     /// own `Value`, a distinct type from this crate's) needs this to build
     /// one from a count it computed itself, the same way this module's own
     /// [`plan_equality`] does internally.
@@ -60,14 +51,13 @@ impl EqualityPlan {
 /// Form the plan of two completed operands of one type, without charge. A
 /// reference pair of different universes refuses with `foreign_reference`.
 ///
-/// **H-5, judgment call: stays `pub`, unmetered, not `pub(crate)`.** This
+/// **Stays `pub` and unmetered.** This
 /// walks the whole occurrence-pair tree of caller-supplied values with no
-/// meter, which is exactly the risk profile the other four H-5 findings
-/// share. The difference here is that "without charge" is this function's
-/// entire documented purpose: it lets a caller size an equality check's cost
+/// meter, which is the risk profile of any unmetered walk. The difference
+/// here is that "without charge" is this function's entire documented purpose: it lets a caller size an equality check's cost
 /// (via [`EqualityPlan::pair_events`]) *before* spending [`planned_equality`]'s
 /// metered budget on it. Giving it a `&mut Meter` would defeat that purpose,
-/// and demoting it to `pub(crate)` deletes a QSL-facing capability that has
+/// and demoting it to `pub(crate)` deletes a capability callers rely on that has
 /// no in-crate substitute (`planned_equality` needs the `equal` bool this
 /// plan discards, so it cannot be rewritten to call this instead). Left
 /// `pub` and documented: a caller that does not want unbounded work must
@@ -158,8 +148,8 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
             {
                 l.retained() == r.retained()
             }
-            // ADR-013 O-14: "Identity and equality use the `VariantId` only"
-            // -- the paired rank (OQ-D) is ignored here, exactly as it is
+            // Identity and equality use the `VariantId` only
+            // -- the paired rank is ignored here, exactly as it is
             // absent from `ValueType::Enum`'s own admission-checked identity.
             (Value::Enum(l), Value::Enum(r)) => l.variant() == r.variant(),
             (Value::Reference(l), Value::Reference(r)) => {
@@ -248,7 +238,7 @@ mod tests {
     }
 
     /// `plan_equality` reports the exact pair count of two equal
-    /// integers without charging (H-7/H-8: previously untested).
+    /// integers without charging.
     #[test]
     fn tc_346_plan_equality_reports_pairs_without_charge() {
         let left = Value::Integer(Integer::one());
@@ -260,9 +250,7 @@ mod tests {
     /// `planned_equality` completes true for two equal integers
     /// under a generous meter, and a meter with no `value_occurrences` left
     /// cannot admit `equality.plan-form`, so the identical comparison
-    /// returns `Outcome::Incomplete` instead (H-7/H-8: `planned_equality`'s
-    /// public API and metering path were previously untested, and metering
-    /// accumulation/`Incomplete` was unproven end to end for any operation).
+    /// returns `Outcome::Incomplete` instead.
     #[test]
     fn tc_347_planned_equality_charges_and_a_tight_meter_is_incomplete() {
         let left = Value::Integer(Integer::one());

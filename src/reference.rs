@@ -1,24 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! O-13/T-6 terminal `Reference<T>` values.
+//! Terminal `Reference<T>` values.
 //!
-//! A reference is terminal: its identity is the triple ADR-013 T-6 gives the
-//! kernel -- `EffectiveId` (the object type), `UniverseId` and `ObjectId` --
-//! and equality never inspects referenced state. This is a fresh cut, not a
-//! verbatim port, of QSL `value::reference`: the original `ObjectReference`
-//! carries a `NodeKey` object type plus raw `UniverseIdentity`/
-//! `ObjectIdentity` byte strings; ADR-013 T-6 replaces the type with an
-//! `EffectiveId` and the universe with a `UniverseId`, both opaque digests
-//! QSL `model` mints from its own preimage (ADR-013 QC-15), and replaces the
-//! object identity with `ObjectId`, the object's own authored UTF-8 bytes,
-//! never a digest (ADR-013 §8 OQ-C ruling). The original
-//! object closure checked against a `TypeEnvironment` is dropped
-//! entirely: it is a declaration-registry concern, not the kernel, and is
-//! `quire-semantic-value`'s `ObjectClosure` (ADR-011 §6.2).
+//! A reference is terminal: its identity is the triple of `EffectiveId` (the
+//! object type), `UniverseId` and `ObjectId`, and equality never inspects
+//! referenced state. `EffectiveId` and `UniverseId` are opaque digests minted by
+//! the caller from its own preimage; `ObjectId` is the object's own authored
+//! UTF-8 bytes, never a digest. Checking a reference against a declaration
+//! registry is not a kernel concern; `quire-semantic-value`'s `ObjectClosure`
+//! does it.
 
 use crate::identity::{EffectiveId, ObjectId, UniverseId};
 
-/// A `Reference<T>` value: its identity triple (ADR-013 T-6). Not `Copy`:
-/// `ObjectId` (ADR-013 §8 OQ-C ruling) carries its own authored bytes rather
+/// A `Reference<T>` value: its identity triple. Not `Copy`:
+/// `ObjectId` carries its own authored bytes rather
 /// than a fixed-size digest, so cloning a reference clones those bytes.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ObjectReference {
@@ -66,8 +60,8 @@ mod tests {
     }
 
     /// two references built from the same triple are equal; changing
-    /// any one component of the triple makes them distinct (ADR-013 T-6:
-    /// equality never inspects referenced state -- only the triple).
+    /// any one component of the triple makes them distinct (equality never
+    /// inspects referenced state -- only the triple).
     #[test]
     fn tc_316_reference_equality_follows_the_identity_triple() {
         let universe = UniverseId::from_digest(digest(1));

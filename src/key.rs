@@ -7,33 +7,29 @@
 //! ordering operator. Comparison is iterative, so value depth never reaches
 //! the host stack.
 //!
-//! **M-2: `Value::Float` has no key, matching its exclusion from `=`.**
+//! **`Value::Float` has no key, matching its exclusion from `=`.**
 //! [`crate::equality`]'s own leaf match excludes `Value::Float` the same
 //! way this module's `leaf` function does -- both fall through to their
-//! catch-all refusal arm. This is not an oversight in either module: IEEE
-//! equality (`NaN != NaN`, `-0.0 == 0.0`) is not the total-order `=` this
-//! key and the generic equality plan give every other leaf type, so IEEE
-//! comparison stays [`crate::compare_ieee`]'s own `IeeeComparison`
-//! (`NumericEqual`/`TotalOrder`/`BitIdentical`), never this key or `=`.
-//! `crate::collection`'s set/bag coalescing groups occurrences by
+//! catch-all refusal arm. IEEE equality (`NaN != NaN`, `-0.0 == 0.0`) is not
+//! the total-order `=` this key and the generic equality plan give every
+//! other leaf type, so IEEE comparison stays [`crate::compare_ieee`]'s own
+//! `IeeeComparison` (`NumericEqual`/`TotalOrder`/`BitIdentical`), never this
+//! key or `=`. `crate::collection`'s set/bag coalescing groups occurrences by
 //! `equality.rs`'s charged member comparison, not this key, so a Float set
 //! or bag of one element still forms; the same `Refusal::CheckedInvariant`
 //! that would stop this key on a Float pair also stops the first
 //! two-element membership comparison there.
 //!
-//! One adaptation against the original: `Value::Enum` is [`crate::value::
-//! EnumMember`] here (ADR-013 T-6, OQ-D ruling) -- a bare [`crate::identity::
-//! VariantId`] paired with its zero-based canonical rank -- not a
-//! declaration-aware `EnumValue` carrying a live position/case lookup. FR-144's
-//! enumeration key row (FR-144-AC-9) fixes canonical order as declaration
-//! position for an `ordered enum` and case-identifier byte order otherwise;
-//! because `EnumMember::rank` is already that canonical-list index (the
-//! shape that admitted it fixed it there, `crate::value::EnumShape::rank`),
-//! comparing two same-enum members' ranks numerically reproduces FR-144's
-//! order for *both* cases at once, with no declaration lookup and no
-//! case-name string needed here. This corrects the prior digest-ordered
-//! comparison this file carried (`quire-exact/src/key.rs:103` before this
-//! change), which did not conform to FR-144 (ADR-013 O-14).
+//! `Value::Enum` is [`crate::value::EnumMember`] here -- a bare
+//! [`crate::identity::VariantId`] paired with its zero-based canonical rank --
+//! not a declaration-aware value carrying a live position/case lookup.
+//! FR-144's enumeration key row (FR-144-AC-9) fixes canonical order as
+//! declaration position for an `ordered enum` and case-identifier byte order
+//! otherwise; because `EnumMember::rank` is already that canonical-list index
+//! (the shape that admitted it fixed it there,
+//! `crate::value::EnumShape::rank`), comparing two same-enum members' ranks
+//! numerically reproduces FR-144's order for *both* cases at once, with no
+//! declaration lookup and no case-name string needed here.
 
 use alloc::{vec, vec::Vec};
 use core::cmp::Ordering;
@@ -51,7 +47,7 @@ enum Task<'a> {
 
 /// Compare the canonical keys of two values of one declared type. `None`
 /// means the operands are not of one keyed type, which a checked program
-/// never produces. `pub`: QSL's expression evaluator's `Machine` groups
+/// never produces. `pub`: an evaluator groups
 /// adjacent equal elements with this key before [`crate::form_grouped`] and
 /// in `Contains`, so it must order exactly as [`crate::form`]'s canonical
 /// sort does.
@@ -106,7 +102,7 @@ fn leaf<'a>(
         (Value::Text(left), Value::Text(right)) => {
             left.retained().as_bytes().cmp(right.retained().as_bytes())
         }
-        // FND-003 (SR-511): a rank alone does not name a declaration. Two
+        // A rank alone does not name a declaration. Two
         // members of *different* enum declarations can share a rank without
         // being equal under `crate::equality` (they have different
         // `VariantId`s), and this leaf carries no declaration to guard on.
@@ -207,7 +203,7 @@ mod tests {
         assert_eq!(compare_keys(&left, &right), None);
     }
 
-    /// (M-2): a same-type `Value::Float` pair has no key, matching
+    /// A same-type `Value::Float` pair has no key, matching
     /// its exclusion from `=` in `crate::equality`'s leaf match.
     #[test]
     fn tc_349_float_pair_has_no_key() {
@@ -218,7 +214,7 @@ mod tests {
         assert_eq!(compare_keys(&left, &right), None);
     }
 
-    /// FND-003 (SR-511): the kernel leaf carries no declaration to guard
+    /// The kernel leaf carries no declaration to guard
     /// on, so two members of *different* enum declarations that happen to
     /// share a rank must still be told apart by `VariantId` -- they are not
     /// equal under `crate::equality`'s leaf match. Mutation proof: dropping

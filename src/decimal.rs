@@ -5,11 +5,10 @@
 //! Every intermediate is an exact integer or reduced rational; no binary
 //! floating-point value exists anywhere on this path.
 //!
-//! Ported from QSL `value::decimal` as part of QSL#213 S-1 (ADR-011 X-1).
 //! [`DecimalType::placement`], [`Placement::materialize`], [`Placed::admit`]
 //! and [`Admitted`] place an exact rational at a decimal target's scale for a
-//! caller that meters the placement itself: QSL `value::quantity`'s
-//! unit conversion into a `Decimal` or integer target, which charges
+//! caller that meters the placement itself, such as a unit
+//! conversion into a `Decimal` or integer target, which charges
 //! `unit.target-domain` rather than any `decimal.*` point. Like
 //! [`sbits`] and [`sdigits`], they are unmetered exact arithmetic, so the
 //! caller charges or bounds the sizes before [`Placement::materialize`]. Each
@@ -1284,7 +1283,7 @@ mod tests {
         assert!(admitted(2).into_integer().is_none());
     }
 
-    /// (M-7): every `RoundingMode` variant round-trips its source
+    /// Every `RoundingMode` variant round-trips its source
     /// spelling through `as_str`/`from_code`, and `ALL` names exactly the
     /// six declared variants.
     #[test]
@@ -1328,9 +1327,8 @@ mod tests {
 
     /// dividing `1 / 3` at scale 2 under `TowardZero` (not
     /// `NearestEven`) rounds and records a loss whose `exact()`/
-    /// `exact_denominator()` reconstruct the exact pre-rounding `1/3` (H-7:
-    /// both were untested; also exercises `evaluate_decimal` under a
-    /// non-`NearestEven` rounding mode).
+    /// `exact_denominator()` reconstruct the exact pre-rounding `1/3` (also exercises
+    /// `evaluate_decimal` under a non-`NearestEven` rounding mode).
     #[test]
     fn tc_344_decimal_loss_exact_reconstructs_the_pre_rounding_rational() {
         let target = DecimalType::new(

@@ -1,55 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! O-13/QC-15 exact kernel `Value`/`ValueType` and composite construction.
+//! Exact kernel `Value`/`ValueType` and composite construction.
 //!
-//! This is a **cut**, not a verbatim port, of QSL's `value::composite`. Per
-//! ADR-013 T-6, every kernel-crossing payload is trimmed to the bare id(s)
-//! it needs, and per O-15, `TypeEnvironment`/`ObjectTypeDeclaration` (the
-//! declaration *registry* -- duplicate-key checks, the recursion rule,
-//! generalization, `Reference<T>` target lookup) stay layer 3 in QSL, not
-//! the kernel. Concretely, against `value::composite`:
+//! Every kernel-crossing payload is trimmed to the bare id(s) it needs. The
+//! declaration *registry* (duplicate-key checks, the recursion rule,
+//! generalization, `Reference<T>` target lookup) is the caller's, not the
+//! kernel's.
 //!
-//! - `ValueType::Enum(NodeKey)` becomes `ValueType::Enum(EnumShape)` (ADR-013
-//!   O-14, T-6): the declaration-keyed `NodeKey` lookup is dropped, but the
-//!   shape carries its admitted variants inline, as a canonically ranked list
-//!   of opaque `VariantId` digests, so `ValueType::admits` needs no
-//!   declaration lookup at all -- membership and rank agreement are checked
-//!   against the shape the type itself carries. `Value::Enum(EnumMember)`
-//!   (T-6: "no `NodeKey`"; OQ-D: "an enum value is a `VariantId` and its
-//!   rank") carries one variant's identity plus its zero-based canonical
-//!   rank, so ordering (`crate::key::compare_keys`) needs no declaration
-//!   lookup either.
-//! - `ValueType::Reference(EffectiveId)` is the same type in both (ADR-013
-//!   O-05). Only the value payload diverges: `Value::Reference(ObjectReference)`
-//!   carries the T-6 triple (`EffectiveId`, `UniverseId`, `ObjectId`) from
-//!   [`crate::reference`], where QSL's carries its `EffectiveId` with raw
-//!   `UniverseIdentity`/`ObjectIdentity` bytes.
-//! - `ValueType::Quantity(QuantityUnit)` becomes `ValueType::Quantity(UnitId)`;
-//!   `Value::Quantity` carries [`crate::quantity::Quantity`], a bare
-//!   `(magnitude, UnitId)` pair with no unit-graph declaration.
-//! - `Value::Population(Arc<PopulationBinding>)` becomes
-//!   `Value::Population(PopulationId)` (ADR-013 O-13 Population row, QC-21,
-//!   FR-089): the kernel carries the opaque identity alone, never the
-//!   `PopulationBinding` a QSL `model` type owns. `ValueType::Population(Option<u64>)`
-//!   is unchanged (T-6: "keeps `u64` count only"). FR-089-AC-5's
-//!   declared-maximum comparison is a QSL-layer check: the model/evaluator
-//!   resolves a `PopulationId` to its binding and compares the binding's own
-//!   declared maximum there, since this leaf crate has no way to resolve a
+//! - `ValueType::Enum(EnumShape)`: the shape carries its admitted variants
+//!   inline, as a canonically ranked list of opaque `VariantId` digests, so
+//!   `ValueType::admits` needs no declaration lookup at all -- membership and
+//!   rank agreement are checked against the shape the type itself carries.
+//!   `Value::Enum(EnumMember)` carries one variant's identity plus its
+//!   zero-based canonical rank, so ordering (`crate::key::compare_keys`) needs no
+//!   declaration lookup either.
+//! - `ValueType::Reference(EffectiveId)`; the value payload
+//!   `Value::Reference(ObjectReference)` carries the triple (`EffectiveId`,
+//!   `UniverseId`, `ObjectId`) from [`crate::reference`].
+//! - `ValueType::Quantity(UnitId)`; `Value::Quantity` carries
+//!   [`crate::quantity::Quantity`], a bare `(magnitude, UnitId)` pair with no
+//!   unit-graph declaration.
+//! - `Value::Population(PopulationId)`: the kernel carries the opaque identity
+//!   alone, never the population binding a caller's model owns.
+//!   `ValueType::Population(Option<u64>)` holds the declared maximum.
+//!   The declared-maximum comparison (FR-089-AC-5) is a caller-layer check: the
+//!   caller resolves a `PopulationId` to its binding and compares the binding's
+//!   own declared maximum there, since this leaf crate has no way to resolve a
 //!   `PopulationId` to anything. Kernel `ValueType::admits` refuses every
-//!   population pair outright: it never pairs `ValueType::Population` with
-//!   `Value::Population`, so every `(ValueType::Population(_),
-//!   Value::Population(_))` pair falls through to `admits`'s existing
-//!   catch-all and returns `false`.
-//! - `TypeEnvironment::record`/`tuple`/`evaluate_record`/`evaluate_tuple`
-//!   become free functions taking the declared shape directly
-//!   (`&[FieldDeclaration]` or `&[ValueType]`) instead of looking it up by
-//!   `NodeKey` in a registry. `CompositeDeclaration` and the declaration-time
-//!   `duplicate_name` self-consistency check are dropped with it: the kernel
-//!   trusts the shape its caller (QSL's own `TypeEnvironment`) hands it.
-//! - [`from_admitted_slots`] is a new trusted, unchecked composite
-//!   constructor, `pub` (not `pub(crate)`, since QSL is a separate crate now)
-//!   for QSL to call once it has independently checked a value against its
-//!   own registry -- mirroring [`OptionValue::from_admitted`]'s identical
-//!   role, which is likewise widened from `pub(crate)` to `pub` here.
+//!   population pair outright (FR-089-AC-6): every
+//!   `(ValueType::Population(_), Value::Population(_))` pair falls through to
+//!   `admits`'s catch-all and returns `false`.
+//! - `record`/`tuple`/`evaluate_record`/`evaluate_tuple` are free functions taking
+//!   the declared shape directly (`&[FieldDeclaration]` or `&[ValueType]`)
+//!   rather than looking it up in a registry. The kernel trusts the shape its
+//!   caller hands it.
+//! - [`from_admitted_slots`] is a trusted, unchecked composite constructor, `pub`
+//!   for a caller that has independently checked a value against its own
+//!   registry, mirroring [`OptionValue::from_admitted`]'s identical role.
 
 use alloc::sync::Arc;
 use alloc::{boxed::Box, string::String, vec, vec::Vec};
@@ -70,21 +56,18 @@ use crate::text::{Text, TextType};
 
 mod value_type;
 
-/// The inline, *ranked* set of an enum type's admitted variants (ADR-013
-/// O-14, OQ-D ruling): the kernel `ValueType::Enum` carries its variant set
+/// The inline, *ranked* set of an enum type's admitted variants. The kernel `ValueType::Enum` carries its variant set
 /// directly, as opaque [`VariantId`] digests, so `admits` is a pure
-/// set-membership test needing no declaration lookup. Unlike the type's
-/// earlier, unranked shape (`quire-exact/src/value.rs:73`, before this
-/// change), the variants are held as a canonically ordered list, not a
-/// digest-ordered set: FR-144's enumeration key row (FR-144-AC-9) fixes
+/// set-membership test needing no declaration lookup. The variants are held as a canonically
+/// ordered list, not a digest-ordered set: FR-144's enumeration key row (FR-144-AC-9) fixes
 /// canonical order as declaration position for an `ordered enum` and
 /// case-identifier byte order for an unordered one, never the `VariantId`
 /// digest. `EnumShape` cannot compute that order itself -- a kernel leaf
-/// holds no case-name strings -- so the caller (QSL `check`, `semantic_value`)
+/// holds no case-name strings -- so the caller
 /// supplies `variants` already in that canonical order; each variant's
 /// zero-based index in the list is its *rank* ([`Self::rank`]), which
-/// [`EnumMember`] carries next to its `VariantId` (OQ-D: "An enum value
-/// carries its `VariantId` and its rank"). Two shapes are the same shape
+/// [`EnumMember`] carries next to its `VariantId` (an enum value
+/// carries its `VariantId` and its rank). Two shapes are the same shape
 /// exactly when they admit the same variants in the same canonical order and
 /// agree on [`Self::is_ordered`].
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -118,8 +101,7 @@ impl EnumShape {
     }
 
     /// `variant`'s zero-based index in this shape's canonical member list, or
-    /// `None` when `variant` is not one of this shape's admitted variants
-    /// (ADR-013 O-14/OQ-D: "a rank is a function of its `VariantId`").
+    /// `None` when `variant` is not one of this shape's admitted variants.
     pub fn rank(&self, variant: VariantId) -> Option<u32> {
         self.variants
             .iter()
@@ -137,9 +119,9 @@ impl EnumShape {
 }
 
 /// A completed enum value: its variant identity and its canonical rank next
-/// to it (ADR-013 O-14, OQ-D ruling: "An enum value carries its `VariantId`
+/// to it (an enum value carries its `VariantId`
 /// and its rank, the variant's zero-based index in the FR-141 canonical
-/// member list"). Identity and equality use `variant` alone
+/// member list). Identity and equality use `variant` alone
 /// (the kernel equality leaf match, "Identity and equality use the
 /// `VariantId` only"); `rank` exists purely so the kernel's own canonical key
 /// (`compare_keys`, FR-144) can order same-enum values
@@ -203,8 +185,7 @@ pub enum ValueType {
     Quantity(UnitId),
     /// A `Text[min, max; profile]`.
     Text(TextType),
-    /// An `Enum` type admitting exactly this inline variant set (ADR-013
-    /// O-14).
+    /// An `Enum` type admitting exactly this inline variant set.
     Enum(EnumShape),
     /// `Option<T>`: `none` or a present `T`.
     Option(Box<ValueType>),
@@ -213,11 +194,11 @@ pub enum ValueType {
     /// A collection type `K<T>[min, max]`, or the unbounded `K<T>`.
     Collection(Box<CollectionType>),
     /// `Reference<T>` to an object of the object type with this effective
-    /// identity (ADR-013 T-6).
+    /// identity.
     Reference(EffectiveId),
     /// The `Population<T>[N]` parameter type's declared maximum `N`, or
     /// `None` for a population with no declared maximum, which is unbounded
-    /// (QSpec FR-153-AC-9, ADR-014 §2 and N-3).
+    /// (QSpec FR-153-AC-9).
     Population(Option<u64>),
 }
 
@@ -236,7 +217,7 @@ impl ValueType {
     /// and collection values carry their declared type, which must be this
     /// type; their contents were admitted at construction. An `Enum` shape
     /// admits a `Value::Enum` exactly when the shape's own ranked list agrees
-    /// with the member's claimed rank for its variant (ADR-013 O-14/OQ-D): a
+    /// with the member's claimed rank for its variant: a
     /// pure lookup against the shape, no declaration lookup needed.
     pub fn admits(&self, value: &Value) -> bool {
         match (self, value) {
@@ -262,8 +243,8 @@ impl ValueType {
             }
             // `ValueType::Population` does not pair with `Value::Population`
             // here (see this module's doc comment): FR-089-AC-5's
-            // declared-maximum comparison is a QSL-layer check, performed by
-            // the model/evaluator once it resolves the binding. Kernel
+            // declared-maximum comparison is a caller-layer check, performed by
+            // the caller once it resolves the binding. Kernel
             // `admits` refuses population pairs outright; this pair falls
             // through to the catch-all below and returns `false`.
             (
@@ -322,12 +303,9 @@ pub enum Value {
     Quantity(Quantity),
     /// A text value of its declared type.
     Text(Text),
-    /// A bare enum member identity and its canonical rank (ADR-013 T-6,
-    /// OQ-D).
-    Enum(EnumMember),
-    /// An opaque population admission identity (ADR-013 O-13 Population
-    /// row, QC-21, FR-089): never the `PopulationBinding` itself, which
-    /// stays a QSL `model` type.
+    /// A bare enum member identity and its canonical rank.    Enum(EnumMember),
+    /// An opaque population admission identity (FR-089): never the population binding itself, which
+    /// stays a caller's model type.
     Population(PopulationId),
     /// An option value.
     Option(Arc<OptionValue>),
@@ -824,8 +802,8 @@ impl OptionValue {
 
     /// Materialize an already-admitted `payload` as `Option<payload_type>`,
     /// checking no structural `admits()` match. `pub`, not `pub(crate)`,
-    /// since the caller checking admission (e.g. QSL's own upcast-aware
-    /// `lookup<T>(p, r)`) is a separate crate from this one.
+    /// since the caller checking admission (e.g. an upcast-aware
+    /// lookup) is a separate crate from this one.
     pub fn from_admitted(payload_type: ValueType, payload: Option<Value>) -> Value {
         let occ = match &payload {
             Some(payload) => Integer::one().add(&payload.occ()),
@@ -879,9 +857,9 @@ pub enum FieldValue {
 }
 
 /// A declaration-owned named field. The kernel carries a member only as an
-/// opaque [`MemberId`] digest (ADR-013 O-06): `name` is retained solely as a
+/// opaque [`MemberId`] digest: `name` is retained solely as a
 /// human-readable label for `Debug`/diagnostics, and no public semantic
-/// dispatch here keys on it (#213's own acceptance criterion) -- every
+/// dispatch here keys on it -- every
 /// lookup, refusal component and slot match below keys on `member`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldDeclaration {
@@ -930,7 +908,7 @@ impl FieldDeclaration {
 }
 
 /// Construct a record from its declared `shape` (looked up by the caller's
-/// own declaration registry -- QSL's `TypeEnvironment`, not the kernel).
+/// own declaration registry -- not the kernel).
 /// An omitted `?` field is `absent`.
 pub fn record(
     shape: &[FieldDeclaration],
@@ -1082,9 +1060,8 @@ fn admitted(value_type: &ValueType, outcome: Outcome<Value>) -> Result<Value, St
 }
 
 /// Charge `composite.result-retain` with `occ(result)`, then expose it.
-/// `pub`, not `pub(crate)`: QSL's name-keyed `TypeEnvironment::
-/// evaluate_record`/`evaluate_tuple` and its expression evaluator's
-/// `Machine` build composites outside this crate and charge the same point
+/// `pub`, not `pub(crate)`: a caller's name-keyed record/tuple evaluation
+/// and expression evaluator build composites outside this crate and charge the same point
 /// through this one function.
 pub fn retain_composite(value: Value, meter: &mut Meter) -> Outcome<Value> {
     Outcome::from_stop(retain_composite_stop(value, meter))
@@ -1106,8 +1083,8 @@ pub enum Component {
     /// The composite value as a whole (its declaration or arity).
     Value,
     /// A named record field or object attribute, by its opaque member
-    /// identity (ADR-013 O-06). No public semantic dispatch depends on
-    /// display text (#213's own acceptance criterion).
+    /// identity. No public semantic dispatch depends on
+    /// display text.
     Field(MemberId),
     /// A zero-based tuple position.
     Position(usize),
@@ -1219,8 +1196,7 @@ fn composite(declaration: NodeKey, slots: Box<[FieldValue]>) -> Value {
 }
 
 /// Materialize already-admitted slots as a composite value, checking
-/// nothing: the caller (QSL's own `TypeEnvironment`, which is not kernel per
-/// ADR-013 O-15) has already checked every slot against its own declared
+/// nothing: the caller (whose declaration registry is not kernel) has already checked every slot against its own declared
 /// shape. Mirrors [`OptionValue::from_admitted`]'s identical bypass role.
 pub fn from_admitted_slots(declaration: NodeKey, slots: Box<[FieldValue]>) -> Value {
     composite(declaration, slots)
@@ -1291,7 +1267,7 @@ mod tests {
     }
 
     /// TC-297 (FR-089-AC-6): kernel `admits` refuses every population pair;
-    /// the declared-maximum comparison is the QSL layer's (FR-089-AC-5).
+    /// the declared-maximum comparison is the caller layer's (FR-089-AC-5).
     #[trace("TC-297", "FR-089-AC-6")]
     #[test]
     fn admits_refuses_a_population_pair() {
@@ -1301,7 +1277,7 @@ mod tests {
 
     /// an `Enum` shape admits a `Value::Enum` of a variant it
     /// contains at the variant's own rank, and refuses one it does not
-    /// contain (ADR-013 O-14/OQ-D, no declaration lookup).
+    /// contain.
     ///
     /// Also TC-409 (FR-088-AC-11): admission checks the whole `(VariantId,
     /// rank)` pair, not membership alone.
@@ -1316,7 +1292,7 @@ mod tests {
         assert!(!ValueType::Boolean.admits(&Value::Enum(EnumMember::new(in_shape, 0))));
     }
 
-    /// (OQ-D adverse): a well-formed variant paired with the *wrong*
+    /// A well-formed variant paired with the *wrong*
     /// rank is refused just as surely as an unknown variant -- admission
     /// checks the whole `(VariantId, rank)` pair against the shape's own
     /// ranked list, not membership alone.
@@ -1335,7 +1311,7 @@ mod tests {
         assert!(!shape.admits(&Value::Enum(EnumMember::new(second, 0))));
     }
 
-    /// OQ-D: the shape's own rank lookup is exactly the variant's index in
+    /// The shape's own rank lookup is exactly the variant's index in
     /// the canonical list the caller supplied, and an unranked (unknown)
     /// variant resolves to `None`, never a panic or a fabricated rank.
     ///
@@ -1408,7 +1384,7 @@ mod tests {
         );
     }
 
-    /// (H-7/H-8): `fill_slots` fills a present field and, for an
+    /// `fill_slots` fills a present field and, for an
     /// omitted optional field, `Absent`, both in declaration order
     /// regardless of supplied order (`fill_slots` was previously only
     /// exercised indirectly, through `record`'s missing-required-field
@@ -1437,7 +1413,7 @@ mod tests {
         assert!(matches!(slots[1], FieldValue::Absent));
     }
 
-    /// (H-7/H-8): `evaluate_record` runs a deferred field expression
+    /// `evaluate_record` runs a deferred field expression
     /// and completes with `composite.result-retain` charged (`evaluate_record`
     /// had no test before this; `record`/`tuple`'s tests exercise only the
     /// non-deferred constructors).
@@ -1463,7 +1439,7 @@ mod tests {
         assert_eq!(value.occ(), Integer::one().add(&Integer::one()));
     }
 
-    /// (H-7/H-8): `evaluate_tuple` runs deferred positional
+    /// `evaluate_tuple` runs deferred positional
     /// expressions in position order and completes (`evaluate_tuple` had no
     /// test before this).
     #[test]

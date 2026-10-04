@@ -6,11 +6,9 @@
 //! Every size amount is derived before the value it measures is retained; no
 //! power of ten is allocated to measure an aligned decimal coefficient.
 //!
-//! Ported from QSL `value::numeric` as part of QSL#213 S-1 (ADR-011 X-1). The
-//! one adaptation: [`ArithmeticOperator`] is `pub` here rather than
-//! `pub(crate)`, because [`crate::rational::RationalDomain::result_of`] (a
-//! kernel-row scalar operation this crate exposes to its consumers) names it
-//! in a public signature.
+//! [`ArithmeticOperator`] is `pub` because
+//! [`crate::rational::RationalDomain::result_of`] (a scalar operation this crate
+//! exposes to its consumers) names it in a public signature.
 //!
 //! [`OrderingOperator::holds`] is `pub`: it is a pure decision over an
 //! already-computed `Ordering`, so exposing it exposes no unmetered
@@ -208,8 +206,8 @@ fn integer_arithmetic_bits(operation: IntegerArithmetic<'_>) -> Integer {
 
 /// The `integer_bits` amount of `rational-arithmetic.arithmetic` for `a/b`
 /// and `c/d`: `max(N,D)`, with `N` and `D` bounding the unreduced parts, and
-/// `max(bits(a),bits(b))` for unary `-`. QSL `value::quantity`'s
-/// `unit.rational-arithmetic` charge reuses it, sized before the event.
+/// `max(bits(a),bits(b))` for unary `-`. A caller's
+/// `unit.rational-arithmetic` charge can reuse it, sized before the event.
 pub fn rational_arithmetic_bits(operation: RationalArithmetic<'_>) -> Integer {
     let (numerator, denominator) = match operation {
         RationalArithmetic::Multiply(left, right) => (
@@ -415,8 +413,8 @@ pub fn evaluate_boolean(connective: BooleanConnective, meter: &mut Meter) -> Out
 
 /// Charge `boolean.result-retain` for a decided connective result.
 ///
-/// `pub`, not `pub(crate)`: `qsl_eval::value::
-/// expression::evaluate`'s own `and`/`or` short-circuit evaluation, which
+/// `pub`, not `pub(crate)`: a caller's own `and`/`or` short-circuit
+/// evaluation, which
 /// cannot call the full [`evaluate_boolean`] dispatch because it may not
 /// have evaluated its second operand, retains its already-decided `bool`
 /// through this function directly -- the same `OrderingOperator::holds`/

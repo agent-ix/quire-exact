@@ -1,38 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! O-16 kernel outcomes: `Outcome<T>`, `Undefined`, `Refusal`, `Stop`.
+//! Kernel outcomes: `Outcome<T>`, `Undefined`, `Refusal`, `Stop`.
 //!
 //! A false Boolean is a completed value, never a refusal. `requires-bound`
 //! and `unsupported` are per-item provider dispositions, not evaluator
 //! outcomes, so they have no variant here.
 //!
-//! Cut from QSL `value::outcome` per ADR-013 O-16/O-17: the kernel `Refusal`
-//! carries only its own typed cause. Two variants are dropped against the
-//! original because their payload is not a kernel type:
+//! The kernel `Refusal` carries only its own typed cause. A cause whose payload
+//! is not a kernel type has no variant here:
 //!
-//! - `Refusal::WrongSnapshot(WrongSnapshotCause)`: `WrongSnapshotCause` is
-//!   QSL `value::expression`'s own closed cause set for a `pre(..)` anchor
-//!   mismatch, a QSL `check`/evaluator concept, not a kernel one.
-//! - `Refusal::Model(ModelQueryRefusal)`: `ModelQueryRefusal` carries
-//!   `crate::diagnostic::Code`, QSL's `diagnostic` catalog (ADR-013 O-17
-//!   explicitly keeps `CatalogCode`/category out of the kernel; that is
-//!   S-5's job, not S-1's).
+//! - a closed cause set for a `pre(..)` anchor mismatch is an evaluator concept,
+//!   not a kernel one.
+//! - a model-query refusal carries the caller's diagnostic catalog code; the
+//!   catalog code and category stay out of the kernel, which names its own
+//!   codes.
 //!
-//! The category-mapping table and `FamilyOutcome`/`FamilyResult` that union
-//! several evaluators' outcomes into one reported shape are QSL concepts
-//! layered on top of this and are not kernel (ADR-013 O-16).
+//! The category-mapping table and the family outcome and result types that union
+//! several evaluators' outcomes into one reported shape are layered on top of
+//! this and are not kernel.
 //!
-//! **M-4: `Undefined::PreconditionFalse(PreconditionFailure)` is dropped**
-//! against the original (it carried `{ operation, selected, receiver }`: the
-//! called member name, the selected redefinition candidate's identity as a
-//! bare `String`, and the receiver reference). Choosing among several
-//! redefinition candidates by the receiver's most-specific runtime type is
-//! family dispatch, and T-6 is explicit that family causes are never
-//! kernel causes: resolving *which* candidate linked, and reporting
-//! that its precondition evaluated false, is QSL `model`/`check`'s own
-//! concept, layered on top of this module the same way the category-mapping
-//! table above it is. Retyping `selected` to `EffectiveId` would still leave
-//! a dispatch-resolution cause sitting in the kernel's closed `Undefined`
-//! set, so removing the variant, not retyping its payload, is the fix.
+//! `Undefined::PreconditionFalse` has no variant here. Choosing among several
+//! redefinition candidates by the receiver's most-specific runtime type is family
+//! dispatch, and family causes are never kernel causes: resolving *which*
+//! candidate linked, and reporting that its precondition evaluated false, is the
+//! caller's concept, layered on top of this module the same way the
+//! category-mapping table above is. Retyping the selected candidate to
+//! `EffectiveId` would still leave a dispatch-resolution cause in the kernel's
+//! closed `Undefined` set, so the variant is omitted, not retyped.
 
 use crate::accounting::Incomplete;
 use crate::collection::{CardinalityBound, CollectionKind};
@@ -52,12 +45,10 @@ use alloc::boxed::Box;
 pub enum Outcome<T> {
     /// A completed value. `T` itself carries any typed loss where the
     /// operation has one (e.g. `DecimalResult::loss`); `Outcome` does not
-    /// separately carry [`crate::Location`]/[`crate::Origin`] provenance --
-    /// M-3, correcting a previous, false claim here. Nothing in this crate
+    /// separately carry [`crate::Location`]/[`crate::Origin`] provenance -- nothing in this crate
     /// wires the two together: a caller that wants a completed value's
     /// occurrence provenance holds it itself, the way a call locus is
-    /// already the caller's own concept (see `PreconditionFailure`'s former
-    /// doc comment, now removed as M-4).
+    /// already the caller's own concept.
     Completed(T),
     /// The operation has no mathematical value.
     Undefined(Undefined),
@@ -230,8 +221,8 @@ pub enum Refusal {
 impl Refusal {
     /// The catalog `refused { code }` spelling, `None` only for
     /// `CheckedInvariant`, which is an internal fault and never a refusal
-    /// record. The kernel names its own codes; QSL `diagnostic` maps them to
-    /// its catalog (ADR-013 O-17).
+    /// record. The kernel names its own codes; a caller maps them to
+    /// its own catalog.
     pub fn code(&self) -> Option<&'static str> {
         match self {
             Self::InexactDecimal { .. } => Some("inexact_decimal"),
@@ -332,7 +323,7 @@ mod tests {
 
     use super::*;
 
-    /// (H-7/H-8, strengthened): `Outcome::completed` returns the
+    /// `Outcome::completed` returns the
     /// value for `Completed` and `None` for every other variant --
     /// `Undefined`, `Refused` and `Incomplete` are each exercised, not just
     /// `Undefined` as before.
