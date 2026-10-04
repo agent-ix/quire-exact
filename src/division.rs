@@ -129,7 +129,7 @@ fn refused_interval(domain: &IntegerDomain) -> Result<Box<IntegerInterval>, Stop
 }
 
 /// Charge, compute and admit the exposed member. Membership is decided after
-/// `integer-division.domain-pair` and before the retention.
+/// `integer-division.domain` and before `integer-division.result-retain`.
 fn member_of(
     profile: DivisionProfile,
     member: DivisionMember,
@@ -151,15 +151,15 @@ fn member_of(
     let (quotient, remainder) = profile.apply(dividend, divisor);
     let exposed = member.select(quotient, remainder);
     meter.charge(
-        Charge::new(ChargePoint::IntegerDivisionDomainPair).size(LimitKind::ValueOccurrences, 1),
+        Charge::new(ChargePoint::IntegerDivisionDomain).size(LimitKind::ValueOccurrences, 1),
     )?;
     if !domain.contains(&exposed) {
-        return Err(Stop::Refused(Refusal::DivisionMemberOutOfDomain {
+        return Err(Stop::Refused(Refusal::DivisionOutOfDomain {
             domain: refused_interval(domain)?,
             member,
         }));
     }
-    meter.charge(Charge::new(ChargePoint::IntegerDivisionResultPair).results(1))?;
+    meter.charge(Charge::new(ChargePoint::IntegerDivisionResultRetain).results(1))?;
     Ok(exposed)
 }
 
@@ -259,7 +259,7 @@ mod tests {
         }
     }
 
-    /// `10 / y` over `1..=10` at `y = 5` is 2; `x % -1` over `-10..=5` at
+    /// `10 div y` over `1..=10` at `y = 5` is 2; `x % -1` over `-10..=5` at
     /// `x = -10` is 0 even though the quotient (10) is outside that domain.
     #[trace("TC-905", "FR-357-AC-2")]
     #[test]
@@ -273,33 +273,27 @@ mod tests {
     }
 
     /// A quotient outside the domain refuses with `quotient-outside-domain`,
-    /// a remainder outside refuses with `remainder-outside-domain`.
+    /// a remainder outside refuses with `remainder-outside-domain`, under
+    /// every profile.
     #[trace("TC-905", "FR-357-AC-3")]
     #[test]
     fn exposed_member_outside_domain_refuses_with_its_cause() {
-        let quotient = run(
-            DivisionProfile::Truncating,
-            DivisionMember::Quotient,
-            10,
-            1,
-            &range(0, 5),
-        );
-        let Outcome::Refused(refusal) = quotient else {
-            panic!("quotient 10 is outside 0..=5");
-        };
-        assert_eq!(refusal.code(), Some("division_member_out_of_domain"));
-        assert_eq!(refusal.cause(), Some("quotient-outside-domain"));
-        let remainder = run(
-            DivisionProfile::Truncating,
-            DivisionMember::Remainder,
-            9,
-            5,
-            &range(0, 3),
-        );
-        let Outcome::Refused(refusal) = remainder else {
-            panic!("remainder 4 is outside 0..=3");
-        };
-        assert_eq!(refusal.cause(), Some("remainder-outside-domain"));
+        for profile in DivisionProfile::ALL {
+            let Outcome::Refused(refusal) =
+                run(profile, DivisionMember::Quotient, 10, 1, &range(0, 5))
+            else {
+                panic!("quotient 10 is outside 0..=5");
+            };
+            assert_eq!(refusal.code(), Some("division_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("quotient-outside-domain"));
+            let Outcome::Refused(refusal) =
+                run(profile, DivisionMember::Remainder, 9, 5, &range(0, 3))
+            else {
+                panic!("remainder 4 is outside 0..=3");
+            };
+            assert_eq!(refusal.code(), Some("division_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("remainder-outside-domain"));
+        }
     }
 
     /// The three laws differ on negative operands exactly as defined, for -7
@@ -321,27 +315,103 @@ mod tests {
         assert_eq!(pair(DivisionProfile::Euclidean, -7, -2), (int(4), int(1)));
     }
 
-    /// `i64::MIN / -1` is exact (2^63), not an overflow; it is refused only
-    /// when the domain excludes it.
+    /// `i64::MIN div -1` is exact (2^63): a domain that holds it admits it. In
+    /// a signed-64 domain the quotient refuses with `quotient-outside-domain`
+    /// while the remainder, 0, completes.
     #[trace("TC-905", "FR-357-AC-5")]
     #[test]
     fn i64_min_divided_by_minus_one_is_exact() {
         let wide = IntegerDomain::Bounded(
             IntegerInterval::new(int(0), Integer::from(i128::from(i64::MAX) + 1)).unwrap(),
         );
+        let signed_64 = range(i64::MIN, i64::MAX);
         for profile in DivisionProfile::ALL {
             let q = run(profile, DivisionMember::Quotient, i64::MIN, -1, &wide);
             assert_eq!(q.completed(), Some(Integer::from(1_i128 << 63)));
-            let r = run(profile, DivisionMember::Remainder, i64::MIN, -1, &wide);
+            let Outcome::Refused(refusal) =
+                run(profile, DivisionMember::Quotient, i64::MIN, -1, &signed_64)
+            else {
+                panic!("quotient 2^63 is outside signed 64-bit");
+            };
+            assert_eq!(refusal.code(), Some("division_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("quotient-outside-domain"));
+            let r = run(profile, DivisionMember::Remainder, i64::MIN, -1, &signed_64);
             assert_eq!(r.completed(), Some(int(0)));
-            let narrow = run(
-                profile,
-                DivisionMember::Quotient,
-                i64::MIN,
-                -1,
-                &range(0, i64::MAX),
+        }
+    }
+
+    /// The admitted charge sequence is operands, arithmetic, domain, then
+    /// result-retain for one result unit. A refusal never reaches
+    /// result-retain, a zero divisor stops after operands, and a result limit
+    /// one too small reports `integer-division.result-retain`.
+    #[cfg(feature = "test-support")]
+    #[trace("TC-905", "FR-357-AC-6")]
+    #[test]
+    fn division_charges_one_domain_occurrence_and_one_result_unit() {
+        use crate::accounting::ChargePoint::{
+            IntegerDivisionArithmetic as Arithmetic, IntegerDivisionDomain as Domain,
+            IntegerDivisionOperands as Operands, IntegerDivisionResultRetain as Retain,
+        };
+        let limited = |result_units| {
+            let mut limits = *generous_meter().limits();
+            limits.result_units = result_units;
+            Meter::new(limits)
+        };
+        for member in [DivisionMember::Quotient, DivisionMember::Remainder] {
+            let mut meter = limited(1);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(2),
+                &range(0, 9),
+                &mut meter,
             );
-            assert!(matches!(narrow, Outcome::Refused(_)));
+            assert!(out.completed().is_some());
+            assert_eq!(
+                meter.admitted_charges(),
+                [Operands, Arithmetic, Domain, Retain]
+            );
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+
+            let mut meter = limited(1);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(2),
+                &range(5, 5),
+                &mut meter,
+            );
+            assert!(matches!(out, Outcome::Refused(_)));
+            assert_eq!(meter.admitted_charges(), [Operands, Arithmetic, Domain]);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+
+            let mut meter = limited(1);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(0),
+                &range(0, 9),
+                &mut meter,
+            );
+            assert!(matches!(out, Outcome::Undefined(_)));
+            assert_eq!(meter.admitted_charges(), [Operands]);
+
+            let mut meter = limited(0);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(2),
+                &range(0, 9),
+                &mut meter,
+            );
+            let Outcome::Incomplete(incomplete) = out else {
+                panic!("a result limit of 0 cannot retain the member");
+            };
+            assert_eq!(incomplete.charge_point, Retain);
         }
     }
 

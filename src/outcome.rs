@@ -132,7 +132,7 @@ pub enum Refusal {
         target: Box<DecimalType>,
     },
     /// The member `div` or `rem` exposes is outside the consumer domain.
-    DivisionMemberOutOfDomain {
+    DivisionOutOfDomain {
         /// The bounded consumer's `Int[..]` domain.
         domain: Box<IntegerInterval>,
         /// Which member was exposed and outside.
@@ -224,7 +224,7 @@ impl Refusal {
         match self {
             Self::InexactDecimal { .. } => Some("inexact_decimal"),
             Self::DecimalOutOfDomain { .. } => Some("decimal_out_of_domain"),
-            Self::DivisionMemberOutOfDomain { .. } => Some("division_member_out_of_domain"),
+            Self::DivisionOutOfDomain { .. } => Some("division_out_of_domain"),
             Self::ModuloOutOfDomain { .. } => Some("modulo_out_of_domain"),
             Self::TextLengthOutOfDomain { .. } => Some("text_length_out_of_domain"),
             Self::IntegerOutOfDomain { .. } => Some("integer_out_of_domain"),
@@ -251,7 +251,7 @@ impl Refusal {
             | Self::IntegerOutOfDomain { .. }
             | Self::RationalOutOfDomain { .. }
             | Self::IeeeRationalOutOfDomain { .. } => Some("outside-domain"),
-            Self::DivisionMemberOutOfDomain { member, .. } => Some(match member {
+            Self::DivisionOutOfDomain { member, .. } => Some(match member {
                 DivisionMember::Quotient => "quotient-outside-domain",
                 DivisionMember::Remainder => "remainder-outside-domain",
             }),
@@ -374,7 +374,7 @@ mod tests {
                 .unwrap(),
             )
         };
-        let member = |member| Refusal::DivisionMemberOutOfDomain {
+        let member = |member| Refusal::DivisionOutOfDomain {
             domain: interval(),
             member,
         };
@@ -394,12 +394,12 @@ mod tests {
             ),
             (
                 member(DivisionMember::Quotient),
-                "division_member_out_of_domain",
+                "division_out_of_domain",
                 "quotient-outside-domain",
             ),
             (
                 member(DivisionMember::Remainder),
-                "division_member_out_of_domain",
+                "division_out_of_domain",
                 "remainder-outside-domain",
             ),
             (
