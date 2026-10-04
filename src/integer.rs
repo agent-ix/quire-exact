@@ -449,7 +449,7 @@ mod tests {
     /// domain, and `BoundedInteger` reports back the exact value and domain
     /// that admitted it.
     #[test]
-    fn tc_329_bounded_integer_admits_within_domain() {
+    fn bounded_integer_admits_within_domain() {
         let domain = IntegerInterval::new(Integer::zero(), Integer::from(10_u64)).unwrap();
         let admitted = domain.admit(Integer::from(7_u64)).unwrap();
         assert_eq!(admitted.value(), &Integer::from(7_u64));
@@ -459,7 +459,7 @@ mod tests {
     /// a value outside the declared domain is refused with
     /// `OutOfDomain`, never silently narrowed or saturated.
     #[test]
-    fn tc_330_bounded_integer_refuses_outside_domain() {
+    fn bounded_integer_refuses_outside_domain() {
         let domain = IntegerInterval::new(Integer::zero(), Integer::from(10_u64)).unwrap();
         assert_eq!(domain.admit(Integer::from(11_u64)), Err(OutOfDomain));
     }
@@ -467,7 +467,7 @@ mod tests {
     /// parsing round-trips through `Display` for a canonical
     /// decimal integer literal, negative sign included.
     #[test]
-    fn tc_331_integer_parse_display_round_trips() {
+    fn integer_parse_display_round_trips() {
         let parsed = Integer::from_str("-42").unwrap();
         assert_eq!(parsed.to_string(), "-42");
     }

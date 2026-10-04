@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Canonical exact rationals (AD-005, FR-140 loss records).
+//! Canonical exact rationals (QSpec FR-140 loss records).
 //!
 //! `Rational`'s arithmetic (`add`/`sub`/`neg`/`mul`/`div`/`pow`,
 //! `divided_by_power_of_ten`/`divided_by_power_of_two`) is unmetered and
@@ -344,7 +344,7 @@ mod tests {
     /// sign onto the numerator, so `2/4` and `-1/-2` both construct the same
     /// canonical `1/2`.
     #[test]
-    fn tc_332_new_reduces_and_normalizes_sign() {
+    fn new_reduces_and_normalizes_sign() {
         let two_fourths = Rational::new(Integer::from(2_u64), Integer::from(4_u64)).unwrap();
         let neg_over_neg = Rational::new(
             Integer::zero().sub(&Integer::one()),
@@ -359,7 +359,7 @@ mod tests {
     /// a zero denominator is refused, never silently treated as an
     /// undefined or infinite value.
     #[test]
-    fn tc_333_zero_denominator_is_refused() {
+    fn zero_denominator_is_refused() {
         assert_eq!(
             Rational::new(Integer::one(), Integer::zero()),
             Err(ZeroDenominator)
@@ -369,7 +369,7 @@ mod tests {
     /// `RationalDomain::contains` is exactly the closed
     /// numerator/denominator interval product membership test.
     #[test]
-    fn tc_334_domain_contains_checks_both_intervals() {
+    fn domain_contains_checks_both_intervals() {
         let domain = RationalDomain::new(
             IntegerInterval::new(Integer::zero(), Integer::from(10_u64)).unwrap(),
             IntegerInterval::new(Integer::one(), Integer::one()).unwrap(),

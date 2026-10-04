@@ -3,7 +3,7 @@
 //!
 //! A `NodeKey` is an opaque 32-byte digest in domain
 //! `quire.checked-semantic-node/v1`. Node ids are content-addressed over the
-//! `node-identity-preimage.schema.json` preimage: equal keys mean
+//! preimage the caller defines: equal keys mean
 //! structurally identical nodes.
 //!
 //! Minting rule: the kernel `NodeKey` has one minting constructor,
@@ -44,8 +44,7 @@ pub fn is_identifier(text: &str) -> bool {
         && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
-/// A `node-identity-preimage.schema.json` `$defs.Identifier`
-/// (`^[A-Za-z_][A-Za-z0-9_]*$`): one identifier-shaped name segment. An
+/// An identifier-shaped name segment (`^[A-Za-z_][A-Za-z0-9_]*$`). An
 /// invalid identifier is refused at construction rather than reaching a
 /// schema-invalid wire shape.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -139,7 +138,7 @@ mod tests {
     /// and ordering equal to zero. Unequal digests mint keys that order by
     /// raw digest bytes, not merely compare unequal.
     #[test]
-    fn tc_300_equal_digest_bytes_mint_interchangeable_node_keys() {
+    fn equal_digest_bytes_mint_interchangeable_node_keys() {
         use std::collections::HashSet;
 
         let a = NodeKey::from_digest(digest(1));
@@ -170,7 +169,7 @@ mod tests {
     /// `Display` renders exactly 64 lowercase hex digits, the wire
     /// spelling an emitter writes for `NodeId{digest}`.
     #[test]
-    fn tc_301_display_is_64_lowercase_hex_digits() {
+    fn display_is_64_lowercase_hex_digits() {
         let key = NodeKey::from_digest(digest(0xab));
         let rendered = key.to_string();
         assert_eq!(rendered.len(), 64);

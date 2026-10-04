@@ -49,9 +49,8 @@ impl ComparisonOperator {
 
     /// Decide the operator over an exact ordering of its operands.
     ///
-    /// `pub`, not `pub(crate)`: `quire_spec_language::value::
-    /// text`'s own `compare`, still local because it returns this crate's
-    /// own `Outcome`, calls it directly. It is a pure decision over an
+    /// `pub`, not `pub(crate)`: a caller's own text comparison, which
+    /// returns its own outcome type, calls it directly. It is a pure decision over an
     /// already-computed `Ordering`, so widening charges or exposes nothing.
     pub fn holds(self, ordering: Ordering) -> bool {
         match self {
@@ -110,19 +109,19 @@ pub enum IllTypedCause {
     /// An IEEE value is converted directly to `Decimal`, `Integer` or
     /// `Int[..]`; only a `Rational[..]` target is defined.
     IeeeToNonRationalExact,
-    /// FR-272 `type-mismatch`: the operands or a value and its expected
+    /// `type-mismatch`: the operands or a value and its expected
     /// position have no common declared type and no admitted conversion.
     TypeMismatch,
-    /// FR-272 `operator-ineligible`: the operator is not defined for the
+    /// `operator-ineligible`: the operator is not defined for the
     /// operand type, such as `=` on an IEEE-bearing type.
     OperatorIneligible,
-    /// FR-272 `ambiguous-literal`: a collection or `rational` literal has no
+    /// `ambiguous-literal`: a collection or `rational` literal has no
     /// unique expected type.
     AmbiguousLiteral,
 }
 
 impl IllTypedCause {
-    /// The closed FR-272 `cause` tag, for the causes the complete-V1 cause
+    /// The closed `cause` tag, for the causes the complete-V1 cause
     /// table names.
     pub fn tag(self) -> Option<&'static str> {
         match self {
@@ -150,19 +149,19 @@ mod tests {
     use super::*;
 
     /// each comparison operator decides its Boolean from an exact
-    /// ordering exactly as its FR-149 name reads.
+    /// ordering exactly as its QSpec-FR-149 name reads.
     #[test]
-    fn tc_335_holds_matches_the_operator_name() {
+    fn holds_matches_the_operator_name() {
         assert!(ComparisonOperator::Less.holds(Ordering::Less));
         assert!(!ComparisonOperator::Less.holds(Ordering::Equal));
         assert!(ComparisonOperator::GreaterOrEqual.holds(Ordering::Equal));
         assert!(!ComparisonOperator::Equal.holds(Ordering::Greater));
     }
 
-    /// only the three FR-272-catalogued causes have a `tag`; every
+    /// only the three catalogued causes have a `tag`; every
     /// other cause is a kernel-internal reason with no closed spelling.
     #[test]
-    fn tc_336_only_catalogued_causes_have_a_tag() {
+    fn only_catalogued_causes_have_a_tag() {
         assert_eq!(IllTypedCause::TypeMismatch.tag(), Some("type-mismatch"));
         assert_eq!(IllTypedCause::DistinctUnits.tag(), None);
     }

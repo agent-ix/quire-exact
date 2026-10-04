@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify the kernel's optional bound end to end. Scope: FR-097-AC-7.
+Verify the kernel's optional bound end to end.
 
 Scope: FR-097-AC-7.
 

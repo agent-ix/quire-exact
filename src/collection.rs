@@ -386,7 +386,7 @@ fn bound_and_retain(
         Charge::new(ChargePoint::CollectionBound).size(LimitKind::ValueOccurrences, count),
     )?;
     // An unbounded collection type has no cardinality to violate (QSpec
-    // FR-144-AC-12); the charge above still applies.
+    // QSpec-FR-144-AC-12); the charge above still applies.
     if let Some(bound) = collection_type.bound {
         if let Some(violation) = bound.violation(count) {
             return Err(Stop::Refused(Refusal::CardinalityOutOfBound {
@@ -470,7 +470,7 @@ fn member_equal_stop(candidate: &Value, member: &Value, meter: &mut Meter) -> Re
     // `candidate` the value tested against it, so `plan_pairs(member,
     // candidate)` -- not the reverse -- keeps a `ForeignReference`'s
     // `required` naming the collection's own universe and `supplied` the
-    // probe's (FR-096's `required`/`supplied` convention;
+    // probe's (the `required`/`supplied` convention;
     // `plan_pairs` is symmetric, so this does not change the pair count or
     // result).
     let plan = plan_pairs(member, candidate).map_err(Stop::Refused)?;
@@ -522,7 +522,7 @@ mod tests {
     /// an empty bound `[0, 3]` admits an empty sequence with zero
     /// occurrences retained.
     #[test]
-    fn tc_314_empty_sequence_within_bound_completes() {
+    fn empty_sequence_within_bound_completes() {
         let bound = CardinalityBound::new(0, 3).unwrap();
         let collection_type =
             CollectionType::new(CollectionKind::Sequence, ValueType::Integer, Some(bound));
@@ -536,7 +536,7 @@ mod tests {
     /// `AboveMaximum` and no collection is materialized.
     #[trace("QSpec-TC-189", "QSpec-FR-144-AC-3")]
     #[test]
-    fn tc_315_sequence_above_maximum_is_refused() {
+    fn sequence_above_maximum_is_refused() {
         let bound = CardinalityBound::new(0, 1).unwrap();
         let collection_type =
             CollectionType::new(CollectionKind::Sequence, ValueType::Integer, Some(bound));

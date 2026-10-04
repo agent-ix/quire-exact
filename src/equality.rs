@@ -240,7 +240,7 @@ mod tests {
     /// `plan_equality` reports the exact pair count of two equal
     /// integers without charging.
     #[test]
-    fn tc_346_plan_equality_reports_pairs_without_charge() {
+    fn plan_equality_reports_pairs_without_charge() {
         let left = Value::Integer(Integer::one());
         let right = Value::Integer(Integer::one());
         let plan = plan_equality(&left, &right).unwrap();
@@ -252,7 +252,7 @@ mod tests {
     /// cannot admit `equality.plan-form`, so the identical comparison
     /// returns `Outcome::Incomplete` instead.
     #[test]
-    fn tc_347_planned_equality_charges_and_a_tight_meter_is_incomplete() {
+    fn planned_equality_charges_and_a_tight_meter_is_incomplete() {
         let left = Value::Integer(Integer::one());
         let right = Value::Integer(Integer::one());
 
@@ -270,7 +270,7 @@ mod tests {
 
     /// two equal integers plan one pair and compare equal.
     #[test]
-    fn tc_321_equal_integers_plan_one_equal_pair() {
+    fn equal_integers_plan_one_equal_pair() {
         let left = Value::Integer(Integer::one());
         let right = Value::Integer(Integer::one());
         let plan = plan_pairs(&left, &right).unwrap();
@@ -303,7 +303,7 @@ mod tests {
     /// `ForeignReference` rather than comparing structurally, carrying the
     /// left operand's universe as `required` and the right's as `supplied`.
     #[test]
-    fn tc_322_foreign_reference_pair_is_refused() {
+    fn foreign_reference_pair_is_refused() {
         use crate::identity::{EffectiveId, ObjectId, UniverseId};
         use crate::reference::ObjectReference;
 

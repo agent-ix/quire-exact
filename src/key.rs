@@ -23,12 +23,12 @@
 //! `Value::Enum` is [`crate::value::EnumMember`] here -- a bare
 //! [`crate::identity::VariantId`] paired with its zero-based canonical rank --
 //! not a declaration-aware value carrying a live position/case lookup.
-//! FR-144's enumeration key row (FR-144-AC-9) fixes canonical order as
+//! QSpec-FR-144's enumeration key row (QSpec-FR-144-AC-9) fixes canonical order as
 //! declaration position for an `ordered enum` and case-identifier byte order
 //! otherwise; because `EnumMember::rank` is already that canonical-list index
 //! (the shape that admitted it fixed it there,
 //! `crate::value::EnumShape::rank`), comparing two same-enum members' ranks
-//! numerically reproduces FR-144's order for *both* cases at once, with no
+//! numerically reproduces QSpec-FR-144's order for *both* cases at once, with no
 //! declaration lookup and no case-name string needed here.
 
 use alloc::{vec, vec::Vec};
@@ -170,7 +170,7 @@ mod tests {
     /// two equal integers key-compare equal; unequal integers key
     /// in the same order as their value ordering.
     #[test]
-    fn tc_312_integer_keys_follow_value_ordering() {
+    fn integer_keys_follow_value_ordering() {
         let one = Value::Integer(Integer::one());
         let two = Value::Integer(Integer::one().add(&Integer::one()));
         assert_eq!(compare_keys(&one, &one), Some(Ordering::Equal));
@@ -180,7 +180,7 @@ mod tests {
     /// comparing values of unrelated types (a checked program never
     /// produces this) returns `None`, not a panic.
     #[test]
-    fn tc_313_mismatched_leaf_types_return_none() {
+    fn mismatched_leaf_types_return_none() {
         let boolean = Value::Boolean(true);
         let integer = Value::Integer(Integer::one());
         assert_eq!(compare_keys(&boolean, &integer), None);
@@ -206,12 +206,34 @@ mod tests {
     /// A same-type `Value::Float` pair has no key, matching
     /// its exclusion from `=` in `crate::equality`'s leaf match.
     #[test]
-    fn tc_349_float_pair_has_no_key() {
+    fn float_pair_has_no_key() {
         use crate::ieee::IeeeValue;
 
         let left = Value::Float(IeeeValue::binary64(0x3ff0_0000_0000_0000));
         let right = Value::Float(IeeeValue::binary64(0x3ff0_0000_0000_0000));
         assert_eq!(compare_keys(&left, &right), None);
+    }
+
+    /// Two members of one shape order by their rank, whatever the order of
+    /// their `VariantId` digests.
+    #[trace("TC-409", "FR-088-AC-11")]
+    #[test]
+    fn compare_keys_orders_members_of_one_shape_by_rank() {
+        use crate::identity::VariantId;
+        use crate::value::EnumMember;
+
+        fn variant(byte: u8) -> VariantId {
+            let mut bytes = [0_u8; 32];
+            bytes[31] = byte;
+            VariantId::from_digest(bytes)
+        }
+
+        // Rank 0 has the larger digest.
+        let first = Value::Enum(EnumMember::new(variant(9), 0));
+        let second = Value::Enum(EnumMember::new(variant(1), 1));
+        assert_eq!(compare_keys(&first, &second), Some(Ordering::Less));
+        assert_eq!(compare_keys(&second, &first), Some(Ordering::Greater));
+        assert_eq!(compare_keys(&first, &first), Some(Ordering::Equal));
     }
 
     /// The kernel leaf carries no declaration to guard
@@ -221,7 +243,7 @@ mod tests {
     /// the `left.variant() != right.variant()` guard back to a bare
     /// `left.rank().cmp(&right.rank())` makes this return
     /// `Some(Ordering::Equal)` instead of `None`.
-    #[trace("TC-409")]
+    #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn compare_keys_refuses_same_rank_different_declaration_members() {
         use crate::identity::VariantId;

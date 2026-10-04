@@ -113,7 +113,7 @@ pub enum Undefined {
 /// Why a defined result is refused. Refusals never carry the refused value.
 ///
 /// Each of the ten value refusals carries the declared target domain or IEEE
-/// width its catalog record renders (FR-096), so the record is built
+/// width its catalog record renders, so the record is built
 /// from the variant and never from a message. Bigint domains are boxed, which
 /// keeps `Refusal` small; it is `Clone`, not `Copy`.
 ///
@@ -184,9 +184,8 @@ pub enum Refusal {
         /// The grammar-named `Rational[..]` conversion target.
         target: Box<RationalDomain>,
     },
-    /// A comparison met two references of different universes (FR-096: the
-    /// `foreign_reference`/`foreign-universe` key-table row, `required` and
-    /// `supplied` rendered as lowercase hex). `required` is the universe
+    /// A comparison met two references of different universes: code
+    /// `foreign_reference`, cause `foreign-universe`. `required` is the universe
     /// already in force, `supplied` the one tested against it: for a bare
     /// equality (`plan_pairs(left, right)`, `equality.rs`), that is the left
     /// operand's universe and the right's, since equality has no "binding"
@@ -328,7 +327,7 @@ mod tests {
     /// `Undefined`, `Refused` and `Incomplete` are each exercised, not just
     /// `Undefined` as before.
     #[test]
-    fn tc_317_completed_extracts_only_the_completed_variant() {
+    fn completed_extracts_only_the_completed_variant() {
         use crate::accounting::{ChargePoint, Incomplete, LimitKind};
         use crate::integer::Integer;
 
@@ -355,7 +354,7 @@ mod tests {
     }
 
     /// TC-428 (FR-096-AC-8): every kernel refusal but `CheckedInvariant`
-    /// returns the catalog code and cause of its key-table row, and
+    /// returns the catalog code and cause of its row, and
     /// `CheckedInvariant` returns neither.
     #[trace("TC-428", "FR-096-AC-8")]
     #[test]
@@ -497,5 +496,71 @@ mod tests {
         }
         assert_eq!(Refusal::CheckedInvariant.code(), None);
         assert_eq!(Refusal::CheckedInvariant.cause(), None);
+    }
+
+    /// TC-428 (FR-096-AC-8): a value refusal carries the declared target it
+    /// was raised for, so a refusal that dropped or swapped its target
+    /// fails here.
+    #[trace("TC-428", "FR-096-AC-8")]
+    #[test]
+    fn tc_428_a_value_refusal_carries_its_target() {
+        use crate::integer::Integer;
+        use crate::text::TextProfile;
+
+        let range = |lower: i64, upper: i64| {
+            IntegerInterval::spanning(Integer::from(lower), Integer::from(upper))
+        };
+
+        let Refusal::IntegerOutOfDomain { target } = (Refusal::IntegerOutOfDomain {
+            target: Box::new(range(-5, 9)),
+        }) else {
+            unreachable!()
+        };
+        assert_eq!(*target, range(-5, 9));
+
+        let narrow = Refusal::InexactDecimal {
+            target: InexactTarget::Integer(Box::new(range(0, 9))),
+        };
+        assert!(
+            matches!(&narrow, Refusal::InexactDecimal { target: InexactTarget::Integer(domain) } if **domain == range(0, 9))
+        );
+
+        let text = TextType::new(1, 8, TextProfile::Nfc).unwrap();
+        assert!(
+            matches!(&Refusal::TextLengthOutOfDomain { target: text.clone() }, Refusal::TextLengthOutOfDomain { target } if *target == text)
+        );
+
+        let flags = IeeeFlags::EMPTY;
+        assert!(matches!(
+            &Refusal::IeeeNotExact { target: IeeeWidth::Binary32, would_be: flags },
+            Refusal::IeeeNotExact { target: IeeeWidth::Binary32, would_be } if *would_be == flags
+        ));
+        assert!(matches!(
+            &Refusal::IeeeNanPayloadNotRepresentable {
+                target: IeeeWidth::Binary32,
+                source: IeeeWidth::Binary64,
+            },
+            Refusal::IeeeNanPayloadNotRepresentable {
+                target: IeeeWidth::Binary32,
+                source: IeeeWidth::Binary64,
+            }
+        ));
+
+        let domain = DecimalType::new(
+            Integer::from(-100),
+            Integer::from(100),
+            0,
+            2,
+            crate::decimal::RoundingMode::Exact,
+        )
+        .unwrap();
+        assert!(
+            matches!(&Refusal::DecimalOutOfDomain { target: Box::new(domain.clone()) }, Refusal::DecimalOutOfDomain { target } if **target == domain)
+        );
+
+        let rational = RationalDomain::new(range(-9, 9), range(1, 9)).unwrap();
+        assert!(
+            matches!(&Refusal::RationalOutOfDomain { target: Box::new(rational.clone()) }, Refusal::RationalOutOfDomain { target } if **target == rational)
+        );
     }
 }

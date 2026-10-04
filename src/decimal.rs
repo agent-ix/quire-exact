@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! FR-140 exact decimals: coefficient/scale values, the six rounding spellings,
+//! QSpec-FR-140 exact decimals: coefficient/scale values, the six rounding spellings,
 //! canonical-rational loss records and metered evaluation.
 //!
 //! Every intermediate is an exact integer or reduced rational; no binary
@@ -418,7 +418,7 @@ impl DecimalType {
         self.rounding
     }
 
-    /// FR-140 value-only membership. With normalized (`c`, `s`), the value is a
+    /// QSpec-FR-140 value-only membership. With normalized (`c`, `s`), the value is a
     /// member exactly when `s* = max(s, smin) <= smax` and
     /// `lo <= c × 10^(s* - s) <= hi`. The lifted coefficient is never
     /// materialized and no charge is made.
@@ -468,7 +468,7 @@ pub fn compare_shifted(value: &Integer, shift: u64, bound: &Integer) -> Ordering
     }
 }
 
-/// One FR-140 decimal operation.
+/// One QSpec-FR-140 decimal operation.
 #[derive(Clone, Copy, Debug)]
 pub enum DecimalOperation<'a> {
     /// `a + b`.
@@ -908,7 +908,7 @@ pub struct Placed {
 }
 
 impl Placed {
-    /// Admit the placed value by its own target's FR-140 membership, or
+    /// Admit the placed value by its own target's QSpec-FR-140 membership, or
     /// refuse it `DecimalOutOfDomain`.
     pub fn admit(self) -> Result<Admitted, Refusal> {
         self.value.check_membership(&self.target)?;
@@ -1008,7 +1008,7 @@ fn reject_zero_divisor(operation: DecimalOperation<'_>) -> Result<(), Stop> {
 enum Intermediate {
     /// The integer `value` in units of `10^-scale`.
     Scaled { value: Integer, scale: u64 },
-    /// The reduced FR-140 `N/D`, already in units of `10^-T`.
+    /// The reduced QSpec-FR-140 `N/D`, already in units of `10^-T`.
     Quotient(Rational),
 }
 
@@ -1215,7 +1215,7 @@ mod tests {
         Integer::from(value)
     }
 
-    /// FR-142-AC-3: a placement is bound to its own
+    /// QSpec-FR-142-AC-3: a placement is bound to its own
     /// target. `7/4` places exactly at `Decimal[0, 100; 0, 2]` (1.75 is
     /// outside the declared `[0, 1.00]`), and the placement cannot be
     /// retained unless admitted, so the out-of-domain value is refused
@@ -1254,7 +1254,7 @@ mod tests {
         assert!(result.loss().is_none());
     }
 
-    /// FR-142-AC-3 (review M1): the integer view exists only for a
+    /// QSpec-FR-142-AC-3 (review M1): the integer view exists only for a
     /// scale-zero target; an admitted placement at a nonzero scale has none.
     #[trace("QSpec-TC-187", "QSpec-FR-142-AC-3")]
     #[test]
@@ -1287,7 +1287,7 @@ mod tests {
     /// spelling through `as_str`/`from_code`, and `ALL` names exactly the
     /// six declared variants.
     #[test]
-    fn tc_348_rounding_mode_spellings_round_trip() {
+    fn rounding_mode_spellings_round_trip() {
         assert_eq!(RoundingMode::ALL.len(), 6);
         for mode in RoundingMode::ALL {
             assert_eq!(RoundingMode::from_code(mode.as_str()), Some(mode));
@@ -1297,7 +1297,7 @@ mod tests {
     /// `1.00 + 2.00` completes to the exact `3.00` coefficient at
     /// the target's declared scale.
     #[test]
-    fn tc_339_decimal_addition_completes_exactly() {
+    fn decimal_addition_completes_exactly() {
         let target = generous_type();
         let mut meter = generous_meter();
         let one = Decimal::new(Integer::from(100_u64), 2);
@@ -1312,7 +1312,7 @@ mod tests {
     /// a value's normalized coefficient outside the declared bound
     /// is not a member, at any representation of the same numeric value.
     #[test]
-    fn tc_340_contains_rejects_outside_the_declared_bound() {
+    fn contains_rejects_outside_the_declared_bound() {
         let target = DecimalType::new(
             Integer::zero(),
             Integer::from(10_u64),
@@ -1330,7 +1330,7 @@ mod tests {
     /// `exact_denominator()` reconstruct the exact pre-rounding `1/3` (also exercises
     /// `evaluate_decimal` under a non-`NearestEven` rounding mode).
     #[test]
-    fn tc_344_decimal_loss_exact_reconstructs_the_pre_rounding_rational() {
+    fn decimal_loss_exact_reconstructs_the_pre_rounding_rational() {
         let target = DecimalType::new(
             Integer::zero().sub(&Integer::from(1_000_000_u64)),
             Integer::from(1_000_000_u64),

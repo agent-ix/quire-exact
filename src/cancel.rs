@@ -17,7 +17,7 @@ use alloc::sync::Arc;
 use core::fmt;
 use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
-/// Why a [`Cancel`] handle was cancelled (FR-276).
+/// Why a [`Cancel`] handle was cancelled.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CancelCause {
     /// The caller asked for it.
@@ -60,7 +60,7 @@ struct Shared {
     /// The cause a charge saw, or [`LIVE`] while none has.
     tripped: AtomicU8,
     /// How many charges have polled this handle while an operation counted
-    /// them, for the per-stage work it reports (FR-275-AC-5).
+    /// them, for the per-stage work it reports.
     charges: AtomicU32,
     /// How many operations are counting charges now. A charge pays for the
     /// count only while this is above zero, so an evaluation that counts

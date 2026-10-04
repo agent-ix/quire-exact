@@ -483,7 +483,7 @@ impl IeeeOperationKind {
         Self::FromExact,
     ];
 
-    /// The reserved qualified intrinsic identity, for the five FR-148 intrinsics.
+    /// The reserved qualified intrinsic identity, for the five QSpec-FR-148 intrinsics.
     pub fn intrinsic_identity(self) -> Option<&'static str> {
         match self {
             Self::SquareRoot => Some("quire::value::ieee::sqrt"),
@@ -627,7 +627,7 @@ pub fn compare_ieee<'a>(
     meter: &mut Meter,
 ) -> Result<Outcome<bool>, IllTyped> {
     let (left, right) = (ieee_operand(left)?, ieee_operand(right)?);
-    // FR-148: every comparison whose IEEE operands differ in width is
+    // QSpec-FR-148: every comparison whose IEEE operands differ in width is
     // `ill_typed` before any charge.
     let width = same_width(left, &[right])?;
     Ok(Outcome::from_stop(compare(
@@ -1593,7 +1593,7 @@ fn round(format: Format, exact: Exact, rounding: RoundingMode) -> (u64, IeeeFlag
             approximation,
         } => (negative, approximation),
     };
-    // FR-148-AC-8: strict `exact` reports `nearest-even` would-be flags.
+    // QSpec-FR-148-AC-8: strict `exact` reports `nearest-even` would-be flags.
     let direction = match rounding {
         RoundingMode::Exact => RoundingMode::NearestEven,
         other => other,
@@ -1661,7 +1661,7 @@ fn convert_width(
             negative,
             signaling,
         } => {
-            // FR-148: the payload is the integer below the quiet bit, kept
+            // QSpec-FR-148: the payload is the integer below the quiet bit, kept
             // unchanged; one not smaller than the target's quiet bit is refused
             // with no flags, before the NaN is consumed.
             let payload = value.bits & (source.quiet_bit() - 1);
@@ -1727,7 +1727,7 @@ mod tests {
     /// a canonical quiet-NaN bit pattern decodes as NaN, and a
     /// finite bit pattern does not.
     #[test]
-    fn tc_325_is_nan_follows_the_bit_pattern() {
+    fn is_nan_follows_the_bit_pattern() {
         let nan = IeeeValue::binary64(0x7ff8_0000_0000_0000);
         let one = IeeeValue::binary64(0x3ff0_0000_0000_0000);
         assert!(nan.is_nan());
@@ -1738,7 +1738,7 @@ mod tests {
     /// canonical binary64 `2.0` bit pattern with no flags raised
     /// (`evaluate_ieee` had no test before this).
     #[test]
-    fn tc_350_evaluate_ieee_adds_two_finite_values() {
+    fn evaluate_ieee_adds_two_finite_values() {
         let mut meter = generous_meter();
         let one = IeeeValue::binary64(0x3ff0_0000_0000_0000);
         let outcome = evaluate_ieee(
@@ -1756,7 +1756,7 @@ mod tests {
     /// `NumericEqual`, and cross-width operands are ill-typed before any
     /// charge (`compare_ieee` had no test before this).
     #[test]
-    fn tc_351_compare_ieee_numeric_equal_and_cross_width_is_ill_typed() {
+    fn compare_ieee_numeric_equal_and_cross_width_is_ill_typed() {
         let mut meter = generous_meter();
         let one64 = IeeeValue::binary64(0x3ff0_0000_0000_0000);
         let other_one64 = IeeeValue::binary64(0x3ff0_0000_0000_0000);
@@ -1773,7 +1773,7 @@ mod tests {
     /// pattern with no flags raised (`convert_ieee_width` had no test
     /// before this).
     #[test]
-    fn tc_352_convert_ieee_width_narrows_exactly() {
+    fn convert_ieee_width_narrows_exactly() {
         let mut meter = generous_meter();
         let one64 = IeeeValue::binary64(0x3ff0_0000_0000_0000);
         let outcome = convert_ieee_width(
@@ -1792,7 +1792,7 @@ mod tests {
     /// undefined rather than converted (`ieee_to_exact` had no test before
     /// this).
     #[test]
-    fn tc_353_ieee_to_exact_converts_finite_and_refuses_nan() {
+    fn ieee_to_exact_converts_finite_and_refuses_nan() {
         use crate::integer::IntegerInterval;
         use crate::outcome::Undefined;
         use crate::rational::{Rational, RationalDomain};
@@ -1824,7 +1824,7 @@ mod tests {
     /// nearest-even rounding produces the canonical IEEE bit pattern for
     /// `1.0`, with no exception flags raised.
     #[test]
-    fn tc_326_exact_to_ieee_of_one_is_canonical() {
+    fn exact_to_ieee_of_one_is_canonical() {
         let mut meter = generous_meter();
         let one = Integer::one();
         let outcome = exact_to_ieee(

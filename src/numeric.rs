@@ -36,7 +36,7 @@ pub enum ArithmeticOperator {
     Divide,
 }
 
-/// A numeric ordering operator. Equality has its own FR-149 schedule.
+/// A numeric ordering operator. Equality has its own QSpec-FR-149 schedule.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrderingOperator {
     /// `<`.
@@ -50,9 +50,8 @@ pub enum OrderingOperator {
 }
 
 impl OrderingOperator {
-    /// `pub`, not `fn`-private: `quire_spec_language::value::
-    /// numeric`'s own `order`, still local because it returns this crate's
-    /// own `Outcome`, calls it directly. It is a pure decision over an
+    /// `pub`, not `fn`-private: a caller's own numeric ordering, which
+    /// returns its own outcome type, calls it directly. It is a pure decision over an
     /// already-computed `Ordering`, so widening charges or exposes nothing.
     pub fn holds(self, ordering: Ordering) -> bool {
         match self {
@@ -244,7 +243,7 @@ pub enum IntegerArithmetic<'a> {
 
 /// Evaluate integer arithmetic: `integer-arithmetic.operands`,
 /// `integer-arithmetic.arithmetic`, the uncharged membership of an optional
-/// FR-044 result bound, then `integer-arithmetic.result-retain`.
+/// result bound, then `integer-arithmetic.result-retain`.
 pub fn evaluate_integer_arithmetic(
     operation: IntegerArithmetic<'_>,
     bound: Option<&IntegerInterval>,
@@ -310,7 +309,7 @@ pub enum RationalArithmetic<'a> {
 /// divisor as undefined, `rational-arithmetic.arithmetic` from the operands,
 /// `rational-arithmetic.normalize` on the unreduced intermediate, the
 /// uncharged membership of
-/// an optional FR-044 result domain, then `rational-arithmetic.result-retain`.
+/// an optional result domain, then `rational-arithmetic.result-retain`.
 pub fn evaluate_rational_arithmetic(
     operation: RationalArithmetic<'_>,
     domain: Option<&RationalDomain>,
@@ -452,7 +451,7 @@ mod tests {
 
     /// `2 + 3` completes to `5` and charges the metered result.
     #[test]
-    fn tc_337_integer_addition_completes() {
+    fn integer_addition_completes() {
         let mut meter = generous_meter();
         let (two, three) = (Integer::from(2_u64), Integer::from(3_u64));
         let outcome =
@@ -463,7 +462,7 @@ mod tests {
     /// `a implies b` is false only when `a` is true and `b` is
     /// false, matching its logical definition exactly.
     #[test]
-    fn tc_338_implies_is_false_only_for_true_and_false() {
+    fn implies_is_false_only_for_true_and_false() {
         let mut meter = generous_meter();
         let outcome = evaluate_boolean(BooleanConnective::Implies(true, false), &mut meter);
         assert_eq!(outcome.completed(), Some(false));

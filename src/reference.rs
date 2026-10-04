@@ -6,8 +6,7 @@
 //! referenced state. `EffectiveId` and `UniverseId` are opaque digests minted by
 //! the caller from its own preimage; `ObjectId` is the object's own authored
 //! UTF-8 bytes, never a digest. Checking a reference against a declaration
-//! registry is not a kernel concern; `quire-semantic-value`'s `ObjectClosure`
-//! does it.
+//! registry is not a kernel concern; a caller does it.
 
 use crate::identity::{EffectiveId, ObjectId, UniverseId};
 
@@ -63,7 +62,7 @@ mod tests {
     /// any one component of the triple makes them distinct (equality never
     /// inspects referenced state -- only the triple).
     #[test]
-    fn tc_316_reference_equality_follows_the_identity_triple() {
+    fn reference_equality_follows_the_identity_triple() {
         let universe = UniverseId::from_digest(digest(1));
         let object_type = EffectiveId::from_digest(digest(2));
         let object = ObjectId::new("o1").unwrap();

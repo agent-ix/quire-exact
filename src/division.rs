@@ -220,12 +220,12 @@ mod tests {
     /// dividing by zero under any law is undefined, never a panic.
     ///
     /// Also QSpec FR-147-AC-2 ("Division by zero is undefined and produces
-    /// no numeric value"), verified through central `TC-192`
+    /// no numeric value"), verified through central `QSpec-TC-192`
     /// (`agent-ix/quire-specification`): this is the kernel-level instance
     /// of that requirement.
     #[trace("QSpec-TC-192", "QSpec-FR-147-AC-2")]
     #[test]
-    fn tc_323_division_by_zero_is_undefined() {
+    fn division_by_zero_is_undefined() {
         let domain = IntegerDomain::Mathematical;
         let mut meter = generous_meter();
         let outcome = divide(
@@ -244,7 +244,7 @@ mod tests {
     /// Euclidean `mod` never returns a negative remainder for a
     /// negative dividend, unlike truncating `rem`.
     #[test]
-    fn tc_324_euclidean_modulo_is_nonnegative() {
+    fn euclidean_modulo_is_nonnegative() {
         let domain = IntegerDomain::Mathematical;
         let mut meter = generous_meter();
         let dividend = Integer::zero().sub(&Integer::from(7_u64));

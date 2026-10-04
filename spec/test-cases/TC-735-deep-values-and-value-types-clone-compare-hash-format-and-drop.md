@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify iterative handling of 100,000-deep values and value types. Scope: FR-262-AC-2.
+Verify iterative handling of 100,000-deep values and value types.
 
 Scope: FR-262-AC-2.
 
@@ -28,4 +28,4 @@ Run every step on a thread spawned with a 512 KiB stack.
 
 ## Status
 
-Implemented. The tests are in `src/value/value_type.rs`, tagged `#[trace("TC-735", "FR-262-AC-2")]`.
+Implemented. The tests are in `src/value/value_type.rs` and `src/value.rs`, tagged `#[trace("TC-735", "FR-262-AC-2")]`.

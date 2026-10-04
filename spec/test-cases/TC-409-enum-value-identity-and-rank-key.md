@@ -18,8 +18,9 @@ Scope: FR-088-AC-11.
 
 1. Build the ranked shape of the ordered enum `b`, `a`, `c`, read each variant's rank, and form the kernel set `{c, a, b}`. Record the visiting order.
 2. Repeat with the unordered enum, whose canonical list is `a`, `b`, `c`.
-3. Build a value that pairs `a`'s `VariantId` with rank 2 and admit it against the shape.
+3. Build a value that pairs `a`'s `VariantId` with a rank other than its own and admit it against the shape.
 4. Compare the ranks and the visiting order of two shapes whose variants differ in identity but not in rank or order.
+5. Compare two members of one shape with `compare_keys`, the variant with the larger digest holding the lower rank.
 
 ## Expected Results
 
@@ -27,7 +28,8 @@ Scope: FR-088-AC-11.
 - Step 2: the ranks are `a` 0, `b` 1, `c` 2, and the set visits `a`, `b`, `c`.
 - Step 3: admission refuses the value.
 - Step 4: the ranks and the visiting order are equal.
+- Step 5: the lower rank orders first, whatever the digests.
 
 ## Status
 
-Implemented. The tests are in `src/value.rs` and `src/key.rs`, tagged `#[trace("TC-409")]`.
+Implemented. The tests are in `src/value.rs` and `src/key.rs`, tagged `#[trace("TC-409", "FR-088-AC-11")]`.

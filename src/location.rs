@@ -13,7 +13,7 @@
 //!
 //! **`Role`'s `String` has no length bound.** This is deliberate: a role's
 //! spelling is a small, fixed vocabulary word that the caller's preimage schema
-//! names at check time (`node-identity-preimage.schema.json`), not a value
+//! names at check time, not a value
 //! materialized from caller-supplied, runtime-metered evaluation input the way a
 //! `Decimal`'s scale or a `Text`'s bytes are. Nothing on any evaluation path
 //! constructs a `Role` from adversarial input, so it takes no charge and needs no
@@ -132,7 +132,7 @@ mod tests {
     /// `(role, ordinal)` occurrence are equal; a different ordinal makes
     /// them distinct.
     #[test]
-    fn tc_305_location_equality_follows_node_and_occurrence() {
+    fn location_equality_follows_node_and_occurrence() {
         let node = NodeKey::from_digest(digest(1));
         let a = Location::new(node, Origin::new(Role::from("declaration"), 0));
         let b = Location::new(node, Origin::new(Role::from("declaration"), 0));
@@ -146,7 +146,7 @@ mod tests {
     /// order the derive relies on, exercised rather than merely round-
     /// tripped through the accessors.
     #[test]
-    fn tc_306_origin_orders_by_role_then_ordinal() {
+    fn origin_orders_by_role_then_ordinal() {
         let declaration_0 = Origin::new(Role::from("declaration"), 0);
         let declaration_1 = Origin::new(Role::from("declaration"), 1);
         let reference_0 = Origin::new(Role::from("reference"), 0);

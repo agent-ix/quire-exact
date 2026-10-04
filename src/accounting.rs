@@ -264,7 +264,7 @@ pub enum ChargePoint {
     /// `population.visit`.
     PopulationVisit,
     /// `dispatch.select`: one dispatched `receiver.member(args)` call
-    /// (FR-151, TC-196 D06).
+    ///.
     DispatchSelect,
     /// `declaration.check`: one checked-family declaration's own checking
     /// work -- distinct from
@@ -274,16 +274,16 @@ pub enum ChargePoint {
     /// outcome naming the work-budget stage limit, never `Incomplete`
     /// (`check` never returns `Incomplete`).
     DeclarationCheck,
-    /// `graph.expand` (FR-107): one node enqueued by a `reaches`
+    /// `graph.expand`: one node enqueued by a `reaches`
     /// walk, its source included.
     GraphExpand,
-    /// `graph.edge` (FR-107): one edge target visited by a `reaches` walk.
+    /// `graph.edge`: one edge target visited by a `reaches` walk.
     GraphEdge,
-    /// `graph.result-retain` (FR-107): a `reaches` walk's Boolean result.
+    /// `graph.result-retain`: a `reaches` walk's Boolean result.
     GraphResultRetain,
-    /// `model.deref` (FR-107): one `deref(...)` of a model reference.
+    /// `model.deref`: one `deref(...)` of a model reference.
     ModelDeref,
-    /// `model.navigate` (FR-107): one model attribute field read
+    /// `model.navigate`: one model attribute field read
     /// (`self.f`/`deref(r).f`).
     ModelNavigate,
 }
@@ -450,7 +450,7 @@ pub struct Incomplete {
     pub charge_point: ChargePoint,
 }
 
-/// An NFR-071 fault-injection request: deny the `occurrence`th (1-based) charge
+/// A fault-injection request: deny the `occurrence`th (1-based) charge
 /// at `point`.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct InjectedDenial {
@@ -524,14 +524,13 @@ impl Charge {
 /// also shares the caller's [`Cancel`] handle, a reference count that is no
 /// per-charge state. The ordered charge log
 /// ([`Meter::admitted_charges`]) exists only under the `test-support`
-/// feature, which only a dev-dependency may enable (TC-243's
-/// `no_shipped_dependency_enables_test_support`).
+/// feature, which only a dev-dependency may enable.
 ///
 /// quire:canonical
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Meter {
     counters: Counters,
-    /// The handle every charge polls (FR-276), when the caller gave one.
+    /// The handle every charge polls, when the caller gave one.
     cancel: Option<Cancel>,
     #[cfg(feature = "test-support")]
     admitted: Vec<ChargePoint>,
@@ -570,7 +569,7 @@ impl Meter {
         }
     }
 
-    /// This meter, polling `cancel` at every charge (FR-276). A cancelled
+    /// This meter, polling `cancel` at every charge. A cancelled
     /// handle denies the charge as an exhausted `work_units` budget does.
     #[must_use]
     pub fn with_cancel(mut self, cancel: Cancel) -> Self {
@@ -621,7 +620,7 @@ impl Meter {
     /// The denials that do not come from a limit, checked first at every
     /// charge, each recorded as if the `work_units` limit were the work
     /// already consumed, so `limit = consumed = w`: a cancelled handle
-    /// (FR-276), which the operation holding it reports as its
+    ///, which the operation holding it reports as its
     /// cancellation, and the qualification seam's one exact named charge.
     fn check_injected(&self, point: ChargePoint, work_units: Integer) -> Result<(), Incomplete> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {
@@ -707,7 +706,7 @@ impl Meter {
         self.admitted.push(point);
     }
 
-    /// The FR-149 `equality.plan` charge: size `value_occurrences` is the
+    /// The QSpec-FR-149 `equality.plan` charge: size `value_occurrences` is the
     /// planned pair count; without changing any consumed counter it requires
     /// `pairs + 2` remaining work units and one remaining result unit, then
     /// consumes the plan's own work unit.
@@ -768,7 +767,7 @@ mod tests {
     /// than only ever recording one charge's amount, every other counter assertion
     /// in this crate is single-charge high-water.
     #[test]
-    fn tc_327_charge_within_limits_is_admitted() {
+    fn charge_within_limits_is_admitted() {
         let mut meter = Meter::new(tight_limits());
         meter
             .charge(
@@ -787,7 +786,7 @@ mod tests {
     /// counter is unchanged and the exact limit/consumed/next-charge triple
     /// is reported.
     #[test]
-    fn tc_328_charge_past_limit_is_denied_atomically() {
+    fn charge_past_limit_is_denied_atomically() {
         let mut meter = Meter::new(tight_limits());
         let denial = meter
             .charge(
@@ -833,7 +832,7 @@ mod tests {
         }
     }
 
-    /// FR-276: a meter polls its handle at every charge. A cancelled handle
+    /// A meter polls its handle at every charge. A cancelled handle
     /// denies the next charge without changing any counter, and the handle
     /// records the trip.
     #[test]

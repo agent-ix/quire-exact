@@ -22,7 +22,7 @@
 //! - `Value::Population(PopulationId)`: the kernel carries the opaque identity
 //!   alone, never the population binding a caller's model owns.
 //!   `ValueType::Population(Option<u64>)` holds the declared maximum.
-//!   The declared-maximum comparison (FR-089-AC-5) is a caller-layer check: the
+//!   The declared-maximum comparison  is a caller-layer check: the
 //!   caller resolves a `PopulationId` to its binding and compares the binding's
 //!   own declared maximum there, since this leaf crate has no way to resolve a
 //!   `PopulationId` to anything. Kernel `ValueType::admits` refuses every
@@ -59,7 +59,7 @@ mod value_type;
 /// The inline, *ranked* set of an enum type's admitted variants. The kernel `ValueType::Enum` carries its variant set
 /// directly, as opaque [`VariantId`] digests, so `admits` is a pure
 /// set-membership test needing no declaration lookup. The variants are held as a canonically
-/// ordered list, not a digest-ordered set: FR-144's enumeration key row (FR-144-AC-9) fixes
+/// ordered list, not a digest-ordered set: QSpec-FR-144's enumeration key row (QSpec-FR-144-AC-9) fixes
 /// canonical order as declaration position for an `ordered enum` and
 /// case-identifier byte order for an unordered one, never the `VariantId`
 /// digest. `EnumShape` cannot compute that order itself -- a kernel leaf
@@ -77,7 +77,7 @@ pub struct EnumShape {
 }
 
 impl EnumShape {
-    /// The enum shape admitting exactly `variants`, supplied already in FR-141
+    /// The enum shape admitting exactly `variants`, supplied already in QSpec-FR-141
     /// canonical order (declaration order when `ordered`, case-identifier byte
     /// order otherwise): the caller's responsibility, since this leaf type has
     /// no case-name strings to sort by itself.
@@ -89,7 +89,7 @@ impl EnumShape {
     }
 
     /// Whether the declaration this shape describes selects `ordered enum`
-    /// semantics (FR-141-AC-5): only an ordered enum admits an ordering
+    /// semantics (QSpec-FR-141-AC-5): only an ordered enum admits an ordering
     /// operator.
     pub fn is_ordered(&self) -> bool {
         self.ordered
@@ -120,11 +120,11 @@ impl EnumShape {
 
 /// A completed enum value: its variant identity and its canonical rank next
 /// to it (an enum value carries its `VariantId`
-/// and its rank, the variant's zero-based index in the FR-141 canonical
+/// and its rank, the variant's zero-based index in the QSpec-FR-141 canonical
 /// member list). Identity and equality use `variant` alone
 /// (the kernel equality leaf match, "Identity and equality use the
 /// `VariantId` only"); `rank` exists purely so the kernel's own canonical key
-/// (`compare_keys`, FR-144) can order same-enum values
+/// (`compare_keys`, QSpec-FR-144) can order same-enum values
 /// without any declaration lookup. [`ValueType::admits`] refuses a value
 /// whose claimed rank disagrees with the shape's own ranked list, so a
 /// well-formed `EnumMember` always has `shape.rank(member.variant()) ==
@@ -148,7 +148,7 @@ impl EnumMember {
         self.variant
     }
 
-    /// This member's zero-based index in its enum's FR-141 canonical member
+    /// This member's zero-based index in its enum's QSpec-FR-141 canonical member
     /// list.
     pub fn rank(&self) -> u32 {
         self.rank
@@ -242,7 +242,7 @@ impl ValueType {
                 reference.object_type() == *object_type
             }
             // `ValueType::Population` does not pair with `Value::Population`
-            // here (see this module's doc comment): FR-089-AC-5's
+            // here (see this module's doc comment): the
             // declared-maximum comparison is a caller-layer check, performed by
             // the caller once it resolves the binding. Kernel
             // `admits` refuses population pairs outright; this pair falls
@@ -305,7 +305,7 @@ pub enum Value {
     Text(Text),
     /// A bare enum member identity and its canonical rank.
     Enum(EnumMember),
-    /// An opaque population admission identity (FR-089): never the population binding itself, which
+    /// An opaque population admission identity: never the population binding itself, which
     /// stays a caller's model type.
     Population(PopulationId),
     /// An option value.
@@ -1262,13 +1262,13 @@ mod tests {
     /// `ValueType::Boolean` admits only `Value::Boolean`, refusing
     /// a value of another kind.
     #[test]
-    fn tc_307_admits_checks_the_matching_variant_only() {
+    fn admits_checks_the_matching_variant_only() {
         assert!(ValueType::Boolean.admits(&Value::Boolean(true)));
         assert!(!ValueType::Boolean.admits(&Value::Integer(Integer::one())));
     }
 
     /// TC-297 (FR-089-AC-6): kernel `admits` refuses every population pair;
-    /// the declared-maximum comparison is the caller layer's (FR-089-AC-5).
+    /// the declared-maximum comparison is the caller layer's.
     #[trace("TC-297", "FR-089-AC-6")]
     #[test]
     fn admits_refuses_a_population_pair() {
@@ -1280,11 +1280,11 @@ mod tests {
     /// contains at the variant's own rank, and refuses one it does not
     /// contain.
     ///
-    /// Also TC-409 (FR-088-AC-11): admission checks the whole `(VariantId,
-    /// rank)` pair, not membership alone.
-    #[trace("TC-409")]
+    /// Also FR-088-AC-11: admission checks the whole `(VariantId, rank)` pair,
+    /// not membership alone.
+    #[trace("TC-409", "FR-088-AC-11")]
     #[test]
-    fn tc_308_enum_shape_admits_only_its_own_variants() {
+    fn enum_shape_admits_only_its_own_variants() {
         let in_shape = VariantId::from_digest(digest(1));
         let out_of_shape = VariantId::from_digest(digest(2));
         let shape = ValueType::Enum(EnumShape::new(false, [in_shape]));
@@ -1298,9 +1298,9 @@ mod tests {
     /// checks the whole `(VariantId, rank)` pair against the shape's own
     /// ranked list, not membership alone.
     ///
-    /// Also TC-409 step 5 (FR-088-AC-11): a value that pairs a known
+    /// Also TC-409 step 3 (FR-088-AC-11): a value that pairs a known
     /// `VariantId` with the wrong rank is refused at admission.
-    #[trace("TC-409")]
+    #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn admits_refuses_a_known_variant_at_the_wrong_rank() {
         let first = VariantId::from_digest(digest(1));
@@ -1316,9 +1316,9 @@ mod tests {
     /// the canonical list the caller supplied, and an unranked (unknown)
     /// variant resolves to `None`, never a panic or a fabricated rank.
     ///
-    /// Also TC-409 step 3 (FR-088-AC-11): rank is the canonical-list
+    /// Also TC-409 steps 1 and 2 (FR-088-AC-11): rank is the canonical-list
     /// position.
-    #[trace("TC-409")]
+    #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn enum_shape_rank_matches_canonical_position() {
         let a = VariantId::from_digest(digest(1));
@@ -1332,11 +1332,107 @@ mod tests {
         assert_eq!(shape.variants().collect::<Vec<_>>(), [a, b]);
     }
 
+    /// Form the kernel set of `members` over `shape` and return the visited
+    /// variants' ranks, in visiting order.
+    fn set_visiting_ranks(shape: &EnumShape, members: &[VariantId]) -> Vec<u32> {
+        use crate::accounting::ScalarLimits;
+        use crate::collection::{form_collection, CollectionKind, CollectionType};
+
+        let mut meter = Meter::new(ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        });
+        let collection_type =
+            CollectionType::new(CollectionKind::Set, ValueType::Enum(shape.clone()), None);
+        let occurrences = members
+            .iter()
+            .map(|variant| {
+                let rank = shape.rank(*variant).expect("a variant of the shape");
+                Value::Enum(EnumMember::new(*variant, rank))
+            })
+            .collect();
+        let value = form_collection(&collection_type, occurrences, &mut meter)
+            .expect("every member is admitted")
+            .completed()
+            .expect("the set forms");
+        let Value::Collection(set) = value else {
+            panic!("a collection value");
+        };
+        set.elements()
+            .iter()
+            .map(|element| match element {
+                Value::Enum(member) => member.rank(),
+                other => panic!("an enum member, found {other:?}"),
+            })
+            .collect()
+    }
+
+    /// A set of an ordered enum's values visits them in declaration order,
+    /// and a set of an unordered enum's values in its canonical (case
+    /// identifier) order, whatever the digests of the variants and whatever
+    /// order they were formed in. Two shapes whose variants differ in
+    /// identity but not in rank and order give the same ranks and the same
+    /// visiting order.
+    #[trace("TC-409", "FR-088-AC-11")]
+    #[test]
+    fn a_set_visits_enum_values_in_canonical_rank_order() {
+        // Declared order `b`, `a`, `c`; the digests order them `a`, `c`, `b`.
+        let (a, b, c) = (
+            VariantId::from_digest(digest(1)),
+            VariantId::from_digest(digest(3)),
+            VariantId::from_digest(digest(2)),
+        );
+        let ordered = EnumShape::new(true, [b, a, c]);
+        assert_eq!(
+            [ordered.rank(b), ordered.rank(a), ordered.rank(c)],
+            [Some(0), Some(1), Some(2)]
+        );
+        assert_eq!(set_visiting_ranks(&ordered, &[c, a, b]), [0, 1, 2]);
+        let visited: Vec<VariantId> = {
+            let ranks = set_visiting_ranks(&ordered, &[c, a, b]);
+            ranks
+                .iter()
+                .map(|rank| ordered.variants().nth(*rank as usize).unwrap())
+                .collect()
+        };
+        assert_eq!(visited, [b, a, c]);
+
+        // Unordered: canonical list `a`, `b`, `c`.
+        let unordered = EnumShape::new(false, [a, b, c]);
+        assert_eq!(set_visiting_ranks(&unordered, &[c, b, a]), [0, 1, 2]);
+        let visited: Vec<VariantId> = set_visiting_ranks(&unordered, &[c, b, a])
+            .iter()
+            .map(|rank| unordered.variants().nth(*rank as usize).unwrap())
+            .collect();
+        assert_eq!(visited, [a, b, c]);
+
+        // A second shape with other variant identities at the same positions.
+        let (x, y, z) = (
+            VariantId::from_digest(digest(9)),
+            VariantId::from_digest(digest(8)),
+            VariantId::from_digest(digest(7)),
+        );
+        let renamed = EnumShape::new(true, [x, y, z]);
+        assert_eq!(
+            [renamed.rank(x), renamed.rank(y), renamed.rank(z)],
+            [Some(0), Some(1), Some(2)]
+        );
+        assert_eq!(set_visiting_ranks(&renamed, &[z, x, y]), [0, 1, 2]);
+    }
+
     /// building a record with a missing required field is refused
     /// at that field, before any other field is inspected.
     #[trace("QSpec-TC-188", "QSpec-FR-143-AC-4")]
     #[test]
-    fn tc_309_record_refuses_a_missing_required_field() {
+    fn record_refuses_a_missing_required_field() {
         let member = MemberId::from_digest(digest(2));
         let shape = vec![FieldDeclaration::new(
             member,
@@ -1353,7 +1449,7 @@ mod tests {
     /// completes, and `occ` counts the tuple itself plus its one integer
     /// position.
     #[test]
-    fn tc_310_tuple_of_declared_arity_and_types_completes() {
+    fn tuple_of_declared_arity_and_types_completes() {
         let shape = vec![ValueType::Integer];
         let value = tuple(
             &shape,
@@ -1368,7 +1464,7 @@ mod tests {
     /// the declared and supplied counts named.
     #[trace("QSpec-TC-188", "QSpec-FR-143-AC-4")]
     #[test]
-    fn tc_311_tuple_wrong_arity_names_both_counts() {
+    fn tuple_wrong_arity_names_both_counts() {
         let shape = vec![ValueType::Integer, ValueType::Boolean];
         let err = tuple(
             &shape,
@@ -1391,7 +1487,7 @@ mod tests {
     /// exercised indirectly, through `record`'s missing-required-field
     /// refusal path).
     #[test]
-    fn tc_354_fill_slots_fills_present_and_absent_in_declaration_order() {
+    fn fill_slots_fills_present_and_absent_in_declaration_order() {
         let count = MemberId::from_digest(digest(1));
         let label = MemberId::from_digest(digest(2));
         let shape = vec![
@@ -1419,7 +1515,7 @@ mod tests {
     /// had no test before this; `record`/`tuple`'s tests exercise only the
     /// non-deferred constructors).
     #[test]
-    fn tc_355_evaluate_record_completes_from_a_deferred_field() {
+    fn evaluate_record_completes_from_a_deferred_field() {
         let count = MemberId::from_digest(digest(1));
         let shape = vec![FieldDeclaration::new(
             count,
@@ -1444,7 +1540,7 @@ mod tests {
     /// expressions in position order and completes (`evaluate_tuple` had no
     /// test before this).
     #[test]
-    fn tc_356_evaluate_tuple_completes_from_deferred_positions() {
+    fn evaluate_tuple_completes_from_deferred_positions() {
         let shape = vec![ValueType::Integer];
         let mut meter = generous_meter();
         let positions: Vec<Deferred<'_>> = vec![Box::new(|_meter| {
@@ -1829,7 +1925,7 @@ mod tests {
     }
 
     /// Levels of nesting in [`deep_value`]. A recursive walk spends at least
-    /// one stack frame per level, so this many levels overflows the 2 MiB
+    /// one stack frame per level, so this many levels overflows the 512 KiB
     /// stack [`on_small_stack`] runs each walk on by a wide margin.
     const DEEP: usize = 100_000;
 
@@ -1859,11 +1955,11 @@ mod tests {
         (node_type, value)
     }
 
-    /// Run `walk` on a thread with a 2 MiB stack, so a recursive walk
+    /// Run `walk` on a thread with a 512 KiB stack, so a recursive walk
     /// overflows whatever stack size the test harness itself was given.
     fn on_small_stack(walk: impl FnOnce() + Send + 'static) {
         std::thread::Builder::new()
-            .stack_size(2 * 1024 * 1024)
+            .stack_size(512 * 1024)
             .spawn(walk)
             .expect("spawn the walk thread")
             .join()
@@ -1891,8 +1987,23 @@ mod tests {
         }
     }
 
-    /// Dropping a value nested `DEEP` levels deep completes on a 2 MiB
+    /// A value nested `DEEP` levels deep compares equal to its clone, and it
+    /// and its clone drop, on a 512 KiB stack.
+    #[trace("TC-735", "FR-262-AC-2")]
+    #[test]
+    fn a_deep_value_equals_its_clone_and_both_drop() {
+        on_small_stack(|| {
+            let (_, value) = deep_value();
+            let clone = value.clone();
+            assert!(value == clone);
+            drop(value);
+            drop(clone);
+        });
+    }
+
+    /// Dropping a value nested `DEEP` levels deep completes on a 512 KiB
     /// stack.
+    #[trace("TC-735", "FR-262-AC-2")]
     #[test]
     fn a_deep_value_drops_on_a_small_stack() {
         on_small_stack(|| {
@@ -1925,7 +2036,7 @@ mod tests {
     }
 
     /// Formatting a value nested `DEEP` levels deep with `Debug` completes
-    /// on a 2 MiB stack, and the output closes every level it opens.
+    /// on a 512 KiB stack, and the output closes every level it opens.
     #[test]
     fn a_deep_value_debug_formats_on_a_small_stack() {
         on_small_stack(|| {
@@ -1937,7 +2048,7 @@ mod tests {
         });
     }
 
-    /// `admits` decides a value nested `DEEP` levels deep on a 2 MiB stack:
+    /// `admits` decides a value nested `DEEP` levels deep on a 512 KiB stack:
     /// it reads the type the composite carries and never descends into it.
     #[test]
     fn a_deep_value_is_admitted_on_a_small_stack() {
@@ -1949,7 +2060,7 @@ mod tests {
     }
 
     /// Equality planning and evaluation compare two separately built values
-    /// nested `DEEP` levels deep on a 2 MiB stack, and find them equal.
+    /// nested `DEEP` levels deep on a 512 KiB stack, and find them equal.
     #[test]
     fn deep_values_compare_equal_on_a_small_stack() {
         on_small_stack(|| {
@@ -1962,7 +2073,7 @@ mod tests {
     }
 
     /// The canonical key orders two separately built values nested `DEEP`
-    /// levels deep on a 2 MiB stack, and finds them equal.
+    /// levels deep on a 512 KiB stack, and finds them equal.
     #[test]
     fn deep_values_compare_keys_on_a_small_stack() {
         on_small_stack(|| {

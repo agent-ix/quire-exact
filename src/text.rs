@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! FR-141 text: validated UTF-8 payloads, the six text profiles, bounded
+//! QSpec-FR-141 text: validated UTF-8 payloads, the six text profiles, bounded
 //! `Text[min,max; profile]` admission and metered comparison.
 //!
 //! Normalization uses exactly the Unicode 17.0.0 data selected by
@@ -47,7 +47,7 @@ const _: () = assert!(
     "quire.value.text.unicode-17.0.0/v1 requires Unicode 17.0.0 normalization tables"
 );
 
-/// One FR-141 text profile.
+/// One QSpec-FR-141 text profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum TextProfile {
     /// Decoded scalar sequence without normalization.
@@ -65,7 +65,7 @@ pub enum TextProfile {
 }
 
 impl TextProfile {
-    /// Every profile in FR-141 order.
+    /// Every profile in QSpec-FR-141 order.
     pub const ALL: [Self; 6] = [
         Self::UnicodeScalars,
         Self::Nfc,
@@ -113,8 +113,8 @@ impl TextProfile {
     /// Profile length of a retained sequence: bytes for `binary-utf8`, scalars
     /// otherwise, counted on the retained (normalized) sequence.
     ///
-    /// `pub`, not `fn`-private: `quire_spec_language::value::
-    /// text`'s own `Text::length` calls it directly. It is a pure counted
+    /// `pub`, not `fn`-private: a caller's own text length calls it
+    /// directly. It is a pure counted
     /// length over an already-retained sequence, so widening it charges or
     /// bounds nothing that was not already the caller's job.
     pub fn length(self, retained: &str) -> u64 {
@@ -127,8 +127,8 @@ impl TextProfile {
         length_amount(count)
     }
 
-    /// `pub`, not `fn`-private: `quire_spec_language::value::
-    /// text`'s own `compare` calls it directly, the same reasoning as
+    /// `pub`, not `fn`-private: a caller's own text comparison calls it
+    /// directly, the same reasoning as
     /// [`Self::length`] above.
     pub fn order(self, left: &str, right: &str) -> Ordering {
         match self {
@@ -156,9 +156,8 @@ pub enum NormalizationForm {
 impl NormalizationForm {
     /// Stream the normalized scalars of `text`.
     ///
-    /// `pub`, not `pub(crate)`: `quire_spec_language::value::
-    /// text`'s own `prepare` engine, still local because it returns this
-    /// crate's own `Outcome`, calls it directly rather than reimplementing
+    /// `pub`, not `pub(crate)`: a caller's own text preparation, which
+    /// returns its own outcome type, calls it directly rather than reimplementing
     /// Unicode normalization dispatch. This streams already-decoded scalars
     /// and charges nothing itself, so widening it exposes no unmetered
     /// materialization.
@@ -236,8 +235,8 @@ impl TextType {
         self.profile
     }
 
-    /// `pub`, not `fn`-private: `quire_spec_language::value::
-    /// text`'s own `check_length` calls it directly, the same reasoning as
+    /// `pub`, not `fn`-private: a caller's own length check calls it
+    /// directly, the same reasoning as
     /// [`TextProfile::length`].
     pub fn admits(&self, retained: &str) -> bool {
         (self.min..=self.max).contains(&self.profile.length(retained))
@@ -490,7 +489,7 @@ mod tests {
     /// a runtime UTF-8 payload within its declared length bounds is
     /// admitted unchanged.
     #[test]
-    fn tc_341_utf8_payload_within_bound_is_admitted() {
+    fn utf8_payload_within_bound_is_admitted() {
         let payload = TextPayload::from_utf8("café".as_bytes()).unwrap();
         assert_eq!(payload.as_str(), "café");
         let text_type = TextType::new(0, 10, TextProfile::UnicodeScalars).unwrap();
@@ -503,7 +502,7 @@ mod tests {
     /// a payload longer than the declared maximum is refused with
     /// `TextLengthOutOfDomain`, never silently truncated.
     #[test]
-    fn tc_342_admit_refuses_past_the_declared_maximum() {
+    fn admit_refuses_past_the_declared_maximum() {
         let payload = TextPayload::from_utf8("hello".as_bytes()).unwrap();
         let text_type = TextType::new(0, 3, TextProfile::UnicodeScalars).unwrap();
         let mut meter = generous_meter();

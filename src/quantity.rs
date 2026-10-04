@@ -166,7 +166,7 @@ mod tests {
     /// adding two quantities in the same unit completes with the
     /// summed magnitude in that unit.
     #[test]
-    fn tc_319_same_unit_addition_completes() {
+    fn same_unit_addition_completes() {
         let metres = unit(1);
         let left = Quantity::new(Rational::from_integer(Integer::one()), metres);
         let right = Quantity::new(Rational::from_integer(Integer::one()), metres);
@@ -186,7 +186,7 @@ mod tests {
     /// ill-typed with `DistinctUnits`, before any charge.
     #[trace("QSpec-TC-187", "QSpec-FR-142-AC-9")]
     #[test]
-    fn tc_320_distinct_units_are_ill_typed() {
+    fn distinct_units_are_ill_typed() {
         let metres = Quantity::new(Rational::from_integer(Integer::one()), unit(1));
         let seconds = Quantity::new(Rational::from_integer(Integer::one()), unit(2));
         let mut meter = generous_meter();
@@ -201,7 +201,7 @@ mod tests {
     /// (the metering, proved end to end).
     #[trace("QSpec-TC-187", "QSpec-FR-142-AC-7")]
     #[test]
-    fn tc_345_compare_quantity_charges_and_a_tight_meter_is_incomplete() {
+    fn compare_quantity_charges_and_a_tight_meter_is_incomplete() {
         let metres = unit(1);
         let left = Quantity::new(Rational::from_integer(Integer::one()), metres);
         let right = Quantity::new(Rational::from_integer(Integer::from(2_u64)), metres);

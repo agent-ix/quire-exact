@@ -107,7 +107,7 @@ digest_identity!(
 );
 
 /// Digest domain and preimage version of a compound unit's [`UnitId`]: QSpec
-/// FR-142's evaluator-owned `quire.value.compound-unit/v1` value identity.
+/// QSpec-FR-142's evaluator-owned `quire.value.compound-unit/v1` value identity.
 pub const COMPOUND_UNIT_DOMAIN: &str = "quire.value.compound-unit/v1";
 
 /// Which of QSpec FR-142's two unit identities a [`UnitId`] carries. No other domain is admitted.
@@ -230,7 +230,7 @@ digest_identity!(
     /// holds none of that preimage knowledge, only the resulting digest.
     /// `PopulationBinding` itself -- admission, membership, and the
     /// `allInstances`/`lookup` closure state -- stays a caller's model type,
-    /// never a kernel one (FR-089).
+    /// never a kernel one.
     PopulationId,
     POPULATION_ID_DOMAIN,
     "quire.population/v1"
@@ -254,7 +254,7 @@ pub struct ObjectId(Box<str>);
 impl ObjectId {
     /// The one public constructor: `identity`'s own authored UTF-8 bytes,
     /// exactly as supplied. Refuses only when `identity` is empty (QSpec
-    /// FR-035); this crate performs no other validation of the authored
+    /// QSpec-FR-035); this crate performs no other validation of the authored
     /// identity.
     pub fn new(identity: impl Into<String>) -> Result<Self, EmptyObjectIdentity> {
         let identity = identity.into();
@@ -298,9 +298,9 @@ mod tests {
     /// and `ObjectId` are each hand-written, not
     /// macro-generated, and have their own equivalent coverage below
     /// (`tc_411_unit_id_is_a_two_domain_record_compared_on_label_then_bytes`,
-    /// `tc_302b_equal_object_identity_bytes_mint_interchangeable_identities`).
+    /// `equal_object_identity_bytes_mint_interchangeable_identities`).
     #[test]
-    fn tc_302_equal_digest_bytes_mint_interchangeable_identities() {
+    fn equal_digest_bytes_mint_interchangeable_identities() {
         macro_rules! check {
             ($ty:ident) => {
                 let a = $ty::from_digest(digest(1));
@@ -324,7 +324,7 @@ mod tests {
     /// strings compare unequal and order lexically over their bytes (`ObjectId` carries its bytes directly, never a
     /// digest, so there is no digest to equate here).
     #[test]
-    fn tc_302b_equal_object_identity_bytes_mint_interchangeable_identities() {
+    fn equal_object_identity_bytes_mint_interchangeable_identities() {
         let a = ObjectId::new("o1").unwrap();
         let b = ObjectId::new("o1").unwrap();
         let c = ObjectId::new("o2").unwrap();
@@ -342,7 +342,7 @@ mod tests {
     /// mutation-provable assertion (removing the `is_empty` check would let
     /// this construct `Ok`).
     #[test]
-    fn tc_302c_empty_object_identity_refuses() {
+    fn empty_object_identity_refuses() {
         assert_eq!(ObjectId::new("").unwrap_err(), EmptyObjectIdentity);
         assert!(ObjectId::new("o1").is_ok());
     }
@@ -354,7 +354,7 @@ mod tests {
     /// Also pins `EFFECTIVE_ID_DOMAIN` and `UNIVERSE_ID_DOMAIN` to the literal
     /// strings the module doc names. `ObjectId` has no digest domain to include.
     #[test]
-    fn tc_303_domain_constants_are_pairwise_distinct() {
+    fn domain_constants_are_pairwise_distinct() {
         assert_eq!(EFFECTIVE_ID_DOMAIN, "quire.model.effective-declaration/v1");
         assert_eq!(UNIVERSE_ID_DOMAIN, "quire.model.object-universe/v1");
         let domains = [
@@ -400,7 +400,7 @@ mod tests {
 
     /// `Display` renders exactly 64 lowercase hex digits.
     #[test]
-    fn tc_304_display_is_64_lowercase_hex_digits() {
+    fn display_is_64_lowercase_hex_digits() {
         let id = UniverseId::from_digest(digest(0xcd));
         let rendered = id.to_string();
         assert_eq!(rendered.len(), 64);
@@ -414,7 +414,7 @@ mod tests {
     /// bytes exactly, never hex -- `ObjectId` is "not a digest" and that holds
     /// all the way through formatting.
     #[test]
-    fn tc_304b_object_id_display_is_the_authored_bytes_exactly() {
+    fn object_id_display_is_the_authored_bytes_exactly() {
         let id = ObjectId::new("zz9-plural-z-alpha").unwrap();
         assert_eq!(id.to_string(), "zz9-plural-z-alpha");
         assert_eq!(id.as_str(), "zz9-plural-z-alpha");
