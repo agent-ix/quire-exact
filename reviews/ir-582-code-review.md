@@ -56,3 +56,20 @@ because they touch the workflow.
 | FND-003 | low | `.github/workflows/ci.yml` does not run what `make ci` runs. It installs `thumbv7em-none-eabi` but never builds for it, skips the thumbv7em clippy pass and the `test-support` clippy and test lanes, and runs `cargo deny check licenses` where the Makefile runs a full `cargo deny check`. The no_std build is covered only by local `make ci`. Fix: have the workflow run `make ci`. A workflow edit needs the owner's clearance first. | .github/workflows/ci.yml:13-34,52-53; Makefile:36-51,66-67,88 |
 | FND-004 | low | The PR edits `.github/workflows/ci.yml`: it deletes the "Unsafe audit" step and adds the thumbv7em target. The edit is needed, because the script is deleted, but workflow edits need the owner's clearance first. Confirm that clearance before merge, or keep the edit out of this PR. | .github/workflows/ci.yml:17,28-30 |
 | FND-005 | medium | The extraction leaves two copies of the crate. QSL main still carries `quire-exact/` (the same code), and QSL main is still changing it (last change 2026-10-04 01:57 -0700). Until QSL depends on agent-ix/quire-exact by git and deletes `quire-exact/`, the two drift. Any QSL change to the crate after this import must be ported here before the switch. Fix: the QSL half of IR-582. The copy is gone only when QSL's `quire-exact/` path 404s. | src/; ~/dev/quire-spec-language/quire-exact/ |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | Three comments were left broken where the fix round deleted ids mid-sentence. The `DispatchSelect` doc is now "call" followed by a line holding only ".". The `Meter` denial doc reads "a cancelled handle" then a line starting ", which the operation holding it reports as its cancellation". The `Value::Population` module doc reads "comparison  is", with a double space. Fix: rejoin each sentence. | src/accounting.rs:266-267,623; src/value.rs:25 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 02bd366 |
+| FND-002 | fixed | 02bd366 |
+| FND-003 | deferred | Awaiting owner: ci.yml changes need the owner's clearance. Not a merge blocker under the no-CI policy (local make ci is the gate; ir582-quire-exact-ci2.log exit=0). |
+| FND-004 | deferred | Awaiting owner: confirm clearance for the ci.yml edit. Not a merge blocker under the no-CI policy (local make ci is the gate). |
+| FND-005 | deferred | Closes when QSL's Part B of IR-582 lands (same PR series): QSL takes the git dependency and deletes quire-exact/. Verify by a 404 at QSL's quire-exact/ path. |
+| FND-006 | still-open | New this round: the three broken comments at accounting.rs:266-267,623 and value.rs:25 need rejoining. |

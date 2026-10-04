@@ -59,3 +59,20 @@ or by narrowing the AC to what is tested. FND-004 and FND-005 are low.
 | FND-003 | medium | FR-096-AC-8 names targets that TC-428's test does not use. The AC names `Int[-5, 9]`, `Decimal[-100, 100; 0, 2]`, `Rational[-9, 9; 1, 9]`, `Int[0, 9]` and a binary32 `IeeeNotExact` with inexact and overflow flags. The test uses `Int[0, 1]`, `Decimal[0, 1; 0, 0]`, a `[0,1]/[1,1]` rational and `IeeeFlags::EMPTY`. It never asserts that a variant carries its target, so a refusal that drops its target still passes. | src/outcome.rs:357-500; spec/functional/FR-096-kernel-refusal-code-and-cause.md:26 |
 | FND-004 | low | About 57 tests are named `tc_300_...` to `tc_356_...`, and `quire coverage` reads each name as a trace to TC-300 to TC-356. Those ids exist neither here nor in QSL's spec, so 74 traces match no row. The `QSpec-` ones are external and expected. This came from QSL. Renaming is a follow-up, not a reason to break src identity in this PR. | src/node.rs; src/numeric.rs; src/outcome.rs; src/quantity.rs; src/rational.rs; src/text.rs; src/value.rs; src/collection.rs; src/accounting.rs |
 | FND-005 | low | FR-088-AC-12 names a "scaled declared unit `UnitId`", which the kernel has no notion of. A scaled unit is just another declared node key. TC-411 builds no such id. Fix: drop the phrase. | spec/functional/FR-088-enum-and-unit-identity-in-the-kernel.md:27; src/identity.rs:380-399 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | `tc_428_a_value_refusal_carries_its_target` is tautological. Each assertion builds a `Refusal` variant with a target and pattern-matches the same field back out, so the compiler guarantees it and no implementation can fail it. FR-096-AC-8's new clause "Each value refusal carries the target it was raised for ... as built" and TC-428 step 3 claim only that same structural fact. Fix: delete the test, the AC clause and TC step 3. Or accept them, knowing they verify nothing. | src/outcome.rs:504-560; spec/functional/FR-096-kernel-refusal-code-and-cause.md:25; spec/test-cases/TC-428-a-kernel-refusal-returns-its-code-cause-and-target.md:21 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 02bd366 |
+| FND-002 | fixed | 02bd366 |
+| FND-003 | fixed | 02bd366 |
+| FND-004 | fixed | 02bd366 |
+| FND-005 | fixed | 02bd366 |
+| FND-006 | still-open | New this round: the tautological target test and its AC clause need deleting, or an explicit accept from the lead. |

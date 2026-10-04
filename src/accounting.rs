@@ -263,8 +263,7 @@ pub enum ChargePoint {
     LookupResultRetain,
     /// `population.visit`.
     PopulationVisit,
-    /// `dispatch.select`: one dispatched `receiver.member(args)` call
-    ///.
+    /// `dispatch.select`: one dispatched `receiver.member(args)` call.
     DispatchSelect,
     /// `declaration.check`: one checked-family declaration's own checking
     /// work -- distinct from
@@ -619,8 +618,8 @@ impl Meter {
 
     /// The denials that do not come from a limit, checked first at every
     /// charge, each recorded as if the `work_units` limit were the work
-    /// already consumed, so `limit = consumed = w`: a cancelled handle
-    ///, which the operation holding it reports as its
+    /// already consumed, so `limit = consumed = w`: a cancelled handle,
+    /// which the operation holding it reports as its
     /// cancellation, and the qualification seam's one exact named charge.
     fn check_injected(&self, point: ChargePoint, work_units: Integer) -> Result<(), Incomplete> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {

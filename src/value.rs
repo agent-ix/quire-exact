@@ -22,7 +22,7 @@
 //! - `Value::Population(PopulationId)`: the kernel carries the opaque identity
 //!   alone, never the population binding a caller's model owns.
 //!   `ValueType::Population(Option<u64>)` holds the declared maximum.
-//!   The declared-maximum comparison  is a caller-layer check: the
+//!   The declared-maximum comparison is a caller-layer check: the
 //!   caller resolves a `PopulationId` to its binding and compares the binding's
 //!   own declared maximum there, since this leaf crate has no way to resolve a
 //!   `PopulationId` to anything. Kernel `ValueType::admits` refuses every
