@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integer division: the three `div`/`rem` laws, independent Euclidean
-//! `mod`, and atomic pair admission with the named integer-division and
+//! `mod`, and single-member admission (the domain applies only to the member
+//! the expression exposes) with the named integer-division and
 //! integer-modulus charges.
 //!
 //! Whether a *backend* can execute a division item at all is decided ahead of
@@ -55,34 +56,35 @@ impl DivisionProfile {
     }
 }
 
-/// An atomically admitted quotient/remainder pair.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct QuotientRemainder {
-    quotient: Integer,
-    remainder: Integer,
+/// The one member of the `(q, r)` pair an expression exposes.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DivisionMember {
+    /// The quotient, exposed by `div`.
+    Quotient,
+    /// The remainder, exposed by `rem`.
+    Remainder,
 }
 
-impl QuotientRemainder {
-    /// Quotient.
-    pub fn quotient(&self) -> &Integer {
-        &self.quotient
-    }
-
-    /// Remainder.
-    pub fn remainder(&self) -> &Integer {
-        &self.remainder
+impl DivisionMember {
+    fn select(self, quotient: Integer, remainder: Integer) -> Integer {
+        match self {
+            Self::Quotient => quotient,
+            Self::Remainder => remainder,
+        }
     }
 }
 
-/// Evaluate paired `div`/`rem` under the selected law.
+/// Evaluate one member of `div`/`rem` under the selected law. Both members
+/// are computed exactly; only the exposed `member` must be in `domain`.
 pub fn divide(
     profile: DivisionProfile,
+    member: DivisionMember,
     dividend: &Integer,
     divisor: &Integer,
     domain: &IntegerDomain,
     meter: &mut Meter,
-) -> Outcome<QuotientRemainder> {
-    Outcome::from_stop(paired(profile, dividend, divisor, domain, meter))
+) -> Outcome<Integer> {
+    Outcome::from_stop(member_of(profile, member, dividend, divisor, domain, meter))
 }
 
 /// Evaluate `mod`: always the Euclidean remainder, independent of any
@@ -126,16 +128,16 @@ fn refused_interval(domain: &IntegerDomain) -> Result<Box<IntegerInterval>, Stop
     }
 }
 
-/// Charge, compute and admit the pair. Membership of both members is
-/// decided after `integer-division.domain-pair` and before the atomic
-/// retention.
-fn paired(
+/// Charge, compute and admit the exposed member. Membership is decided after
+/// `integer-division.domain` and before `integer-division.result-retain`.
+fn member_of(
     profile: DivisionProfile,
+    member: DivisionMember,
     dividend: &Integer,
     divisor: &Integer,
     domain: &IntegerDomain,
     meter: &mut Meter,
-) -> Result<QuotientRemainder, Stop> {
+) -> Result<Integer, Stop> {
     meter.charge(
         Charge::new(ChargePoint::IntegerDivisionOperands)
             .size(LimitKind::IntegerBits, operand_bits(dividend, divisor))
@@ -147,23 +149,18 @@ fn paired(
             .size(LimitKind::IntegerBits, arithmetic_bits(dividend, divisor)),
     )?;
     let (quotient, remainder) = profile.apply(dividend, divisor);
+    let exposed = member.select(quotient, remainder);
     meter.charge(
-        Charge::new(ChargePoint::IntegerDivisionDomainPair).size(LimitKind::ValueOccurrences, 2),
+        Charge::new(ChargePoint::IntegerDivisionDomain).size(LimitKind::ValueOccurrences, 1),
     )?;
-    let quotient_admitted = domain.contains(&quotient);
-    let remainder_admitted = domain.contains(&remainder);
-    if !(quotient_admitted && remainder_admitted) {
-        return Err(Stop::Refused(Refusal::DivisionPairOutOfDomain {
+    if !domain.contains(&exposed) {
+        return Err(Stop::Refused(Refusal::DivisionOutOfDomain {
             domain: refused_interval(domain)?,
-            quotient_admitted,
-            remainder_admitted,
+            member,
         }));
     }
-    meter.charge(Charge::new(ChargePoint::IntegerDivisionResultPair).results(2))?;
-    Ok(QuotientRemainder {
-        quotient,
-        remainder,
-    })
+    meter.charge(Charge::new(ChargePoint::IntegerDivisionResultRetain).results(1))?;
+    Ok(exposed)
 }
 
 fn euclidean_remainder(
@@ -217,28 +214,205 @@ mod tests {
         })
     }
 
-    /// dividing by zero under any law is undefined, never a panic.
+    fn int(value: i64) -> Integer {
+        Integer::from(value)
+    }
+
+    fn range(low: i64, high: i64) -> IntegerDomain {
+        IntegerDomain::Bounded(IntegerInterval::new(int(low), int(high)).unwrap())
+    }
+
+    fn run(
+        profile: DivisionProfile,
+        member: DivisionMember,
+        a: i64,
+        b: i64,
+        domain: &IntegerDomain,
+    ) -> Outcome<Integer> {
+        divide(
+            profile,
+            member,
+            &int(a),
+            &int(b),
+            domain,
+            &mut generous_meter(),
+        )
+    }
+
+    /// dividing by zero under any law and either member is undefined, never a panic.
     ///
     /// Also QSpec FR-147-AC-2 ("Division by zero is undefined and produces
     /// no numeric value"), verified through central `QSpec-TC-192`
     /// (`agent-ix/quire-specification`): this is the kernel-level instance
     /// of that requirement.
-    #[trace("QSpec-TC-192", "QSpec-FR-147-AC-2")]
+    #[trace("QSpec-TC-192", "QSpec-FR-147-AC-2", "TC-905", "FR-357-AC-1")]
     #[test]
     fn division_by_zero_is_undefined() {
         let domain = IntegerDomain::Mathematical;
-        let mut meter = generous_meter();
-        let outcome = divide(
-            DivisionProfile::Truncating,
-            &Integer::one(),
-            &Integer::zero(),
-            &domain,
-            &mut meter,
+        for profile in DivisionProfile::ALL {
+            for member in [DivisionMember::Quotient, DivisionMember::Remainder] {
+                assert!(matches!(
+                    run(profile, member, 1, 0, &domain),
+                    Outcome::Undefined(Undefined::DivisionByZero)
+                ));
+            }
+        }
+    }
+
+    /// `10 div y` over `1..=10` at `y = 5` is 2; `x rem -1` over `-10..=5` at
+    /// `x = -10` is 0 even though the quotient (10) is outside that domain.
+    #[trace("TC-905", "FR-357-AC-2")]
+    #[test]
+    fn only_the_exposed_member_must_be_in_domain() {
+        for profile in DivisionProfile::ALL {
+            let q = run(profile, DivisionMember::Quotient, 10, 5, &range(1, 10));
+            assert_eq!(q.completed(), Some(int(2)));
+            let r = run(profile, DivisionMember::Remainder, -10, -1, &range(-10, 5));
+            assert_eq!(r.completed(), Some(int(0)));
+        }
+    }
+
+    /// A quotient outside the domain refuses with `quotient-outside-domain`,
+    /// a remainder outside refuses with `remainder-outside-domain`, under
+    /// every profile.
+    #[trace("TC-905", "FR-357-AC-3")]
+    #[test]
+    fn exposed_member_outside_domain_refuses_with_its_cause() {
+        for profile in DivisionProfile::ALL {
+            let Outcome::Refused(refusal) =
+                run(profile, DivisionMember::Quotient, 10, 1, &range(0, 5))
+            else {
+                panic!("quotient 10 is outside 0..=5");
+            };
+            assert_eq!(refusal.code(), Some("division_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("quotient-outside-domain"));
+            let Outcome::Refused(refusal) =
+                run(profile, DivisionMember::Remainder, 9, 5, &range(0, 3))
+            else {
+                panic!("remainder 4 is outside 0..=3");
+            };
+            assert_eq!(refusal.code(), Some("division_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("remainder-outside-domain"));
+        }
+    }
+
+    /// The three laws differ on negative operands exactly as defined, for -7
+    /// and 2 (and -7 and -2 for Euclidean).
+    #[trace("TC-905", "FR-357-AC-4")]
+    #[test]
+    fn profiles_differ_on_negative_operands() {
+        let domain = IntegerDomain::Mathematical;
+        let pair = |profile, a, b| {
+            let q = run(profile, DivisionMember::Quotient, a, b, &domain);
+            let r = run(profile, DivisionMember::Remainder, a, b, &domain);
+            (q.completed().unwrap(), r.completed().unwrap())
+        };
+        assert_eq!(pair(DivisionProfile::Truncating, -7, 2), (int(-3), int(-1)));
+        assert_eq!(pair(DivisionProfile::Floor, -7, 2), (int(-4), int(1)));
+        assert_eq!(pair(DivisionProfile::Euclidean, -7, 2), (int(-4), int(1)));
+        assert_eq!(pair(DivisionProfile::Truncating, -7, -2), (int(3), int(-1)));
+        assert_eq!(pair(DivisionProfile::Floor, -7, -2), (int(3), int(-1)));
+        assert_eq!(pair(DivisionProfile::Euclidean, -7, -2), (int(4), int(1)));
+    }
+
+    /// `i64::MIN div -1` is exact (2^63): a domain that holds it admits it. In
+    /// a signed-64 domain the quotient refuses with `quotient-outside-domain`
+    /// while the remainder, 0, completes.
+    #[trace("TC-905", "FR-357-AC-5")]
+    #[test]
+    fn i64_min_divided_by_minus_one_is_exact() {
+        let wide = IntegerDomain::Bounded(
+            IntegerInterval::new(int(0), Integer::from(i128::from(i64::MAX) + 1)).unwrap(),
         );
-        assert!(matches!(
-            outcome,
-            Outcome::Undefined(Undefined::DivisionByZero)
-        ));
+        let signed_64 = range(i64::MIN, i64::MAX);
+        for profile in DivisionProfile::ALL {
+            let q = run(profile, DivisionMember::Quotient, i64::MIN, -1, &wide);
+            assert_eq!(q.completed(), Some(Integer::from(1_i128 << 63)));
+            let Outcome::Refused(refusal) =
+                run(profile, DivisionMember::Quotient, i64::MIN, -1, &signed_64)
+            else {
+                panic!("quotient 2^63 is outside signed 64-bit");
+            };
+            assert_eq!(refusal.code(), Some("division_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("quotient-outside-domain"));
+            let r = run(profile, DivisionMember::Remainder, i64::MIN, -1, &signed_64);
+            assert_eq!(r.completed(), Some(int(0)));
+        }
+    }
+
+    /// The admitted charge sequence is operands, arithmetic, domain, then
+    /// result-retain for one result unit. A refusal never reaches
+    /// result-retain, a zero divisor stops after operands, and a result limit
+    /// one too small reports `integer-division.result-retain`.
+    #[cfg(feature = "test-support")]
+    #[trace("TC-905", "FR-357-AC-6")]
+    #[test]
+    fn division_charges_one_domain_occurrence_and_one_result_unit() {
+        use crate::accounting::ChargePoint::{
+            IntegerDivisionArithmetic as Arithmetic, IntegerDivisionDomain as Domain,
+            IntegerDivisionOperands as Operands, IntegerDivisionResultRetain as Retain,
+        };
+        let limited = |result_units| {
+            let mut limits = *generous_meter().limits();
+            limits.result_units = result_units;
+            Meter::new(limits)
+        };
+        for member in [DivisionMember::Quotient, DivisionMember::Remainder] {
+            let mut meter = limited(1);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(2),
+                &range(0, 9),
+                &mut meter,
+            );
+            assert!(out.completed().is_some());
+            assert_eq!(
+                meter.admitted_charges(),
+                [Operands, Arithmetic, Domain, Retain]
+            );
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+
+            let mut meter = limited(1);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(2),
+                &range(5, 5),
+                &mut meter,
+            );
+            assert!(matches!(out, Outcome::Refused(_)));
+            assert_eq!(meter.admitted_charges(), [Operands, Arithmetic, Domain]);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+
+            let mut meter = limited(1);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(0),
+                &range(0, 9),
+                &mut meter,
+            );
+            assert!(matches!(out, Outcome::Undefined(_)));
+            assert_eq!(meter.admitted_charges(), [Operands]);
+
+            let mut meter = limited(0);
+            let out = divide(
+                DivisionProfile::Floor,
+                member,
+                &int(7),
+                &int(2),
+                &range(0, 9),
+                &mut meter,
+            );
+            let Outcome::Incomplete(incomplete) = out else {
+                panic!("a result limit of 0 cannot retain the member");
+            };
+            assert_eq!(incomplete.charge_point, Retain);
+        }
     }
 
     /// Euclidean `mod` never returns a negative remainder for a

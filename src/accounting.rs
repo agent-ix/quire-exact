@@ -191,10 +191,10 @@ pub enum ChargePoint {
     IntegerDivisionOperands,
     /// `integer-division.arithmetic`.
     IntegerDivisionArithmetic,
-    /// `integer-division.domain-pair`.
-    IntegerDivisionDomainPair,
-    /// `integer-division.result-pair`.
-    IntegerDivisionResultPair,
+    /// `integer-division.domain`.
+    IntegerDivisionDomain,
+    /// `integer-division.result-retain`.
+    IntegerDivisionResultRetain,
     /// `integer-modulus.operands`.
     IntegerModulusOperands,
     /// `integer-modulus.arithmetic`.
@@ -309,8 +309,8 @@ impl ChargePoint {
         Self::UnitResultRetain,
         Self::IntegerDivisionOperands,
         Self::IntegerDivisionArithmetic,
-        Self::IntegerDivisionDomainPair,
-        Self::IntegerDivisionResultPair,
+        Self::IntegerDivisionDomain,
+        Self::IntegerDivisionResultRetain,
         Self::IntegerModulusOperands,
         Self::IntegerModulusArithmetic,
         Self::IntegerModulusDomain,
@@ -376,8 +376,8 @@ impl ChargePoint {
             Self::UnitResultRetain => "unit.result-retain",
             Self::IntegerDivisionOperands => "integer-division.operands",
             Self::IntegerDivisionArithmetic => "integer-division.arithmetic",
-            Self::IntegerDivisionDomainPair => "integer-division.domain-pair",
-            Self::IntegerDivisionResultPair => "integer-division.result-pair",
+            Self::IntegerDivisionDomain => "integer-division.domain",
+            Self::IntegerDivisionResultRetain => "integer-division.result-retain",
             Self::IntegerModulusOperands => "integer-modulus.operands",
             Self::IntegerModulusArithmetic => "integer-modulus.arithmetic",
             Self::IntegerModulusDomain => "integer-modulus.domain",

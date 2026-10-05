@@ -30,6 +30,7 @@
 use crate::accounting::Incomplete;
 use crate::collection::{CardinalityBound, CollectionKind};
 use crate::decimal::DecimalType;
+use crate::division::DivisionMember;
 use crate::identity::UniverseId;
 use crate::ieee::{IeeeFlags, IeeeWidth};
 use crate::integer::IntegerInterval;
@@ -130,15 +131,12 @@ pub enum Refusal {
         /// The declared `Decimal[..]` target.
         target: Box<DecimalType>,
     },
-    /// At least one member of a quotient/remainder pair is outside the
-    /// consumer domain; neither member is exposed.
-    DivisionPairOutOfDomain {
+    /// The member `div` or `rem` exposes is outside the consumer domain.
+    DivisionOutOfDomain {
         /// The bounded consumer's `Int[..]` domain.
         domain: Box<IntegerInterval>,
-        /// Whether the quotient is a domain member.
-        quotient_admitted: bool,
-        /// Whether the remainder is a domain member.
-        remainder_admitted: bool,
+        /// Which member was exposed and outside.
+        member: DivisionMember,
     },
     /// The Euclidean `mod` remainder is outside the consumer domain.
     ModuloOutOfDomain {
@@ -226,7 +224,7 @@ impl Refusal {
         match self {
             Self::InexactDecimal { .. } => Some("inexact_decimal"),
             Self::DecimalOutOfDomain { .. } => Some("decimal_out_of_domain"),
-            Self::DivisionPairOutOfDomain { .. } => Some("division_pair_out_of_domain"),
+            Self::DivisionOutOfDomain { .. } => Some("division_out_of_domain"),
             Self::ModuloOutOfDomain { .. } => Some("modulo_out_of_domain"),
             Self::TextLengthOutOfDomain { .. } => Some("text_length_out_of_domain"),
             Self::IntegerOutOfDomain { .. } => Some("integer_out_of_domain"),
@@ -253,17 +251,9 @@ impl Refusal {
             | Self::IntegerOutOfDomain { .. }
             | Self::RationalOutOfDomain { .. }
             | Self::IeeeRationalOutOfDomain { .. } => Some("outside-domain"),
-            Self::DivisionPairOutOfDomain {
-                quotient_admitted,
-                remainder_admitted,
-                ..
-            } => Some(match (quotient_admitted, remainder_admitted) {
-                (false, true) => "quotient-outside-domain",
-                (true, false) => "remainder-outside-domain",
-                // The kernel raises the refusal only when a member is
-                // outside, so `(true, true)` cannot occur; it reads as the
-                // widest cause rather than inventing a fourth.
-                (false, false) | (true, true) => "both-outside-domain",
+            Self::DivisionOutOfDomain { member, .. } => Some(match member {
+                DivisionMember::Quotient => "quotient-outside-domain",
+                DivisionMember::Remainder => "remainder-outside-domain",
             }),
             Self::IeeeNotExact { .. } => Some("rounding-required"),
             Self::IeeeNanPayloadNotRepresentable { .. } => Some("payload-exceeds-target"),
@@ -384,13 +374,12 @@ mod tests {
                 .unwrap(),
             )
         };
-        let pair = |quotient_admitted, remainder_admitted| Refusal::DivisionPairOutOfDomain {
+        let member = |member| Refusal::DivisionOutOfDomain {
             domain: interval(),
-            quotient_admitted,
-            remainder_admitted,
+            member,
         };
         let universe = UniverseId::from_digest([0; 32]);
-        let cases: [(Refusal, &str, &str); 15] = [
+        let cases: [(Refusal, &str, &str); 14] = [
             (
                 Refusal::InexactDecimal {
                     target: InexactTarget::Integer(interval()),
@@ -404,19 +393,14 @@ mod tests {
                 "outside-domain",
             ),
             (
-                pair(false, true),
-                "division_pair_out_of_domain",
+                member(DivisionMember::Quotient),
+                "division_out_of_domain",
                 "quotient-outside-domain",
             ),
             (
-                pair(true, false),
-                "division_pair_out_of_domain",
+                member(DivisionMember::Remainder),
+                "division_out_of_domain",
                 "remainder-outside-domain",
-            ),
-            (
-                pair(false, false),
-                "division_pair_out_of_domain",
-                "both-outside-domain",
             ),
             (
                 Refusal::ModuloOutOfDomain { domain: interval() },

@@ -109,7 +109,7 @@ pub use decimal::{
     DecimalLoss, DecimalOperation, DecimalRepresentation, DecimalResult, DecimalType, Placed,
     Placement, RoundingMode,
 };
-pub use division::{divide, modulo, DivisionProfile, QuotientRemainder};
+pub use division::{divide, modulo, DivisionMember, DivisionProfile};
 pub use equality::{plan_equality, planned_equality, EqualityPlan};
 pub use identity::{
     EffectiveId, EmptyObjectIdentity, MemberId, ObjectId, PopulationId, UnitDomain, UnitId,
