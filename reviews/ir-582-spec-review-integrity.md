@@ -45,3 +45,12 @@ Two low findings, no medium or high. Ids are clean and every inspection step
 is true of the code. Mergeable once the wording fixes land, or accept them.
 QSL #632 relies on this PR for TC-292 and the FR-090 kernel clauses, so merge
 it before or with #632.
+
+## Dispositions
+
+Round 1, reviewed at d85256e9262bccb3002030f9c192e3ee2e37fa84.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | d85256e9: "finds no variant", "finds no `PreconditionFalse` variant", "finds no `AbsentKey` variant" |
+| FND-002 | fixed | d85256e9: files renamed to TC-388-kernel-refusal-has-no-wrong-snapshot-variant.md, TC-407-kernel-undefined-has-no-precondition-false-variant.md, TC-408-kernel-undefined-has-no-absent-key-variant.md; no live reference to the old names remains |
