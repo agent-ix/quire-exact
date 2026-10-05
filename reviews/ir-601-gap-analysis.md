@@ -39,3 +39,10 @@ charge behaviour this PR changed has no requirement and no test in this repo.
 | --- | --- | --- | --- |
 | FND-001 | medium | The PR changes the division charges from 2 to 1 at the domain point and from 2 to 1 at the result point. A refusal also skips the result charge. No AC in FR-357 owns this sequence, and no test checks it. `Meter::admitted_charges` (test-support) exists for this, but no division test uses it. A wrong amount or order would pass `make ci`. QSpec #188 states it in FR-147-AC-6, DIV-08 and DIV-15. Fix: add an FR-357 AC for the four named charges with their amounts, and a test that checks the admitted sequence for `div` and `rem`, the missing result charge on a refusal, and an exact-bound limit with one too few. | src/division.rs:141-163; spec/functional/FR-357-single-member-integer-division.md |
 | FND-002 | low | `exposed_member_outside_domain_refuses_with_its_cause` runs only `DivisionProfile::Truncating`, and checks `code()` only for the quotient case. QSpec #188 FR-147-AC-9 says "under each profile". Fix: loop over `DivisionProfile::ALL` (both vectors keep q or r of the same sign, so they hold under all three laws) and check the code in both cases. | src/division.rs:276-303 |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |
+| FND-002 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |

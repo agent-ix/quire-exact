@@ -37,3 +37,11 @@ QSpec #188, AC-5 leaves out the member-only MIN/-1 case, and the operator notati
 | FND-001 | high | FR-096-AC-8 names the refusal `DivisionMemberOutOfDomain` with code `division_member_out_of_domain`, and FR-357 Behavior 1 names `DivisionMemberOutOfDomain`. QSpec #188 names the code `division_out_of_domain`. Fix: align to #188 (`DivisionOutOfDomain`, `division_out_of_domain`) together with SR-004 FND-001. | spec/functional/FR-096-kernel-refusal-code-and-cause.md:25; spec/functional/FR-357-single-member-integer-division.md:19 |
 | FND-002 | medium | FR-357-AC-5 says MIN/-1 "refuses in one [domain] that does not" hold 2^63, but gives no cause. It also leaves out the case that shows the member-only rule: the remainder of MIN/-1 completes with 0 in a signed-64 domain (QSpec #188 DIV-05). TC-905 step 5 inherits the gap. Fix: in a signed-64 domain the quotient refuses with `quotient-outside-domain` and the remainder returns 0, and TC-905 step 5 should say the same. | spec/functional/FR-357-single-member-integer-division.md:31; spec/test-cases/TC-905-single-member-integer-division.md:23 |
 | FND-003 | low | FR-357's description names the operators `div` and `rem`, as QSpec does. AC-2, the use case and TC-905 step 2 write `10 / y` and `x % -1`. Fix: write `10 div y` and `x rem -1`, to match the description and QSpec FR-147-AC-10. | spec/functional/FR-357-single-member-integer-division.md:15; spec/functional/FR-357-single-member-integer-division.md:28; spec/test-cases/TC-905-single-member-integer-division.md:20 |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |
+| FND-002 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |
+| FND-003 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |

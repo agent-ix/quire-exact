@@ -259,7 +259,7 @@ mod tests {
         }
     }
 
-    /// `10 div y` over `1..=10` at `y = 5` is 2; `x % -1` over `-10..=5` at
+    /// `10 div y` over `1..=10` at `y = 5` is 2; `x rem -1` over `-10..=5` at
     /// `x = -10` is 0 even though the quotient (10) is outside that domain.
     #[trace("TC-905", "FR-357-AC-2")]
     #[test]

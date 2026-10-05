@@ -58,3 +58,19 @@ member-only rule.
 | FND-001 | high | The refusal code is `division_member_out_of_domain` (variant `DivisionMemberOutOfDomain`). QSpec #188 names it `division_out_of_domain` in FR-147, FR-271, FR-272, native-diagnostics.md and checked_package_v2.rs. The cause spellings match. Fix: align to #188. Rename the variant to `DivisionOutOfDomain` (so FR-096's `<name in snake case>` convention still holds) and the code to `division_out_of_domain`, and update the outcome.rs test table and the division.rs assert. | src/outcome.rs:135; src/outcome.rs:227; src/outcome.rs:377-404; src/division.rs:290 |
 | FND-002 | high | The charge points stay `integer-division.domain-pair` and `integer-division.result-pair`, and each is now charged 1. QSpec owns the charge catalog (`quire.value.accounting/v1`, proposals/quire-v1/definitions/value-accounting.md). quire-exact only implements it in `ChargePoint::name()`. #188 renames them to `integer-division.domain` (`value_occurrences=1`) and `integer-division.result-retain` (`result_units += 1`). These names appear in `incomplete { charge_point: .. }` records, so the old names now break the spec and also say "pair" for a single member. Fix: align to #188. Rename the `ChargePoint` variants and their `name()` strings, and the doc comment in division.rs:132. The amounts already match. | src/accounting.rs:194-197; src/accounting.rs:379-380; src/division.rs:132; src/division.rs:153-162 |
 | FND-003 | medium | `i64_min_divided_by_minus_one_is_exact` checks the narrow case as `matches!(narrow, Outcome::Refused(_))`, with no code or cause. It never runs the remainder of MIN/-1 in a signed-64 domain, which is the case that shows member-only checking (QSpec #188 DIV-05: the `rem` completes with 0 because the quotient is not checked). The narrow domain 0..=i64::MAX is not signed-64 either. Fix: use `range(i64::MIN, i64::MAX)`, assert the quotient refuses with cause `quotient-outside-domain`, and assert the remainder completes with 0 under each profile. | src/division.rs:325-346 |
+
+## New findings (disposition pass 1)
+
+Reviewed at agent-ix/quire-exact@8137134a5aad2ac467c5905304fda644e9a13ea5 (fix range 45c000f1..8137134a).
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The doc comment on `only_the_exposed_member_must_be_in_domain` still writes `x % -1` on the same line as the corrected `10 div y`. The rest of the change moved to `div`/`rem` (SR-006 FND-003). Fix: write `x rem -1`. | src/division.rs:262 |
+
+## Dispositions
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |
+| FND-002 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |
+| FND-003 | fixed | 8137134a5aad2ac467c5905304fda644e9a13ea5 |
