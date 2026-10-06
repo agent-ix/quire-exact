@@ -51,3 +51,19 @@ Ticket: IR-653. PR: quire-exact#6, head `1381f353d8cc4dee73035e316e3d690ecf86cc8
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | medium | FR-362-AC-3 names "P11 scalar loop" and "Q11 two-step integer fold" but defines neither in quire-exact. Both are caller-level programs: a loop and a fold, which FR-362's Behavior assigns to the caller. A kernel test can only reconstruct them from consumer material. The AC should state the kernel atom call sequence itself. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:23 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` against prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`. Model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`, session `1c69c439-7235-4983-862a-16066636b5df`. Each outcome was checked against the actual fix diff and the public source at that SHA; author assertions were not relied on. No code exists for these planned requirements, and nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+
+### Round 1 after-excerpts
+
+- FND-001: `TC-910` at spec/test-cases/TC-910-exact-scalar-arithmetic-and-atom-charges.md:13. P11/Q11 removed. AC-7 uses direct kernel calls, and TC-910 excludes caller expressions and caller-owned schedules.
+
+```text
+Verify [FR-362](../functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md), AC-1 through AC-9, at kernel scalar entry points without evaluating a caller expression or copying a caller-owned schedule.
+```

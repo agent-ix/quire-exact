@@ -56,3 +56,62 @@ Ticket: IR-653. PR: quire-exact#6, head `1381f353d8cc4dee73035e316e3d690ecf86cc8
 | FND-004 | medium | FR-362 covers "numeric ordering", and `order_numbers` has a Decimals arm with scale-expansion charges (`src/numeric.rs`:122-161). FR-362-AC-2 checks ordering values only for integer and rational, and AC-3's "numeric ordering" does not settle whether decimal is in scope. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:22 | missing-requirement |
 | FND-005 | low | "Include a cancellation case" means arithmetic cancellation, but the crate also has a `Cancel` handle (`Meter::with_cancel`) whose denial is also an `Incomplete`. The AC can be read as asking for a cancelled-meter case. | spec/functional/FR-361-admission-before-large-exact-work.md:21 | wrong-requirement |
 | FND-006 | low | "A cumulative work or result charge" is met by testing only one of the two counters. Both have their own `to_u64` refusal path in `Meter::charge`, so both need the u64::MAX + 1 case. | spec/functional/FR-359-cumulative-meter-boundary.md:23 | wrong-requirement |
+
+## New findings (disposition pass 1)
+
+Round 1 at `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` (prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`), model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`. Regression introduced by the fix round; routed back to the author.
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-007 | medium | The fix for FND-004 assigns decimal ordering to "the decimal contract", but no quire-exact requirement defines decimal ordering values or charges. The public RT test that RT #95 removed, `tc_023_ordering_amounts_for_rationals_and_retained_decimals` (traced to FR-007-AC-7 and FR-006-AC-3), asserted decimal ordering amounts: for example `(0, 5) >= (0, 0)` consumes integer_bits 18, decimal_digits 6 and scale_expansion 5, plus an analytic DecimalDigits refusal at `ordering.arithmetic`. That evidence now has no quire-exact home. Specify it, or name an owning requirement that exists. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:17 | missing-requirement |
+
+## Dispositions
+
+Round 1, reviewed `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` against prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`. Model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`, session `1c69c439-7235-4983-862a-16066636b5df`. Each outcome was checked against the actual fix diff and the public source at that SHA; author assertions were not relied on. No code exists for these planned requirements, and nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-002 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-003 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-004 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-005 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-006 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+
+### Round 1 after-excerpts
+
+- FND-001: `FR-359-AC-5` at spec/functional/FR-359-cumulative-meter-boundary.md:25. New AC-5 refuses a result charge carrying integer_bits = 16 and requires the high-water integer_bits to stay 8. Under src/accounting.rs field order the result refusal precedes any size update.
+
+```text
+First admit an `integer_bits` high-water size of 8 and one result unit under limits of at least 16 bits, `u64::MAX` work units and one result unit. Then attempt a charge carrying `integer_bits = 16` and one result unit. The result refusal leaves `integer_bits = 8`, work units, result units and admission count at their pre-refusal values; under `test-support`, the admitted-charge log is unchanged too.
+```
+
+- FND-002: `FR-359-AC-2` at spec/functional/FR-359-cumulative-meter-boundary.md:22. Both cumulative limits and the prior work consumption are now explicit.
+
+```text
+With `work_units = result_units = u64::MAX`, admit one charge requesting `u64::MAX` result units. Its work consumption is 1. A second charge requesting one result unit returns `Incomplete` at its named point with `limit_kind = ResultUnits`, `limit = consumed = u64::MAX`, and `next_charge = 1`; work remains 1 and admission count remains 1.
+```
+
+- FND-003: `FR-361-AC-4` at spec/functional/FR-361-admission-before-large-exact-work.md:32. Decimal denials are now limit-driven and name the counter: AC-4 ScaleExpansion and AC-5 IntegerBits, each with its exact planned amount. AC-5's amount relation (the arithmetic bits are one more than the admitted scale-expansion bits) matches Plan::arithmetic_sizes for Add in src/decimal.rs. The two points are now separate ACs.
+
+```text
+For valid decimal operands requiring a `2^20`-place scale expansion, set `scale_expansion` to one below the planned shift and leave other limits sufficient. The outcome is `Incomplete` at `decimal.scale-expansion` with `limit_kind = ScaleExpansion` and `next_charge` equal to the exact shift; the observed peak request is below 4,096 bytes.
+```
+
+- FND-004: `FR-362-AC-4` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:38. The ambiguity is resolved: decimal ordering is explicitly outside FR-362. The new statement's referent, "the decimal contract", has no quire-exact requirement; see new FND-007.
+
+```text
+Integer and rational comparisons over fixed and reproducibly sampled pairs equal independently checked numeric comparisons for equality and order. Decimal comparison is outside this criterion.
+```
+
+- FND-005: `FR-361-AC-1` at spec/functional/FR-361-admission-before-large-exact-work.md:29. "Cancellation" is replaced by a subtraction that mathematically cancels to 1.
+
+```text
+For an integer multiplication with a large operand, set `integer_bits` to one below the exact `integer-arithmetic.arithmetic` amount while permitting the operand charge. The outcome is `Incomplete` at `integer-arithmetic.arithmetic` with `limit_kind = IntegerBits` and that exact `next_charge`; the observed peak request meets the arithmetic allocation bound in Behavior. Repeat with operands whose subtraction mathematically cancels to 1 but whose operand-derived arithmetic amount exceeds the limit.
+```
+
+- FND-006: `FR-359-AC-3` at spec/functional/FR-359-cumulative-meter-boundary.md:23. AC-3 now covers work and AC-4 covers results, each with u64::MAX + 1.
+
+```text
+With both cumulative limits at `u64::MAX`, a work charge whose exact amount is `u64::MAX + 1` returns `Incomplete` with `limit_kind = WorkUnits` and `next_charge = u64::MAX + 1`; no counter or admission count changes.
+```

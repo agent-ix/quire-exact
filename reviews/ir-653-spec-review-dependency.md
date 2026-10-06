@@ -51,3 +51,19 @@ Ticket: IR-653. PR: quire-exact#6, head `1381f353d8cc4dee73035e316e3d690ecf86cc8
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | low | FR-362-AC-4 ("Inject a one-shot denial") and FR-361-AC-2 rely on FR-358's one-shot `InjectedDenial` behaviour (implemented at base efd4a22), yet FR-362's Dependencies say "None" and FR-361 names only FR-357. The FR-358 -> FR-361/FR-362 edge is undeclared. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:24 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` against prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`. Model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`, session `1c69c439-7235-4983-862a-16066636b5df`. Each outcome was checked against the actual fix diff and the public source at that SHA; author assertions were not relied on. No code exists for these planned requirements, and nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+
+### Round 1 after-excerpts
+
+- FND-001: `FR-362` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:51. FR-358 is now a `depends_on` relationship and is cited in prose for FR-361 (AC-3) and FR-362 (AC-8).
+
+```text
+- [FR-358](./FR-358-meter-denial-and-bounded-diagnostic-log.md) defines the one-shot denial used in AC-8. [TC-910](../test-cases/TC-910-exact-scalar-arithmetic-and-atom-charges.md) is the test-case home. The kernel operations are in `src/numeric.rs`; callers retain ownership of expression evaluation and short-circuit choice.
+```

@@ -52,3 +52,26 @@ Ticket: IR-653. PR: quire-exact#6, head `1381f353d8cc4dee73035e316e3d690ecf86cc8
 | --- | --- | --- | --- | --- |
 | FND-001 | high | FR-362-AC-3 restates the scalar-atom totals of the P11 (n = 2) and Q11 schedules (15/5 and 6/2 work/result units). Those schedules are defined outside quire-exact: the public RT test that RT #95 removed cites them as TC-191 P11 and TC-190 Q11. That puts a second statement of an external schedule in this spec, and it will drift when the owner changes the program. Use a kernel-owned call sequence instead, with totals derived from FR-362's own amounts. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:23 | wrong-requirement |
 | FND-002 | medium | FR-361's ACs need allocator observation but do not say how to get it. Cargo.toml's package-wide `[lints.rust] unsafe_code = "forbid"` (lines 37-38) applies to test targets as well, so this crate cannot build the counting `unsafe impl GlobalAlloc` that RT's removed `tests/exact_allocation.rs` used (RT forbade unsafe only at its crate root). The code stage then has to choose between relaxing a lint and adding an allocator dev-dependency, and the spec records neither choice. | spec/functional/FR-361-admission-before-large-exact-work.md:21 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` against prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`. Model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`, session `1c69c439-7235-4983-862a-16066636b5df`. Each outcome was checked against the actual fix diff and the public source at that SHA; author assertions were not relied on. No code exists for these planned requirements, and nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-002 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+
+### Round 1 after-excerpts
+
+- FND-001: `FR-362-AC-7` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:41. P11/Q11 totals removed; replaced by a direct kernel-owned three-atom sequence whose 7/3 totals follow from FR-362's own family rows (add 3w/1r, rational ordering 3w/1r, Boolean retain 1w/1r), checked against src/numeric.rs.
+
+```text
+On one meter, directly add integers 5 and 7, compare rationals 1/2 and 2/3 for less-than, then retain an already-decided Boolean `true`. The admitted atom sequence consumes 7 work units and 3 result units, derived from the three family rows in Behavior.
+```
+
+- FND-002: `FR-361` at spec/functional/FR-361-admission-before-large-exact-work.md:21. The spec now records the choice: an external test-only observer with a safe API, with the crate-wide `unsafe_code = "forbid"` kept. Whether a suitable per-thread observer crate exists and passes deny.toml is a CODE-stage fact; this review did not check it.
+
+```text
+For the allocation criteria, construct operands before opening a measurement window around only the denied call. Observe the largest single allocation request on that thread through a test-only external allocator observer with a safe API. The observer's implementation is outside this crate; this crate's `unsafe_code = "forbid"` remains in force and its tests contain no unsafe allocator implementation.
+```

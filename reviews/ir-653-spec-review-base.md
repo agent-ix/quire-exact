@@ -53,3 +53,33 @@ Ticket: IR-653. PR: quire-exact#6, head `1381f353d8cc4dee73035e316e3d690ecf86cc8
 | FND-001 | medium | The "fits" qualifier applies only to the sampled pairs, yet the fixed set includes i128::MIN and i128::MAX. negate(i128::MIN), i128::MAX + 1, i128::MIN - 1 and i128::MIN * -1 have no i128 result to "agree with". The over-i128 product case also names no oracle for its exact value. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:21 | wrong-requirement |
 | FND-002 | medium | FR-362-AC-3 checks observed counters against "independent formulas over input magnitudes and unreduced rational intermediates", but neither FR-362 nor any other quire-exact spec states them. The only statements are doc comments in `src/numeric.rs` (for example `integer_arithmetic_bits`, line 196), so a test would copy the oracle from the implementation it is meant to check. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:23 | missing-requirement |
 | FND-003 | low | None of FR-359..FR-362 has a TC artifact, and every Verification cell reads plain `Test`. By contrast FR-357's ACs name TC-905, and FR-358's spec PR (#4) added TC-906 with the FR. The new ACs have no test-case home in this repo. | spec/functional/FR-359-cumulative-meter-boundary.md:11 | correct-requirement-no-evidence |
+
+## Dispositions
+
+Round 1, reviewed `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` against prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`. Model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`, session `1c69c439-7235-4983-862a-16066636b5df`. Each outcome was checked against the actual fix diff and the public source at that SHA; author assertions were not relied on. No code exists for these planned requirements, and nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-002 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-003 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+
+### Round 1 after-excerpts
+
+- FND-001: `FR-362-AC-1` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:35. Comparison is now limited to checked i128 operations that return a value. The out-of-range cases moved to AC-2 with decimal literals; both literals are correct (2 x i128::MAX and -i128::MIN).
+
+```text
+For binary operations, use pairs from a fixed set including `i128::MIN`, -1, 0, 1 and `i128::MAX`; for negate, use each member as a unary operand. Compare integer add, subtract, multiply and negate only when the corresponding checked `i128` operation returns a value. Repeat over reproducibly sampled signed inputs. Every compared kernel result equals the independent checked result.
+```
+
+- FND-002: `FR-362-AC-6` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:40. FR-362 Behavior now defines B(x) and a per-family table (lines 19-27); each formula matches src/numeric.rs at this SHA. AC-6 computes from those formulas, and TC-910 forbids calling the kernel's amount helpers.
+
+```text
+For those successful operations on fresh meters, independently calculate the maximum size amount across their points from the formulas in Behavior, using the unreduced numerator and denominator for rational normalization. The observed final `integer_bits` and `value_occurrences` equal those maxima; work consumption equals the number of admitted points and result consumption is one.
+```
+
+- FND-003: `FR-359` at spec/functional/FR-359-cumulative-meter-boundary.md:33. TC-907..TC-910 now exist and each FR's Dependencies names its TC home.
+
+```text
+- [TC-907](../test-cases/TC-907-cumulative-meter-boundary.md) is the test-case home for these criteria. This requirement concerns the existing `Meter::charge` and `Charge` accounting contract in `src/accounting.rs`.
+```

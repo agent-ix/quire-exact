@@ -52,3 +52,26 @@ Ticket: IR-653. PR: quire-exact#6, head `1381f353d8cc4dee73035e316e3d690ecf86cc8
 | --- | --- | --- | --- | --- |
 | FND-001 | medium | "Shows no result-sized intermediate was allocated" has no threshold, and Behavior allows "small bookkeeping allocations" without a bound. RT's removed `tests/exact_allocation.rs` asserted that the largest single allocation request was below the operand's byte length / 8. These ACs state no bound at all, so two implementers can reach opposite verdicts on the same trace. | spec/functional/FR-361-admission-before-large-exact-work.md:21 | wrong-requirement |
 | FND-002 | low | FR-362-AC-3 bundles three obligations: admission order per family, formula agreement for four counter kinds, and two fixed workload totals. A single pass/fail result cannot show which one failed. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:23 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `e7cd04e0b79b096e1cffe3dc37775d96efb030e8` against prior `1381f353d8cc4dee73035e316e3d690ecf86cc80`. Model `claude-opus-5-5`, run `0beb8f83-17dc-4263-b553-44c85fabe9c1`, session `1c69c439-7235-4983-862a-16066636b5df`. Each outcome was checked against the actual fix diff and the public source at that SHA; author assertions were not relied on. No code exists for these planned requirements, and nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+| FND-002 | fixed | e7cd04e0b79b096e1cffe3dc37775d96efb030e8 |
+
+### Round 1 after-excerpts
+
+- FND-001: `FR-361` at spec/functional/FR-361-admission-before-large-exact-work.md:23. Thresholds are now stated: below one eighth of the largest operand's byte length for operands of at least 65,536 bits, and below 4,096 bytes for 2^20-place decimal fixtures. The open-ended bookkeeping allowance is removed.
+
+```text
+For an integer or rational arithmetic, division or modulus fixture with operand magnitude at least 65,536 bits, the peak request during denial shall be less than one eighth of the largest operand's byte length. For a decimal fixture with a `2^20`-place shift, the peak shall be below 4,096 bytes. These bounds permit small charge-accounting allocations while excluding the large result, quotient, intermediate and power-of-ten allocations the charge is intended to guard.
+```
+
+- FND-002: `FR-362-AC-5` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:39. The old AC-3 is split into AC-5 (point order), AC-6 (amount agreement) and AC-7 (direct-sequence totals).
+
+```text
+For a successful representative of each integer arithmetic operation, each rational arithmetic operation, integer ordering and rational ordering, the admitted point sequence equals its family row in Behavior. A successful already-decided Boolean retention admits only `boolean.result-retain`.
+```
