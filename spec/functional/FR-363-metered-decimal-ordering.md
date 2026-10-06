@@ -5,6 +5,8 @@ type: FR
 relationships:
   - target: ix://agent-ix/quire-exact/FR-362
     type: references
+  - target: ix://agent-ix/quire-exact/FR-358
+    type: depends_on
 ---
 # FR-363: Decimal ordering compares values and charges retained representations
 
@@ -34,6 +36,7 @@ Sizes are high-water maxima; work and result units are cumulative. The compariso
 | FR-363-AC-2 | For a successful decimal comparison, the meter admits `ordering.operands`, `ordering.arithmetic`, `ordering.result-retain` in that order. On a fresh meter, its size high-water counters equal the maxima in Behavior, with three work units and one result unit. | Test |
 | FR-363-AC-3 | Comparing retained `(0, 5) >= (0, 0)` completes `true` and consumes `integer_bits = 18`, `decimal_digits = 6`, `scale_expansion = 5`, `value_occurrences = 2`, `work_units = 3`, `result_units = 1`. Comparing retained `(100, 2) <= (2, 0)` completes `true` and consumes `integer_bits = 9`, `decimal_digits = 3`, `scale_expansion = 2`, `value_occurrences = 2`, `work_units = 3`, `result_units = 1`. | Test |
 | FR-363-AC-4 | With all limits at `u64::MAX` except `decimal_digits = 64`, testing retained `(1, 0) < (1, u32::MAX)` returns `Incomplete` at `ordering.arithmetic` with `limit_kind = DecimalDigits`, `limit = 64`, `consumed = 1`, and `next_charge = 4,294,967,296`. Only `ordering.operands` is admitted; no result unit is consumed and the scale-alignment power of ten is not materialized. | Test |
+| FR-363-AC-5 | On separate fresh meters with generous limits, inject a one-shot denial at occurrence 1 of each decimal-ordering point: `ordering.operands`, `ordering.arithmetic`, and `ordering.result-retain`. For each point, ordering retained `(0, 5) >= (0, 0)` returns `Incomplete` with `limit_kind = WorkUnits`, `charge_point` equal to the selected point, `limit = consumed` equal to the number of preceding admitted points (0, 1, or 2), and `next_charge = 1`. No Boolean result or result unit is exposed; only the preceding point prefix is admitted and logged, with no later point admitted. | Test |
 
 ## Status
 
@@ -41,4 +44,4 @@ Planned.
 
 ## Dependencies
 
-- [FR-362](./FR-362-exact-scalar-arithmetic-and-atom-charges.md) owns the integer and rational ordering families. [TC-911](../test-cases/TC-911-metered-decimal-ordering.md) is the test-case home. The decimal ordering branch is in `src/numeric.rs` and its exact comparison primitive is in `src/decimal.rs`.
+- [FR-362](./FR-362-exact-scalar-arithmetic-and-atom-charges.md) owns the integer and rational ordering families. [FR-358](./FR-358-meter-denial-and-bounded-diagnostic-log.md) defines the one-shot denial used in AC-5. [TC-911](../test-cases/TC-911-metered-decimal-ordering.md) is the test-case home. The decimal ordering branch is in `src/numeric.rs` and its exact comparison primitive is in `src/decimal.rs`.

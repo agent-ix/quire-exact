@@ -115,3 +115,25 @@ For an integer multiplication with a large operand, set `integer_bits` to one be
 ```text
 With both cumulative limits at `u64::MAX`, a work charge whose exact amount is `u64::MAX + 1` returns `Incomplete` with `limit_kind = WorkUnits` and `next_charge = u64::MAX + 1`; no counter or admission count changes.
 ```
+
+### Round 2 dispositions
+
+Round 2, reviewed `9082081032cf6d82b8e69ae5c7f97d05c230b397` against prior `e7cd04e0b79b096e1cffe3dc37775d96efb030e8`. Model `claude-opus-5-5`, run `3f65df87-0a68-46a3-9a66-0c774b01e53a`, session `1c69c439-7235-4983-862a-16066636b5df`. Scope: FND-007 closure and regressions introduced by the fix. The 18 findings fixed in round 1 are unchanged and get no new row. Planned tests are not credited as run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-007 | fixed | 9082081032cf6d82b8e69ae5c7f97d05c230b397 |
+
+- FND-007: `FR-362` at spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:17. FR-362 now names FR-363 as the owner of decimal ordering. The new FR-363 specifies values via normalized exact comparison, the three ordered charges from retained representations with SB/SD amounts, the RT fixtures (0,5)>=(0,0) -> 18/6/5 and (100,2)<=(2,0) -> 9/3/2, and the analytic DecimalDigits refusal with next_charge 4,294,967,296. Each matches src/numeric.rs and src/decimal.rs at this SHA (source unchanged since the prior SHA). TC-911 is the planned test home, and no test has run. Per-point denial coverage is the separate new FND-008.
+
+```text
+`Integer` is an arbitrary-precision mathematical integer. A checked `i128` calculation is an independent oracle only where that reference operation fits. For a result outside `i128`, an independently authored decimal literal supplies the expected value. The caller owns expression evaluation and any choice to skip a right Boolean operand. [FR-363](./FR-363-metered-decimal-ordering.md) owns decimal ordering values and charges separately from this finite `i128` oracle and charge table.
+```
+
+## New findings (disposition pass 2)
+
+Round 2 at `9082081032cf6d82b8e69ae5c7f97d05c230b397` (prior `e7cd04e0b79b096e1cffe3dc37775d96efb030e8`), model `claude-opus-5-5`, run `3f65df87-0a68-46a3-9a66-0c774b01e53a`. Incomplete fix of FND-007; routed back to the author.
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-008 | medium | FR-363's Behavior requires that a denied decimal-ordering charge returns Incomplete before any later point is admitted. No FR-363 AC or TC-911 step injects a denial at each decimal ordering point; AC-4 covers only a limit refusal at ordering.arithmetic, and FR-362-AC-8 covers only integer and rational ordering. The public RT test that RT #95 removed (tc_023_ordering_amounts_for_rationals_and_retained_decimals) ran assert_named_denials over decimal ordering, checking Incomplete at each admitted point with zero result units. That part of the evidence is still not re-homed. Add a one-shot named-denial AC for ordering.operands, ordering.arithmetic and ordering.result-retain with decimal operands. | spec/functional/FR-363-metered-decimal-ordering.md:27 | missing-requirement |
