@@ -8,7 +8,7 @@ relationships: []
 
 ## Description
 
-When `Integer::abs` receives the value `i64::MIN`, the `quire-exact` kernel SHALL return its exact positive magnitude as an arbitrary-precision `Integer`.
+The `quire-exact` kernel SHALL return the exact positive magnitude `2^63` when `Integer::abs` is called on an `Integer` equal to `i64::MIN`.
 
 ## Acceptance Criteria
 
@@ -22,4 +22,4 @@ Planned.
 
 ## Dependencies
 
-- None. This requirement concerns the existing `Integer::abs` operation in `src/integer.rs`.
+- [TC-908](../test-cases/TC-908-integer-minimum-magnitude.md) is the test-case home for this criterion. The operation is in `src/integer.rs`.
