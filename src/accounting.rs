@@ -15,6 +15,10 @@
 use crate::cancel::Cancel;
 use crate::integer::Integer;
 use alloc::vec::Vec;
+use core::num::NonZeroU64;
+
+#[cfg(feature = "test-support")]
+const CHARGE_LOG_CAPACITY: usize = 4096;
 
 /// A `usize` length or count as an accounting amount.
 ///
@@ -456,7 +460,7 @@ pub struct InjectedDenial {
     /// The named point to deny.
     pub point: ChargePoint,
     /// Which occurrence of that point to deny, starting at one.
-    pub occurrence: u64,
+    pub occurrence: NonZeroU64,
 }
 
 /// One exact `{ counter: amount }` charge vector.
@@ -533,6 +537,8 @@ pub struct Meter {
     cancel: Option<Cancel>,
     #[cfg(feature = "test-support")]
     admitted: Vec<ChargePoint>,
+    #[cfg(feature = "test-support")]
+    charge_log_truncated: bool,
 }
 
 /// The fixed-size state a [`Meter`] charges against.
@@ -565,6 +571,8 @@ impl Meter {
             cancel: None,
             #[cfg(feature = "test-support")]
             admitted: Vec::new(),
+            #[cfg(feature = "test-support")]
+            charge_log_truncated: false,
         }
     }
 
@@ -606,6 +614,13 @@ impl Meter {
         &self.admitted
     }
 
+    /// Whether an admitted charge fell beyond the diagnostic log's first
+    /// 4096 entries.
+    #[cfg(feature = "test-support")]
+    pub fn charge_log_truncated(&self) -> bool {
+        self.charge_log_truncated
+    }
+
     fn incomplete(&self, kind: LimitKind, next: Integer, point: ChargePoint) -> Incomplete {
         Incomplete {
             limit_kind: kind,
@@ -621,7 +636,11 @@ impl Meter {
     /// already consumed, so `limit = consumed = w`: a cancelled handle,
     /// which the operation holding it reports as its
     /// cancellation, and the qualification seam's one exact named charge.
-    fn check_injected(&self, point: ChargePoint, work_units: Integer) -> Result<(), Incomplete> {
+    fn check_injected(
+        &mut self,
+        point: ChargePoint,
+        work_units: Integer,
+    ) -> Result<(), Incomplete> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {
             let consumed = self.consumed(LimitKind::WorkUnits);
             return Err(Incomplete {
@@ -636,9 +655,10 @@ impl Meter {
             Some(denial)
                 if denial.point == point
                     && self.counters.denied_point_admissions.checked_add(1)
-                        == Some(denial.occurrence) =>
+                        == Some(denial.occurrence.get()) =>
             {
                 let consumed = self.consumed(LimitKind::WorkUnits);
+                self.counters.denial = None;
                 Err(Incomplete {
                     limit_kind: LimitKind::WorkUnits,
                     limit: consumed,
@@ -702,7 +722,11 @@ impl Meter {
         }
         self.counters.admissions = self.counters.admissions.saturating_add(1);
         #[cfg(feature = "test-support")]
-        self.admitted.push(point);
+        if self.admitted.len() < CHARGE_LOG_CAPACITY {
+            self.admitted.push(point);
+        } else {
+            self.charge_log_truncated = true;
+        }
     }
 
     /// The QSpec-FR-149 `equality.plan` charge: size `value_occurrences` is the
@@ -805,6 +829,7 @@ mod tests {
         }
     }
 
+    /// Trace: FR-358-AC-6
     /// A production meter's counters own no heap memory, however many
     /// charges it admits; the admission count still grows with every charge.
     /// Built only without `test-support` (`cargo test -p quire-exact`, which
@@ -859,7 +884,7 @@ mod tests {
     fn injected_denial_counts_only_its_own_point() {
         let denial = InjectedDenial {
             point: ChargePoint::FunctionCall,
-            occurrence: 3,
+            occurrence: NonZeroU64::new(3).expect("three is nonzero"),
         };
         let mut meter = Meter::new(unlimited()).with_injected_denial(denial);
         for _ in 0..2 {
@@ -881,9 +906,139 @@ mod tests {
             .expect("no denial is set yet");
         let mut late = late.with_injected_denial(InjectedDenial {
             point: ChargePoint::FunctionCall,
-            occurrence: 1,
+            occurrence: NonZeroU64::new(1).expect("one is nonzero"),
         });
         late.charge(Charge::new(ChargePoint::FunctionCall))
             .expect_err("the first occurrence after the denial is set is denied");
+    }
+
+    /// Trace: FR-358-AC-1
+    #[test]
+    fn injected_denial_spends_only_on_its_named_admitted_position() {
+        let mut meter = Meter::new(tight_limits()).with_injected_denial(InjectedDenial {
+            point: ChargePoint::FunctionCall,
+            occurrence: NonZeroU64::new(2).expect("two is nonzero"),
+        });
+        let before_ordinary_refusal = meter.clone();
+        let ordinary = meter
+            .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 9))
+            .expect_err("nine bits exceeds the ordinary limit");
+        assert_eq!(ordinary.limit_kind, LimitKind::IntegerBits);
+        assert_eq!(meter, before_ordinary_refusal);
+
+        meter
+            .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 4))
+            .expect("first admitted named occurrence");
+        meter
+            .charge(Charge::new(ChargePoint::CollectionVisit))
+            .expect("an unrelated admission does not advance the named occurrence");
+        let before_injected_refusal = meter.clone();
+        let injected = meter
+            .charge(Charge::new(ChargePoint::FunctionCall))
+            .expect_err("second named occurrence is injected denial");
+        assert_eq!(injected.charge_point, ChargePoint::FunctionCall);
+        assert_eq!(injected.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(
+            meter.admission_count(),
+            before_injected_refusal.admission_count()
+        );
+        for kind in LimitKind::ALL {
+            assert_eq!(meter.consumed(kind), before_injected_refusal.consumed(kind));
+        }
+        #[cfg(feature = "test-support")]
+        assert_eq!(
+            meter.admitted_charges(),
+            before_injected_refusal.admitted_charges()
+        );
+
+        meter
+            .charge(Charge::new(ChargePoint::FunctionCall))
+            .expect("the injected denial is spent after one refusal");
+        assert_eq!(meter.admission_count(), 3);
+        assert_eq!(meter.consumed(LimitKind::WorkUnits), 3);
+        assert_eq!(meter.consumed(LimitKind::IntegerBits), 4);
+        #[cfg(feature = "test-support")]
+        assert_eq!(
+            meter.admitted_charges(),
+            [
+                ChargePoint::FunctionCall,
+                ChargePoint::CollectionVisit,
+                ChargePoint::FunctionCall,
+            ]
+        );
+    }
+
+    /// Trace: FR-358-AC-2
+    #[test]
+    fn injected_plan_denial_spends_after_one_refusal() {
+        let mut meter = Meter::new(unlimited()).with_injected_denial(InjectedDenial {
+            point: ChargePoint::EqualityPlan,
+            occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+        });
+        let before = meter.clone();
+        let denied = meter
+            .charge_plan(&Integer::from(2_u64))
+            .expect_err("first plan charge is injected denial");
+        assert_eq!(denied.charge_point, ChargePoint::EqualityPlan);
+        assert_eq!(denied.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(meter.admission_count(), before.admission_count());
+        for kind in LimitKind::ALL {
+            assert_eq!(meter.consumed(kind), before.consumed(kind));
+        }
+        #[cfg(feature = "test-support")]
+        assert_eq!(meter.admitted_charges(), before.admitted_charges());
+
+        meter
+            .charge_plan(&Integer::from(2_u64))
+            .expect("the next plan charge is admitted");
+        assert_eq!(meter.admission_count(), 1);
+        assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 2);
+        assert_eq!(meter.consumed(LimitKind::WorkUnits), 1);
+        #[cfg(feature = "test-support")]
+        assert_eq!(meter.admitted_charges(), [ChargePoint::EqualityPlan]);
+    }
+
+    /// Trace: FR-358-AC-3
+    #[test]
+    fn injected_denial_occurrence_requires_nonzero() {
+        assert_eq!(NonZeroU64::new(0), None);
+        let denial = InjectedDenial {
+            point: ChargePoint::FunctionCall,
+            occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+        };
+        let occurrence: NonZeroU64 = denial.occurrence;
+        assert_eq!(occurrence.get(), 1);
+    }
+
+    /// Trace: FR-358-AC-4, FR-358-AC-5
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn charge_log_retains_only_first_4096_admissions() {
+        let mut meter = Meter::new(unlimited());
+        let expected: Vec<_> = (0..CHARGE_LOG_CAPACITY)
+            .map(|index| {
+                if index % 2 == 0 {
+                    ChargePoint::FunctionCall
+                } else {
+                    ChargePoint::CollectionVisit
+                }
+            })
+            .collect();
+        for point in &expected {
+            meter
+                .charge(Charge::new(*point))
+                .expect("unlimited meter admits each charge");
+        }
+        assert_eq!(meter.admitted_charges(), expected);
+        assert!(!meter.charge_log_truncated());
+        assert_eq!(meter.admission_count(), 4096);
+
+        meter
+            .charge(Charge::new(ChargePoint::EqualityPlan))
+            .expect("the charge beyond the log cap is still admitted");
+        assert_eq!(meter.admitted_charges(), expected);
+        assert!(meter.charge_log_truncated());
+        assert_eq!(meter.admission_count(), 4097);
+        assert_eq!(meter.consumed(LimitKind::WorkUnits), 4097);
     }
 }
