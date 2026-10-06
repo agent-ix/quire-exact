@@ -34,6 +34,7 @@ fn rational(n: i128, d: i128) -> Rational {
     Rational::new(Integer::from(n), Integer::from(d)).unwrap()
 }
 
+#[cfg(feature = "test-support")]
 fn bit_len(n: i128) -> u64 {
     let magnitude = n.unsigned_abs();
     u64::from(128 - magnitude.leading_zeros()).max(1)
@@ -202,7 +203,7 @@ fn rational_arithmetic_matches_reduced_fraction_oracle() {
 #[test]
 fn integer_and_rational_ordering_match_checked_oracle() {
     let values = samples();
-    for pair in values.windows(2).chain(values.chunks_exact(2)) {
+    for pair in values.windows(2) {
         let (a, b) = (pair[0], pair[1]);
         let (left, right) = (Integer::from(a), Integer::from(b));
         let rational_left = rational(a, 97);
