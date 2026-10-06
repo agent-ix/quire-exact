@@ -137,3 +137,17 @@ Round 2 at `9082081032cf6d82b8e69ae5c7f97d05c230b397` (prior `e7cd04e0b79b096e1c
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-008 | medium | FR-363's Behavior requires that a denied decimal-ordering charge returns Incomplete before any later point is admitted. No FR-363 AC or TC-911 step injects a denial at each decimal ordering point; AC-4 covers only a limit refusal at ordering.arithmetic, and FR-362-AC-8 covers only integer and rational ordering. The public RT test that RT #95 removed (tc_023_ordering_amounts_for_rationals_and_retained_decimals) ran assert_named_denials over decimal ordering, checking Incomplete at each admitted point with zero result units. That part of the evidence is still not re-homed. Add a one-shot named-denial AC for ordering.operands, ordering.arithmetic and ordering.result-retain with decimal operands. | spec/functional/FR-363-metered-decimal-ordering.md:27 | missing-requirement |
+
+## Dispositions (round 3)
+
+Round 3, reviewed `67ff0495b66b4f37747e6e0a3000a1506cb258e8` against prior `9082081032cf6d82b8e69ae5c7f97d05c230b397`. Model `claude-opus-5-5`, run `3b4c7eb5-1308-4e04-926d-28719c07e719`, session `1c69c439-7235-4983-862a-16066636b5df`. Scope: FND-008 closure and regressions introduced by the fix; none were found. The 19 findings already fixed are unchanged and get no new row. Planned tests are not credited as run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-008 | fixed | 67ff0495b66b4f37747e6e0a3000a1506cb258e8 |
+
+- FND-008: `FR-363-AC-5` at spec/functional/FR-363-metered-decimal-ordering.md:39. FR-363-AC-5 injects a one-shot denial at each decimal ordering point, and TC-911 step 4 covers the same. Against src/accounting.rs check_injected and src/numeric.rs order() at this SHA, the expected record matches: WorkUnits, limit = consumed = 0/1/2 (one default work unit per earlier admitted point), next_charge = 1 (the default Charge work), and the named point. The denial fires before admission, logging or any result charge, and `?` stops later points. FR-358 is now a depends_on edge. This mirrors RT's removed assert_named_denials. src/ is unchanged since the prior SHA. TC-911 is planned and no test has run.
+
+```text
+On separate fresh meters with generous limits, inject a one-shot denial at occurrence 1 of each decimal-ordering point: `ordering.operands`, `ordering.arithmetic`, and `ordering.result-retain`. For each point, ordering retained `(0, 5) >= (0, 0)` returns `Incomplete` with `limit_kind = WorkUnits`, `charge_point` equal to the selected point, `limit = consumed` equal to the number of preceding admitted points (0, 1, or 2), and `next_charge = 1`. No Boolean result or result unit is exposed; only the preceding point prefix is admitted and logged, with no later point admitted.
+```
