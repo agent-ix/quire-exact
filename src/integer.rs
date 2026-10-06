@@ -445,6 +445,17 @@ mod tests {
 
     use super::*;
 
+    /// Trace: FR-360-AC-1
+    #[test]
+    fn minimum_i64_absolute_value_is_positive_two_to_the_63rd() {
+        let input = Integer::from(i64::MIN);
+        let magnitude = input.abs();
+        assert_eq!(magnitude, Integer::from_str("9223372036854775808").unwrap());
+        assert!(!magnitude.is_negative());
+        assert_ne!(magnitude, input);
+        assert!(input.is_negative());
+    }
+
     /// `IntegerInterval::admit` accepts a value inside the declared
     /// domain, and `BoundedInteger` reports back the exact value and domain
     /// that admitted it.
