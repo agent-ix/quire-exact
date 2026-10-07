@@ -145,3 +145,27 @@ fn assert_denials<T>(points: &[ChargePoint], mut call: impl FnMut(&mut Meter) ->
     let denial = call(&mut meter).map_incomplete();
     let admitted = u64::try_from(index).unwrap();
 ```
+
+### Round 2
+
+Round 2, reviewed `233d68a012a73dea17de0d1e7da7f747c56e9182` against prior `dbebd112bf136badb818e68cec011cc31121fc55`; GitHub PR #7 head and `refs/pull/7/head` independently verified equal to it. Model `claude-opus-5-5`, run `ac997cf4-dcfc-46f2-abc1-97aadea812b5`. The commit only deletes the `operand_size_refuses_at_its_own_point_with_asymmetric_widths` test and its `assert_operand_refusal` helper (68 lines removed from `tests/ir653_scalar.rs`, none added), and copies the round-1 SR files verbatim (`cmp` equal). The round-1 fixes for FND-001..004 are untouched.
+
+The reviewer ran `ir653_scalar` under default features (7 pass) and `test-support` (8 pass), plus `make fmt-check` and `make lint` (pass). `quire matrix --scope .` binds all 26 in-scope criteria, and FR-362-AC-6's only binder is `scalar_families_charge_order_and_independent_size_maxima`.
+
+Removing the test also removes the operand-point observation that SR-2261 FND-001's round-1 deferral reason said was present. That point-sensitive evidence now sits wholly with IR-667, together with the normalize half. No new defect was found.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-005 | fixed | 233d68a012a73dea17de0d1e7da7f747c56e9182 |
+
+### Round 2 after-excerpts
+
+- FND-005: tests/ir653_scalar.rs:372-376. The test with the misapplied `Trace: FR-362-AC-6` tag is gone; `scalar_families_charge_order_and_independent_size_maxima` ends and the FR-362-AC-7 test follows directly.
+
+```text
+    assert_charges(&meter, &[ChargePoint::BooleanResultRetain], 0, 0);
+}
+
+/// Trace: FR-362-AC-7
+#[test]
+```
