@@ -34,3 +34,11 @@ Method: ran `quire matrix --strict` (quire 0.36.1 / engine 0.50.1) on this head 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | Both new tests carry `#[trace("FR-261-AC-3")]`. That id has no spec file in quire-exact, so `quire matrix --strict` binds the tag to nothing and drops it without a warning. FR-261-AC-3 also belongs to quire-spec-language and is about the observation document reader (snapshot admission, `observation.values` refusal, the `ObservationLimits` builder, TC-733), none of which these kernel tests exercise. The kernel guarantee this PR adds has no owning criterion in this repo: payload types are shared, a value N deep holds O(N) type nodes, and a 100,000-deep value with types as deep is admitted on 512 KiB. The repo's precedent is FR-262. It carries the caller's FR id into this spec with its own AC and TC-735, and its tests are tagged `TC-735, FR-262-AC-2`. Fix: add an AC to FR-262 here, or a quire-exact FR-261 file mirroring FR-262's pattern, that states the linear-node property and the deep-typed admission. Give it a TC and retag both tests to that AC and TC. | src/value.rs:2161, 2173 |
+
+## Dispositions
+
+Round 1, reviewed at `7a7ed05534354d89e2f6c6d9112046f5a2c1fc46`.
+
+| FND | Outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 00a42c7, 7a7ed05 |
