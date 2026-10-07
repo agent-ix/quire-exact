@@ -28,7 +28,7 @@ When a charge would exceed a cumulative `u64` limit, the `quire-exact` meter SHA
 
 ## Status
 
-Planned.
+AC-1 through AC-5 retain earlier Trace bindings. PR #9 adds executable Trace bindings for AC-6 and AC-7. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

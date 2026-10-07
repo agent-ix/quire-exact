@@ -28,4 +28,4 @@ The charge reaching the work limit succeeds. Every later charge refuses at the c
 
 ## Status
 
-Planned for the IR-653 CODE stage.
+FR-359-AC-1 through AC-5 retain earlier Trace bindings. PR #9 adds executable Trace bindings for FR-359-AC-6 and AC-7. Run `quire matrix` for the current criterion-to-test mapping.

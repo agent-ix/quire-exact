@@ -33,7 +33,7 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 
 ## Status
 
-PR #9 adds executable Trace bindings for AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.
+PR #9 adds executable Trace bindings for AC-8 through AC-11. AC-7 was retired to FR-368; its ID is not reused. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 
