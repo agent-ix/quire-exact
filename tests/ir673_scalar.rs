@@ -68,7 +68,7 @@ fn denied<T>(
     assert_eq!(meter.consumed(K::ResultUnits), 0);
 }
 
-/// Trace: TC-910, FR-362-AC-10
+/// Trace: TC-910
 #[cfg(feature = "test-support")]
 #[test]
 fn scalar_bit_limits_admit_exactly_and_deny_first_excess() {
