@@ -51,3 +51,15 @@ FR-364-AC-1 can fail despite the bitmask representation, because it fixes the or
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | medium | FR-366-AC-2 tests only payloads that must refuse (`2^22`, `2^30`). An implementation that refuses every binary64-to-binary32 NaN narrowing, or truncates fitting payloads, still passes. The Behavior rule "refuses a payload that cannot fit below the target quiet bit" therefore has no lower side. Source refuses at `payload >= target quiet_bit` (`src/ieee.rs:1667-1668`). Fix: add a fitting case at the boundary: payload `2^22 - 1`, positive and negative, converts to binary32 with sign and payload preserved and the quiet bit set. | spec/functional/FR-366-ieee-exceptional-value-semantics.md:22 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `41d35ea4741dcbe9a5df33961a9e6358c5357222` against prior `05ffdbe0f6b9f5a2be69fef52874eb1776e18cc3`. Model `claude-opus-5-5`, run `720faf90-5d3c-40d8-be4d-1aaae6430466`, session `5600b5d7-c445-43b9-8eba-c1cdee75cf9f`. Each outcome was checked against the 05ffdbe..41d35ea diff, owner source and `quire matrix`; the author's report was not relied on. Spec-only: nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+
+### Round 1 after-excerpts
+
+- FND-001: Converting a binary64 NaN with payload `2^22` or `2^30` to binary32 returns `Refused(IeeeNanPayloadNotRepresentable { source: Binary64, target: Binary32 })` without truncating the payload or retaining a result unit. At payload `2^22 - 1`, positive and negative binary64 quiet NaNs both complete as binary32 quiet NaNs with their respective signs and all payload bits preserved, and one result unit is consumed.

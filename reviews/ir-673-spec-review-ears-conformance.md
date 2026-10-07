@@ -57,3 +57,17 @@ FR-097, FR-362 and FR-366 now carry two SHALLs each. Where that is an ownership 
 | --- | --- | --- | --- | --- |
 | FND-001 | low | FR-361-AC-3's added sentence is garbled: "completes with `integer_bits` equal to the dividend magnitude bit length to the independently calculated floor quotient". A reader must guess which phrase "to the ... quotient" attaches to. Fix: "completes to the independently calculated floor quotient, with final `integer_bits` equal to the dividend magnitude bit length". | spec/functional/FR-361-admission-before-large-exact-work.md:31 | wrong-requirement |
 | FND-002 | low | FR-362-AC-10 bundles more than a dozen independent checks in one AC: exact and one-under bit limits for 11 operations, seven named fixtures, rational and integer work boundaries, and seven power-of-two result edges. FR-362-AC-7 and FR-358-AC-5 are similarly compound. A single binder cannot show which sub-obligation failed, and partial tagging looks like full coverage. Fix: split AC-10 into bit-limit, work-boundary and power-of-two ACs at least. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:46 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `41d35ea4741dcbe9a5df33961a9e6358c5357222` against prior `05ffdbe0f6b9f5a2be69fef52874eb1776e18cc3`. Model `claude-opus-5-5`, run `720faf90-5d3c-40d8-be4d-1aaae6430466`, session `5600b5d7-c445-43b9-8eba-c1cdee75cf9f`. Each outcome was checked against the 05ffdbe..41d35ea diff, owner source and `quire matrix`; the author's report was not relied on. Spec-only: nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+| FND-002 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+
+### Round 1 after-excerpts
+
+- FND-001: FR-361-AC-3 restored to original text; new FR-361-AC-7: On a fresh meter, floor division of a positive at-least-65,536-bit dividend by 3, exposing the quotient in the mathematical domain, completes to the independently calculated floor quotient with `integer_bits` limit equal to the dividend magnitude bit length. Final consumed `integer_bits` equals that exact bit length.
+- FND-002: FR-362-AC-10 split into AC-10 (bit limits), AC-17 (work boundaries), AC-18 (power-of-two edges); FR-362-AC-7 additions into AC-14..16; FR-358-AC-5 additions into AC-8..11. AC-17: For integer `5 + 7`, work limit 2 stops at `integer-arithmetic.result-retain` after operands and arithmetic, with zero result units; work limit 3 completes to 12 with three work and one result unit. For rational `(2/3) * (3/2)`, work limit 2 stops at `rational-arithmetic.normalize`, work limit 3 stops at `rational-arithmetic.result-retain`, and work limit 4 completes to `1/1`; each denied call preserves exactly its...

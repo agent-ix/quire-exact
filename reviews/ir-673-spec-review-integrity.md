@@ -76,3 +76,23 @@ Scope note for the owner, not a defect: the IR-673 description says "no API chan
 | FND-003 | medium | RT TC-034 step 9 (`modulo` equals the Euclidean remainder for all four sign combinations, whatever `div`/`rem` profile ran earlier) is kernel-owned: `pub fn modulo`, `src/division.rs:93`. No owner AC covers it. FR-357 covers `divide` only, and the owner test `euclidean_modulo_is_nonnegative` (`src/division.rs:420`) checks only that `-7 mod 3` is non-negative, with no exact value and no trace tag. The candidate neither ports this case nor records why it is excluded. Fix: add a `modulo` AC under FR-357 (or a new FR) with exact values for `(+-7, +-3)` and profile independence, or record why it is out of scope. | spec/functional/FR-357-single-member-integer-division.md:11 | missing-requirement |
 | FND-004 | low | FR-097 is titled and scoped "unbounded collection", yet its new second SHALL defines a public inclusive count check that only matters for bounded types. The bounded-decision contract is now owned by an FR whose title readers will not search for it under. Fix: move the SHALL and AC-8 to their own FR (for example "Public inclusive cardinality check"), or retitle FR-097. | spec/functional/FR-097-unbounded-collection-in-the-kernel.md:11 | wrong-requirement |
 | FND-005 | low | FR-358-AC-7, a census of the `ChargePoint` and `LimitKind` vocabularies, has no link to FR-358's statement (one-shot denial and the bounded diagnostic log). It is a separate obligation filed under an unrelated requirement. Fix: give the vocabulary census its own FR, or attach it to the FR that owns the charge vocabulary. | spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md:29 | wrong-requirement |
+
+## Dispositions
+
+Round 1, reviewed `41d35ea4741dcbe9a5df33961a9e6358c5357222` against prior `05ffdbe0f6b9f5a2be69fef52874eb1776e18cc3`. Model `claude-opus-5-5`, run `720faf90-5d3c-40d8-be4d-1aaae6430466`, session `5600b5d7-c445-43b9-8eba-c1cdee75cf9f`. Each outcome was checked against the 05ffdbe..41d35ea diff, owner source and `quire matrix`; the author's report was not relied on. Spec-only: nothing was built or run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+| FND-002 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+| FND-003 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+| FND-004 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+| FND-005 | fixed | 41d35ea4741dcbe9a5df33961a9e6358c5357222 |
+
+### Round 1 after-excerpts
+
+- FND-001: FR-362-AC-7 restored to its original tagged text; added schedules moved to untagged FR-362-AC-14..16. On one meter, directly add integers 5 and 7, compare rationals 1/2 and 2/3 for less-than, then retain an already-decided Boolean `true`. The admitted atom sequence consumes 7 work units and 3 result units, derived from the three family rows in Behavior. Status: AC-1 through AC-9 have tagged pre-IR-673 tests. AC-10 through AC-18 are planned and untagged; the existing tags do not bind those additions.
+- FND-002: The kernel SHALL construct rational values with a positive denominator, numerator and denominator reduced to lowest terms, and a unique zero representation `0/1`. `Rational::new(4, 8)` and `Rational::new(-4, -8)` each expose numerator 1 and denominator 2, proving reduction to lowest terms and cancellation of two negative signs. `Rational::new(1, -2)` exposes -1/2. For either denominator 5 or -5, a zero numerator exposes exactly 0/1.
+- FND-003: The public `modulo` operation SHALL return the Euclidean remainder for nonzero divisors independently of any `DivisionProfile` selected for a separate `divide` call. For dividend/divisor pairs `(7, 3)`, `(7, -3)`, `(-7, 3)` and `(-7, -3)`, public `modulo` in the mathematical domain completes to 1, 1, 2 and 2 respectively. Running a `divide` under each of Truncating, Floor and Euclidean before each `modulo` call does not change those results; `modulo` has no profile argument.
+- FND-004: FR-097 title: title: "Collection cardinality bounds and unbounded construction"
+- FND-005: FR-358-AC-7 retired (ID not reused); moved to FR-368. The `quire-exact` meter SHALL expose a complete, uniquely spelled public `ChargePoint` vocabulary and a `LimitKind` vocabulary in `ScalarLimits` field order.
