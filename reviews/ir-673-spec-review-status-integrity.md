@@ -93,3 +93,17 @@ Method: each new sentence was checked against `quoin matrix --json` on 126add3 (
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The rewrite of FR-358's Status (:36) deleted "AC-7 was moved to FR-368 without reusing its ID". That sentence was the recorded fix for spec-review SR-2420 FND-005 (merged in spec PR #8). The AC table now jumps from FR-358-AC-6 to FR-358-AC-8 with nothing explaining the gap, so a later author can reasonably reuse AC-7 and silently alias a retired criterion. The dropped "AC-3 and AC-6 require inspection" clause loses nothing, because their Verification column still says Inspection. Fix: keep the new matrix pointer and restore one sentence, e.g. "AC-7 was retired to FR-368; its ID is not reused." | spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md:36 |
+
+## Dispositions
+
+### Round 2
+
+Round 2, reviewed fix head `9441658f80f9cc9aea33ae94f3555ad5184a478e` against prior `126add38f47e13ec6ba376cf93121c1558c6a2d6`; `git ls-remote` shows `refs/pull/9/head` at that SHA. Model `claude-opus-5-5`, run `6a8d6ca2-e645-451b-9fb3-42bd241049a2`. Checked against `git diff 126add3..9441658`; the coder's report was treated as data. The commit replaces exactly one Status paragraph in each of FR-358, FR-359, TC-906, TC-907 and TC-910 and copies the three reviewer artifacts verbatim (`cmp` equal). It changes no AC, Behavior, `src/`, `tests/`, Cargo, lock or workflow file, so the SR-2435 code fixes from 126add3 are untouched. `quoin matrix --json` on 9441658: the 32 IR-673 criteria are 31 tagged, with FR-362-AC-10 untagged; FR-359-AC-1..7 are all tagged. `quire validate` on the 8 touched files: exit 0. No Cargo or gate run. A sweep of every Status section finds no remaining tag-state claim that contradicts the matrix, except the IR-653-only FR-360:21 and TC-908:25, which round 1 recorded as optional and outside this finding.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 9441658f80f9cc9aea33ae94f3555ad5184a478e |
+
+### Round 2 after-excerpts
+
+- FND-001: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md:36 "PR #9 adds executable Trace bindings for AC-8 through AC-11. AC-7 was retired to FR-368; its ID is not reused. Run `quire matrix` for the current criterion-to-test mapping."
