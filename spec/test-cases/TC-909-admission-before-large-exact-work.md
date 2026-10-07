@@ -20,9 +20,12 @@ Verify [FR-361](../functional/FR-361-admission-before-large-exact-work.md), AC-1
 4. With small decimal coefficients and a `2^20`-place shift, separately deny `decimal.scale-expansion`, `decimal.arithmetic` and `decimal.result-retain` under the limit and point fixtures named in AC-4 through AC-6.
 5. In every case inspect the `Incomplete` record, admitted points and largest single allocation request made inside the window.
 
+6. Complete floor quotient division of the positive large dividend by 3 at its exact operand-bit limit and compare with an independent quotient; lower the limit by one and measure the stopped operand call.
+7. Repeat result-retain denial with `Multiply` of `(1, 0)` by `(1, 0)` into the exact scale-range target in AC-6; inspect all five incomplete fields, preceding points, zero result consumption and the allocation bound.
+
 ## Expected Results
 
-Each case stops at its stated charge point and limit kind with the exact requested amount. The largest request is below one eighth of the operand byte length for integer and rational arithmetic, division and modulus fixtures and below 4,096 bytes for all decimal shift fixtures. No later charge in the denied call is admitted.
+Each case stops at its stated charge point and limit kind with the exact requested amount. The largest request is below one eighth of the operand byte length for integer and rational arithmetic, division and modulus fixtures and below 4,096 bytes for all decimal shift fixtures. No later charge in the denied call is admitted. Exact-limit floor division completes; one-under denies operands with zero consumption. Multiply retention reports prior decimal digits 2 and requests `2^20 + 1` without allocating the retained power of ten.
 
 ## Status
 
