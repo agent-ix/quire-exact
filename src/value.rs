@@ -2158,7 +2158,7 @@ mod tests {
     /// A value `2N` levels deep, declared with types `2N` deep, holds about
     /// twice the type nodes of a value `N` deep: payload types are shared,
     /// not copied per level, so memory is linear in the value.
-    #[trace("FR-261-AC-3")]
+    #[trace("TC-735", "FR-262-AC-3")]
     #[test]
     fn type_nodes_grow_linearly_with_value_depth() {
         let small = type_nodes(&deep_typed_value(1_000).1);
@@ -2167,10 +2167,10 @@ mod tests {
         assert!(large <= 2 * small + 2, "{large} nodes at 2N, {small} at N");
     }
 
-    /// FR-261-AC-3: a recursive value `DEEP` levels deep, declared with
+    /// FR-262-AC-3: a recursive value `DEEP` levels deep, declared with
     /// types `DEEP` deep, is built, admitted, cloned, compared, hashed,
     /// formatted and dropped on a 512 KiB stack.
-    #[trace("FR-261-AC-3")]
+    #[trace("TC-735", "FR-262-AC-3")]
     #[test]
     fn a_deep_value_with_deep_types_is_admitted_in_linear_memory() {
         on_small_stack(|| {
