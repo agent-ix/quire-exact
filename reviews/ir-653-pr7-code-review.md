@@ -87,3 +87,61 @@ Gates run by the reviewer on the frozen head: the focused ir653 integration test
 | FND-002 | medium | FR-362-AC-6's integer fixture uses 5 and 7, which both have B = 3. The expected sizes (`bit_len(7) + 1`, `bit_len(5) + bit_len(7)`, ordering `3`) therefore cannot distinguish `max(B(a), B(c))` from `B(a)`, `B(c)` or a min, or `B(a) + B(c)` from `2·B(a)`. A kernel that sized integer add/subtract, multiply, operands or ordering from only one operand would pass. The rational fixtures (1/2, 2/3) do discriminate. | tests/ir653_scalar.rs:259-265 |
 | FND-003 | low | FR-363-AC-4 also requires that "the scale-alignment power of ten is not materialized", but `huge_retained_scale_refuses_analytically_before_comparison` observes no allocations. Its only evidence is that it finishes rather than building 10^4,294,967,295. The `allocation_counter` window already used in `tests/ir653_admission.rs` would make this an assertion instead of a timing side effect. | tests/ir653_decimal_order.rs:121-153 |
 | FND-004 | low | The FR-362-AC-8 test selects each family with a magic integer (`0..=4`) that a separate `match family` with `_ => unreachable!()` decodes. The fixture row and its call site are two hand-synchronised edit sites. A sixth row given a duplicated index would silently re-test an existing family, and the compiler cannot catch it. A closure or enum per row would keep one fact in one place. | tests/ir653_scalar.rs:375-439 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The new test `operand_size_refuses_at_its_own_point_with_asymmetric_widths` is tagged `Trace: FR-362-AC-6`, but what it asserts is a point-local operand refusal (`integer_bits = 7`, refusal at `*.operands` with `next_charge = 8` and zero admissions). FR-362-AC-6 asserts final high-water sizes after successful calls and says nothing about refusal. The test is real evidence for FR-362's Behavior operand amounts, but no AC owns that behavior. The matrix therefore counts it as a second AC-6 binder, which overstates AC-6's coverage and hides the missing criterion. Retag it once the planner's narrow FR-362 spec follow-up adds an owning AC. | tests/ir653_scalar.rs:375-441 |
+
+## Dispositions
+
+Round 1, reviewed fix head `dbebd112bf136badb818e68cec011cc31121fc55` against prior `9a68b718bf76c6763513a484d01df28de6198dc6`; GitHub PR #7 head and `refs/pull/7/head` independently verified equal to it. Model `claude-opus-5-5`, run `ac997cf4-dcfc-46f2-abc1-97aadea812b5`. Each outcome was checked against the fix diff (`git diff 9a68b71..dbebd11 -- tests/`), not the author's summary. The reviewer ran `ir653_scalar` and `ir653_decimal_order` under default features and `test-support` (all pass), plus `make fmt-check` and `make lint` (pass). No full gate was run.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | dbebd112bf136badb818e68cec011cc31121fc55 |
+| FND-002 | fixed | dbebd112bf136badb818e68cec011cc31121fc55 |
+| FND-003 | fixed | dbebd112bf136badb818e68cec011cc31121fc55 |
+| FND-004 | fixed | dbebd112bf136badb818e68cec011cc31121fc55 |
+
+### Round 1 after-excerpts
+
+- FND-001: tests/ir653_scalar.rs:235-254. Equal integers 7/7 and equal rationals 1/2 vs 2/4 now pass through `order_numbers` under all four operators, so `<=`/`>=` differ from their strict forms on exactly these pairs.
+
+```text
+let equal_integers = (Integer::from(7_i64), Integer::from(7_i64));
+let equal_rationals = (rational(1, 2), rational(2, 4));
+...
+(OrderingOperator::Less, false),
+(OrderingOperator::LessOrEqual, true),
+(OrderingOperator::Greater, false),
+(OrderingOperator::GreaterOrEqual, true),
+```
+
+- FND-002: tests/ir653_scalar.rs:280-291 and 348-351. The fixture is now (5, 128) in both orders (B = 3 and 8). Any single-operand formula gives 4 instead of 9 for add/subtract and 6 or 16 instead of 11 for multiply, and the ordering expectation is 8 in both orders, so a single-operand or min formula now fails.
+
+```text
+for (left, right) in [(5_i64, 128_i64), (128, 5)] {
+    let operand_max = bit_len(i128::from(left)).max(bit_len(i128::from(right)));
+    (IntegerArithmetic::Add(&a, &b), operand_max + 1),
+    (IntegerArithmetic::Multiply(&a, &b), bit_len(i128::from(left)) + bit_len(i128::from(right))),
+```
+
+- FND-003: tests/ir653_decimal_order.rs:128-141. The analytic refusal now runs inside an `allocation_counter::measure` window and asserts a bound on total bytes.
+
+```text
+let allocations = allocation_counter::measure(|| {
+    outcome = Some(compare(OrderingOperator::Less, &left, &right, &mut meter));
+});
+assert!(allocations.bytes_total < 4096, ...);
+```
+
+- FND-004: tests/ir653_scalar.rs:469-532. The magic-integer dispatch is replaced by one `assert_denials(points, closure)` call per family, so each row and its call site are a single fact. The index cast became `u64::try_from(index).unwrap()`.
+
+```text
+fn assert_denials<T>(points: &[ChargePoint], mut call: impl FnMut(&mut Meter) -> Outcome<T>) {
+    ...
+    let denial = call(&mut meter).map_incomplete();
+    let admitted = u64::try_from(index).unwrap();
+```

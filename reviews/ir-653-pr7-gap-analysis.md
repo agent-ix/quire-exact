@@ -79,3 +79,11 @@ Matrix: 26/26 in-scope criteria tagged; 0 untagged in scope. Reverse gap: none (
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | FR-362-AC-6 checks sizes only through the final high-water `integer_bits`. Every operand amount and every rational normalize amount in FR-362's Behavior table is mathematically at most the same call's arithmetic amount: B(a·q ± c·p) ≤ max(B(a)+B(q), B(c)+B(p)) + 1, and similarly for the other operations. The maximum therefore always equals the arithmetic term, and the test cannot observe an undercharge at `*.operands` or `rational-arithmetic.normalize`. A limit-at-amount probe per point would be needed. The AC is satisfied as written; this records a limit of the merged criterion, for the spec owner. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:40 |
+
+## Dispositions
+
+Round 1, reviewed fix head `dbebd112bf136badb818e68cec011cc31121fc55` against prior `9a68b718bf76c6763513a484d01df28de6198dc6`. Model `claude-opus-5-5`, run `ac997cf4-dcfc-46f2-abc1-97aadea812b5`. Judged independently of the author's statement. After the fix, `quire matrix --scope .` still binds 26/26 in-scope criteria. FR-362-AC-6 now has two binders, and the second is the subject of SR-2260 FND-005.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | deferred | Partly addressed in dbebd112bf136badb818e68cec011cc31121fc55. `operand_size_refuses_at_its_own_point_with_asymmetric_widths` now observes the operand amounts of integer arithmetic, integer ordering, rational arithmetic and rational ordering directly, through a limit of 7 against an exact `next_charge` of 8 in both operand orders. The `rational-arithmetic.normalize` half cannot be fixed in this PR's tests. `rational-arithmetic.arithmetic` is charged first with an amount at least as large as normalize's, so any `integer_bits` limit that would deny normalize denies arithmetic first. The final high-water hides it, and `admitted_charges()` records points, not amounts. Normalize's exact amount is therefore unobservable at the public meter seam, and the gap is in the merged criterion, not the tests. It is out of scope for this PR and goes to the planner-owned narrow FR-362 spec follow-up (no ticket id assigned yet). |
