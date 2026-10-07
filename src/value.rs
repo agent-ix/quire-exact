@@ -2192,9 +2192,12 @@ mod tests {
             assert!(sink.open >= DEEP);
             assert_eq!(sink.open, sink.close);
 
+            // `value` holds a share of every level, `value_type` and `clone`
+            // share the whole chain: the last holder to drop must detach the
+            // rest of it, so this order exercises a shared-in-the-middle drop.
+            drop(value);
             drop(value_type);
             drop(clone);
-            drop(value);
         });
     }
 }

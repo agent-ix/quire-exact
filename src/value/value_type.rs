@@ -44,8 +44,9 @@ impl ValueType {
 
     /// The one type nested directly in this type, taken out if this handle
     /// is the only owner of the link that holds it, leaving the leaf
-    /// `Boolean` behind. A link another handle still shares keeps its
-    /// nested type: the last handle to drop it detaches it in turn.
+    /// `Boolean` behind without allocating. A link another handle still
+    /// shares keeps its nested type: the last handle to drop it detaches it
+    /// in turn.
     fn take_unshared_child(&mut self) -> Option<ValueType> {
         match self {
             Self::Option(payload) => Arc::get_mut(payload).map(take_type),
@@ -184,9 +185,14 @@ impl Hash for ValueType {
 }
 
 impl Drop for ValueType {
-    /// Detaches the chain one link at a time, so each link drops with only
-    /// a leaf below it and the stack stays a fixed few frames deep. A link
-    /// shared with another handle is only released here.
+    /// Detaches the links this handle owns one at a time, so each drops with
+    /// only a leaf below it and a chain of any depth needs no recursion. A
+    /// link another handle shares is only released here, and its last
+    /// holder detaches the rest. `Arc::get_mut` refuses a link that has a
+    /// `Weak` (this crate makes none), and a concurrent drop of the other
+    /// holder between the check and the release makes this handle the last
+    /// one: that link then drops through `Arc`'s own release, one nested
+    /// call for it, and runs this impl again for what is below.
     fn drop(&mut self) {
         let mut next = self.take_unshared_child();
         while let Some(mut link) = next {
