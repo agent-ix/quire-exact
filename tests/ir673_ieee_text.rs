@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Public IEEE and text owner evidence for IR-673.
 
-#[cfg(feature = "test-support")]
 use quire_exact::{
-    admit_text, compare_text, ComparisonOperator, IllTyped, IllTypedCause, TextPayload,
-    TextProfile, TextType,
+    admit_text, compare_ieee, compare_text, convert_ieee_width, evaluate_ieee, ieee_to_exact,
+    ComparisonOperator, IeeeComparison, IeeeExactLoss, IeeeExactTarget, IeeeFlag, IeeeFlags,
+    IeeeOperation, IeeeValue, IeeeWidth, IllTyped, IllTypedCause, Integer, IntegerInterval,
+    LimitKind, Meter, Outcome, Rational, RationalDomain, Refusal, RoundingMode, ScalarLimits,
+    TextPayload, TextProfile, TextType,
 };
-use quire_exact::{
-    compare_ieee, convert_ieee_width, evaluate_ieee, ieee_to_exact, IeeeComparison, IeeeExactLoss,
-    IeeeExactTarget, IeeeFlag, IeeeFlags, IeeeOperation, IeeeValue, IeeeWidth, Integer,
-    IntegerInterval, LimitKind, Meter, Outcome, Rational, RationalDomain, Refusal, RoundingMode,
-    ScalarLimits,
-};
+
 fn limits() -> ScalarLimits {
     ScalarLimits {
         integer_bits: u64::MAX,
@@ -26,12 +23,14 @@ fn limits() -> ScalarLimits {
         result_units: u64::MAX,
     }
 }
+
 fn meter() -> Meter {
     Meter::new(limits())
 }
+
 fn value(width: IeeeWidth, bits: u64) -> IeeeValue {
     match width {
-        IeeeWidth::Binary32 => IeeeValue::binary32(bits as u32),
+        IeeeWidth::Binary32 => IeeeValue::binary32(u32::try_from(bits).unwrap()),
         IeeeWidth::Binary64 => IeeeValue::binary64(bits),
     }
 }
@@ -266,7 +265,6 @@ fn ieee_total_order_separates_ten_classes_and_signed_zero() {
 }
 
 /// Trace: TC-915, FR-367-AC-1
-#[cfg(feature = "test-support")]
 #[test]
 fn text_profile_mismatch_refuses_before_any_comparison_charge() {
     let payload = TextPayload::from_utf8(b"a").unwrap();
@@ -300,6 +298,8 @@ fn text_profile_mismatch_refuses_before_any_comparison_charge() {
         assert_eq!(comparison.consumed(kind), 0);
     }
     assert_eq!(comparison.admission_count(), 0);
+    #[cfg(feature = "test-support")]
     assert!(comparison.admitted_charges().is_empty());
+    #[cfg(feature = "test-support")]
     assert!(!comparison.charge_log_truncated());
 }

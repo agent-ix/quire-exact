@@ -23,7 +23,7 @@ The `quire-exact` meter SHALL expose a complete, uniquely spelled public `Charge
 
 ## Status
 
-AC-1 and AC-2 are planned for IR-673 and untagged.
+PR #9 adds executable Trace bindings for AC-1 and AC-2. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

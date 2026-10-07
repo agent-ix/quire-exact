@@ -28,4 +28,4 @@ Values agree with the independent mathematical oracle, charge points and counter
 
 ## Status
 
-AC-1 through AC-5 have pre-IR-673 tags. AC-6 and AC-7 are planned and untagged.
+PR #9 adds executable Trace bindings for FR-363-AC-6 and AC-7. Run `quire matrix` for the current criterion-to-test mapping.

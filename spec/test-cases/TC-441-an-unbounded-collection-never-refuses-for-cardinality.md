@@ -29,4 +29,4 @@ Scope: FR-097-AC-7 and FR-097-AC-8.
 
 ## Status
 
-AC-8 planned for IR-673. AC-7 implemented. The existing tests are in `src/collection.rs`, tagged `#[trace("TC-441", "FR-097-AC-7")]`.
+PR #9 adds executable Trace bindings for FR-097-AC-8. Run `quire matrix` for the current criterion-to-test mapping.

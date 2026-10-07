@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Public collection, division, meter and vocabulary evidence for IR-673.
 
-use core::num::NonZeroU64;
-use std::collections::HashSet;
+use std::{collections::HashSet, num::NonZeroU64};
 
 use quire_exact::{
     divide, form_collection, modulo, BoundViolation, CardinalityBound, Charge, ChargePoint,
@@ -195,51 +194,79 @@ fn truncated_meter_log_preserves_accounting_and_denial_atomicity() {
 fn meter_uses_field_order_and_all_counters_are_queryable() {
     let point = ChargePoint::FunctionCall;
     let kinds = LimitKind::ALL;
+    let prior = [11, 22, 33, 44, 55, 66, 77, 88, 99, 111];
     for (position, unavailable) in kinds.into_iter().enumerate() {
         let mut configured = limits();
-        let mut charge = Charge::new(point).results(1);
+        let mut charge = Charge::new(point).work(Integer::from(2_u64)).results(3);
         let sizes: Vec<_> = if position % 2 == 0 {
             kinds.into_iter().enumerate().take(8).collect()
         } else {
             kinds.into_iter().enumerate().take(8).rev().collect()
         };
         for (index, kind) in sizes {
-            charge = charge.size(kind, 2);
+            charge = charge.size(kind, prior[index] + 2);
             if index >= position {
                 match kind {
-                    LimitKind::IntegerBits => configured.integer_bits = 1,
-                    LimitKind::DecimalDigits => configured.decimal_digits = 1,
-                    LimitKind::ScaleExpansion => configured.scale_expansion = 1,
-                    LimitKind::TextInputBytes => configured.text_input_bytes = 1,
-                    LimitKind::TextScalars => configured.text_scalars = 1,
-                    LimitKind::NormalizedScalars => configured.normalized_scalars = 1,
-                    LimitKind::UnitEdges => configured.unit_edges = 1,
-                    LimitKind::ValueOccurrences => configured.value_occurrences = 1,
+                    LimitKind::IntegerBits => configured.integer_bits = prior[index] + 1,
+                    LimitKind::DecimalDigits => configured.decimal_digits = prior[index] + 1,
+                    LimitKind::ScaleExpansion => configured.scale_expansion = prior[index] + 1,
+                    LimitKind::TextInputBytes => configured.text_input_bytes = prior[index] + 1,
+                    LimitKind::TextScalars => configured.text_scalars = prior[index] + 1,
+                    LimitKind::NormalizedScalars => {
+                        configured.normalized_scalars = prior[index] + 1
+                    }
+                    LimitKind::UnitEdges => configured.unit_edges = prior[index] + 1,
+                    LimitKind::ValueOccurrences => configured.value_occurrences = prior[index] + 1,
                     LimitKind::WorkUnits | LimitKind::ResultUnits => unreachable!(),
                 }
             }
         }
         if position <= 8 {
-            configured.work_units = 0;
+            configured.work_units = prior[8] + 1;
         }
         if position <= 9 {
-            configured.result_units = 0;
+            configured.result_units = prior[9] + 2;
         }
         let mut meter = Meter::new(configured);
-        for kind in kinds {
-            assert_eq!(meter.consumed(kind), 0);
+        let initial = kinds.into_iter().take(8).enumerate().fold(
+            Charge::new(point)
+                .work(Integer::from(prior[8]))
+                .results(prior[9]),
+            |charge, (index, kind)| charge.size(kind, prior[index]),
+        );
+        meter.charge(initial).unwrap();
+        for (kind, expected) in kinds.into_iter().zip(prior) {
+            assert_eq!(meter.consumed(kind), expected);
         }
         let before = meter.clone();
         let denial = meter.charge(charge).unwrap_err();
         assert_eq!(denial.limit_kind, unavailable);
         assert_eq!(denial.charge_point, point);
-        assert_eq!(denial.limit, if position < 8 { 1 } else { 0 });
-        assert_eq!(denial.consumed, 0);
+        assert_eq!(
+            denial.limit,
+            if position < 8 {
+                prior[position] + 1
+            } else if position == 8 {
+                100
+            } else {
+                113
+            }
+        );
+        assert_eq!(denial.consumed, prior[position]);
         assert_eq!(
             denial.next_charge,
-            Integer::from(if position >= 8 { 1_u64 } else { 2 })
+            Integer::from(if position == 8 {
+                2_u64
+            } else if position == 9 {
+                3
+            } else {
+                prior[position] + 2
+            })
         );
         assert_eq!(meter, before);
+        for (kind, expected) in kinds.into_iter().zip(prior) {
+            assert_eq!(meter.consumed(kind), expected);
+        }
     }
     let mut meter = Meter::new(limits());
     let initial = kinds
@@ -309,6 +336,199 @@ fn meter_uses_field_order_and_all_counters_are_queryable() {
 /// Trace: TC-916, FR-368-AC-1
 #[test]
 fn charge_point_vocabulary_is_unique_and_round_trips() {
+    const _: () = {
+        assert!(matches!(ChargePoint::ALL[0], ChargePoint::DecimalOperands));
+        assert!(matches!(
+            ChargePoint::ALL[1],
+            ChargePoint::DecimalScaleExpansion
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[2],
+            ChargePoint::DecimalArithmetic
+        ));
+        assert!(matches!(ChargePoint::ALL[3], ChargePoint::DecimalRounding));
+        assert!(matches!(
+            ChargePoint::ALL[4],
+            ChargePoint::DecimalResultRetain
+        ));
+        assert!(matches!(ChargePoint::ALL[5], ChargePoint::TextInputBytes));
+        assert!(matches!(
+            ChargePoint::ALL[6],
+            ChargePoint::TextDecodeScalars
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[7],
+            ChargePoint::TextNormalizeInput
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[8],
+            ChargePoint::TextNormalizeOutput
+        ));
+        assert!(matches!(ChargePoint::ALL[9], ChargePoint::TextResultRetain));
+        assert!(matches!(
+            ChargePoint::ALL[10],
+            ChargePoint::EnumIdentityRead
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[11],
+            ChargePoint::EnumResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[12],
+            ChargePoint::UnitIdentityRead
+        ));
+        assert!(matches!(ChargePoint::ALL[13], ChargePoint::UnitEdge));
+        assert!(matches!(
+            ChargePoint::ALL[14],
+            ChargePoint::UnitRationalArithmetic
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[15],
+            ChargePoint::UnitTargetDomain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[16],
+            ChargePoint::UnitResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[17],
+            ChargePoint::IntegerDivisionOperands
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[18],
+            ChargePoint::IntegerDivisionArithmetic
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[19],
+            ChargePoint::IntegerDivisionDomain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[20],
+            ChargePoint::IntegerDivisionResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[21],
+            ChargePoint::IntegerModulusOperands
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[22],
+            ChargePoint::IntegerModulusArithmetic
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[23],
+            ChargePoint::IntegerModulusDomain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[24],
+            ChargePoint::IntegerModulusResultRetain
+        ));
+        assert!(matches!(ChargePoint::ALL[25], ChargePoint::IeeeOperands));
+        assert!(matches!(
+            ChargePoint::ALL[26],
+            ChargePoint::IeeeExactIntermediate
+        ));
+        assert!(matches!(ChargePoint::ALL[27], ChargePoint::IeeeRound));
+        assert!(matches!(
+            ChargePoint::ALL[28],
+            ChargePoint::IeeeResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[29],
+            ChargePoint::EqualityPlanForm
+        ));
+        assert!(matches!(ChargePoint::ALL[30], ChargePoint::EqualityPlan));
+        assert!(matches!(ChargePoint::ALL[31], ChargePoint::EqualityPair));
+        assert!(matches!(
+            ChargePoint::ALL[32],
+            ChargePoint::EqualityResultRetain
+        ));
+        assert!(matches!(ChargePoint::ALL[33], ChargePoint::FunctionCall));
+        assert!(matches!(
+            ChargePoint::ALL[34],
+            ChargePoint::CollectionElement
+        ));
+        assert!(matches!(ChargePoint::ALL[35], ChargePoint::CollectionVisit));
+        assert!(matches!(
+            ChargePoint::ALL[36],
+            ChargePoint::CollectionMemberWalk
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[37],
+            ChargePoint::CollectionMemberTest
+        ));
+        assert!(matches!(ChargePoint::ALL[38], ChargePoint::CollectionBound));
+        assert!(matches!(
+            ChargePoint::ALL[39],
+            ChargePoint::CollectionResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[40],
+            ChargePoint::CompositeResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[41],
+            ChargePoint::IntegerArithmeticOperands
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[42],
+            ChargePoint::IntegerArithmeticArithmetic
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[43],
+            ChargePoint::IntegerArithmeticResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[44],
+            ChargePoint::RationalArithmeticOperands
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[45],
+            ChargePoint::RationalArithmeticArithmetic
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[46],
+            ChargePoint::RationalArithmeticNormalize
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[47],
+            ChargePoint::RationalArithmeticResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[48],
+            ChargePoint::OrderingOperands
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[49],
+            ChargePoint::OrderingArithmetic
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[50],
+            ChargePoint::OrderingResultRetain
+        ));
+        assert!(matches!(
+            ChargePoint::ALL[51],
+            ChargePoint::BooleanResultRetain
+        ));
+        assert!(matches!(ChargePoint::ALL[52], ChargePoint::LookupKey));
+        assert!(matches!(
+            ChargePoint::ALL[53],
+            ChargePoint::LookupResultRetain
+        ));
+        assert!(matches!(ChargePoint::ALL[54], ChargePoint::PopulationVisit));
+        assert!(matches!(ChargePoint::ALL[55], ChargePoint::DispatchSelect));
+        assert!(matches!(
+            ChargePoint::ALL[56],
+            ChargePoint::DeclarationCheck
+        ));
+        assert!(matches!(ChargePoint::ALL[57], ChargePoint::GraphExpand));
+        assert!(matches!(ChargePoint::ALL[58], ChargePoint::GraphEdge));
+        assert!(matches!(
+            ChargePoint::ALL[59],
+            ChargePoint::GraphResultRetain
+        ));
+        assert!(matches!(ChargePoint::ALL[60], ChargePoint::ModelDeref));
+        assert!(matches!(ChargePoint::ALL[61], ChargePoint::ModelNavigate));
+    };
     let mut seen = HashSet::new();
     for point in ChargePoint::ALL {
         let name = match point {
@@ -399,7 +619,20 @@ fn limit_kind_vocabulary_matches_scalar_limit_fields() {
         (LimitKind::ResultUnits, "result_units"),
     ];
     assert_eq!(LimitKind::ALL.len(), expected.len());
-    for (actual, (kind, name)) in LimitKind::ALL.into_iter().zip(expected) {
+    for (position, (actual, (kind, name))) in LimitKind::ALL.into_iter().zip(expected).enumerate() {
+        let index = match actual {
+            LimitKind::IntegerBits => 0,
+            LimitKind::DecimalDigits => 1,
+            LimitKind::ScaleExpansion => 2,
+            LimitKind::TextInputBytes => 3,
+            LimitKind::TextScalars => 4,
+            LimitKind::NormalizedScalars => 5,
+            LimitKind::UnitEdges => 6,
+            LimitKind::ValueOccurrences => 7,
+            LimitKind::WorkUnits => 8,
+            LimitKind::ResultUnits => 9,
+        };
+        assert_eq!(index, position);
         assert_eq!(actual, kind);
         assert_eq!(actual.as_str(), name);
     }

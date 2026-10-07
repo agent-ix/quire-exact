@@ -25,7 +25,7 @@ For +0.5 and -0.5, Exact refuses both; TowardZero produces 0/0, TowardPositive 1
 
 ## Status
 
-Planned for IR-673 owner evidence. Existing source behavior requires direct owner tests.
+PR #9 adds executable Trace bindings for AC-1 and AC-2. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

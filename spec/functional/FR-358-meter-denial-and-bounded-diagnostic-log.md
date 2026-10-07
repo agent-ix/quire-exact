@@ -33,7 +33,7 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 
 ## Status
 
-AC-1, AC-2, AC-4 and AC-5 have tagged pre-IR-673 tests; AC-3 and AC-6 require inspection. AC-7 was moved to FR-368 without reusing its ID. AC-8 through AC-11 are planned and have no executable binders.
+PR #9 adds executable Trace bindings for AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

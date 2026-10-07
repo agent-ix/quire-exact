@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Retained decimal comparison and rounding evidence for IR-673.
 
+use std::cmp::Ordering;
+
 use quire_exact::{
     evaluate_decimal, order_numbers, Decimal, DecimalOperation, DecimalType, InexactTarget,
     Integer, LimitKind, Meter, OrderedOperands, OrderingOperator, Outcome, Refusal, RoundingMode,
     ScalarLimits,
 };
-use std::cmp::Ordering;
+
 fn limits() -> ScalarLimits {
     ScalarLimits {
         integer_bits: u64::MAX,
@@ -21,9 +23,11 @@ fn limits() -> ScalarLimits {
         result_units: u64::MAX,
     }
 }
+
 fn decimal(c: i64, s: u32) -> Decimal {
     Decimal::new(Integer::from(c), s)
 }
+
 fn target(mode: RoundingMode) -> DecimalType {
     DecimalType::new(Integer::from(-10_i64), Integer::from(10_i64), 0, 0, mode).unwrap()
 }

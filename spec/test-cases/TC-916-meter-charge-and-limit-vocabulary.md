@@ -23,4 +23,4 @@ Every enum variant occurs once, each spelling is unique and documented, charge p
 
 ## Status
 
-Planned for IR-673; no executable binder exists yet.
+PR #9 adds executable Trace bindings for FR-368-AC-1 and AC-2. Run `quire matrix` for the current criterion-to-test mapping.
