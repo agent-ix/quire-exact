@@ -239,3 +239,115 @@ fn decimal_retain_denial_precedes_target_scale_expansion() {
     assert_eq!(meter.admission_count(), 3);
     assert_small(requested, 4096);
 }
+
+/// Trace: TC-909, FR-361-AC-7, FR-361-AC-8
+#[test]
+fn large_floor_quotient_completes_at_exact_operand_bit_limit_and_denies_below() {
+    let dividend = Integer::one().shifted_left(LARGE_BITS - 1);
+    let divisor = Integer::from(3_i64);
+    let reference = Integer::from_big(dividend.as_big() / divisor.as_big());
+    let mut configured = limits();
+    configured.integer_bits = LARGE_BITS;
+    let mut meter = Meter::new(configured);
+    assert_eq!(
+        divide(
+            DivisionProfile::Floor,
+            DivisionMember::Quotient,
+            &dividend,
+            &divisor,
+            &IntegerDomain::Mathematical,
+            &mut meter
+        )
+        .completed(),
+        Some(reference)
+    );
+    assert_eq!(meter.consumed(LimitKind::IntegerBits), LARGE_BITS);
+    configured.integer_bits = LARGE_BITS - 1;
+    let mut meter = Meter::new(configured);
+    let (outcome, bytes) = measure(|| {
+        divide(
+            DivisionProfile::Floor,
+            DivisionMember::Quotient,
+            &dividend,
+            &divisor,
+            &IntegerDomain::Mathematical,
+            &mut meter,
+        )
+    });
+    let Outcome::Incomplete(stop) = outcome else {
+        panic!("operand charge must stop")
+    };
+    assert_eq!(
+        (
+            stop.charge_point,
+            stop.limit_kind,
+            stop.limit,
+            stop.consumed,
+            stop.next_charge
+        ),
+        (
+            ChargePoint::IntegerDivisionOperands,
+            LimitKind::IntegerBits,
+            LARGE_BITS - 1,
+            0,
+            Integer::from(LARGE_BITS)
+        )
+    );
+    assert_eq!(meter.admission_count(), 0);
+    assert_small(bytes, (LARGE_BITS / 8) / 8);
+}
+
+/// Trace: TC-909, FR-361-AC-9
+#[test]
+fn huge_decimal_target_denies_retain_before_power_allocation() {
+    let (left, right) = (decimal(1, 0), decimal(1, 0));
+    let target = DecimalType::new(
+        Integer::from(0_i64),
+        Integer::from(1_i64),
+        0,
+        u64::from(DECIMAL_SHIFT),
+        RoundingMode::Exact,
+    )
+    .unwrap();
+    let mut configured = limits();
+    configured.decimal_digits = u64::from(DECIMAL_SHIFT);
+    let mut meter = Meter::new(configured);
+    let (outcome, bytes) = measure(|| {
+        evaluate_decimal(
+            DecimalOperation::Multiply(&left, &right),
+            &target,
+            &mut meter,
+        )
+    });
+    let Outcome::Incomplete(stop) = outcome else {
+        panic!("result retention must stop")
+    };
+    assert_eq!(
+        (
+            stop.charge_point,
+            stop.limit_kind,
+            stop.limit,
+            stop.consumed,
+            stop.next_charge
+        ),
+        (
+            ChargePoint::DecimalResultRetain,
+            LimitKind::DecimalDigits,
+            u64::from(DECIMAL_SHIFT),
+            2,
+            Integer::from(u64::from(DECIMAL_SHIFT) + 1)
+        )
+    );
+    assert_eq!(meter.admission_count(), 3);
+    assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+    #[cfg(feature = "test-support")]
+    assert_eq!(
+        meter.admitted_charges(),
+        [
+            ChargePoint::DecimalOperands,
+            ChargePoint::DecimalScaleExpansion,
+            ChargePoint::DecimalArithmetic
+        ]
+    );
+    assert_small(bytes, 4096);
+}
