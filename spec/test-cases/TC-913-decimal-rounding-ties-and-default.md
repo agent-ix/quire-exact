@@ -23,4 +23,4 @@ Results follow the six-mode tie table. Exact and the default refuse discarded no
 
 ## Status
 
-Planned for IR-673; executable evidence has not yet been added.
+PR #9 adds executable Trace bindings for FR-365-AC-1 and AC-2. Run `quire matrix` for the current criterion-to-test mapping.

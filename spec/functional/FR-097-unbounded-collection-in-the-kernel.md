@@ -29,7 +29,7 @@ A caller forms a collection of a million elements under no declared maximum. It 
 
 ## Status
 
-AC-7 implemented; AC-8 planned for IR-673.
+PR #9 adds executable Trace bindings for AC-8. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

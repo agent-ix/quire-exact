@@ -38,4 +38,4 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 
 ## Status
 
-Existing AC-1..AC-6 evidence predates IR-673; AC-8..AC-11 require new executable tests.
+PR #9 adds executable Trace bindings for FR-358-AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.

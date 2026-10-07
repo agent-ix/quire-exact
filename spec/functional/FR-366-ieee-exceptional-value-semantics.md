@@ -25,7 +25,7 @@ Arithmetic selects the leftmost NaN in operand order, preserves its sign and pay
 
 ## Status
 
-Planned for IR-673 owner evidence. Existing source behavior requires direct owner tests.
+PR #9 adds executable Trace bindings for AC-1 through AC-4. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

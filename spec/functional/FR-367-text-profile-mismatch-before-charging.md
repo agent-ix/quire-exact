@@ -22,7 +22,7 @@ The profile check precedes comparison and budget enforcement even when the text 
 
 ## Status
 
-Planned for IR-673 owner evidence. Existing source behavior requires direct owner tests.
+PR #9 adds executable Trace bindings for AC-1. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

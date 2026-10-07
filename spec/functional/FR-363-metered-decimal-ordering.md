@@ -42,7 +42,7 @@ Sizes are high-water maxima; work and result units are cumulative. The compariso
 
 ## Status
 
-AC-1 through AC-5 have tagged pre-IR-673 tests. AC-6 and AC-7 are planned and untagged.
+PR #9 adds executable Trace bindings for AC-6 and AC-7. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

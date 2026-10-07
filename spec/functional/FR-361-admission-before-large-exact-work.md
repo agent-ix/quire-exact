@@ -38,7 +38,7 @@ For an integer or rational arithmetic, division or modulus fixture with operand 
 
 ## Status
 
-AC-1 through AC-6 have tagged pre-IR-673 tests. AC-7 through AC-9 are planned and untagged.
+PR #9 adds executable Trace bindings for AC-7 through AC-9. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

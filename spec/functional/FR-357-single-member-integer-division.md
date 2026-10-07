@@ -38,7 +38,7 @@ A caller evaluates `10 div y` over `1..=10` at `y = 5`. The remainder 0 is outsi
 
 ## Status
 
-AC-1 through AC-6 are implemented and tagged. AC-7 is planned for IR-673 and untagged.
+PR #9 adds executable Trace bindings for AC-7. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 

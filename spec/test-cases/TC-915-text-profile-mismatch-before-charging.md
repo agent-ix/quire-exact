@@ -22,4 +22,4 @@ The result is DistinctTextProfiles before any charge or incomplete outcome; the 
 
 ## Status
 
-Planned for IR-673; executable evidence has not yet been added.
+PR #9 adds executable Trace bindings for FR-367-AC-1. Run `quire matrix` for the current criterion-to-test mapping.

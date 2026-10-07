@@ -31,4 +31,4 @@ Steps 1 through 6 return the value or refusal named in their criteria. Step 7 re
 
 ## Status
 
-AC-1 through AC-6 are implemented; AC-7 is planned and has no executable binder. The existing tests are in `src/division.rs`: `division_by_zero_is_undefined`, `only_the_exposed_member_must_be_in_domain`, `exposed_member_outside_domain_refuses_with_its_cause`, `profiles_differ_on_negative_operands`, `i64_min_divided_by_minus_one_is_exact`, and (under `test-support`) `division_charges_one_domain_occurrence_and_one_result_unit`.
+PR #9 adds executable Trace bindings for FR-357-AC-7. Run `quire matrix` for the current criterion-to-test mapping.

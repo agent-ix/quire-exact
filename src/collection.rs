@@ -117,7 +117,8 @@ impl CardinalityBound {
         self.maximum
     }
 
-    fn violation(self, count: u64) -> Option<BoundViolation> {
+    /// Reports whether `count` falls outside this inclusive bound without charging a meter.
+    pub fn violation(self, count: u64) -> Option<BoundViolation> {
         if count < self.minimum {
             Some(BoundViolation::BelowMinimum)
         } else if count > self.maximum {

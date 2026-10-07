@@ -30,4 +30,4 @@ Each case stops at its stated charge point and limit kind with the exact request
 
 ## Status
 
-AC-1 through AC-6 have pre-IR-673 tags. AC-7 through AC-9 are planned and untagged.
+PR #9 adds executable Trace bindings for FR-361-AC-7 through AC-9. Run `quire matrix` for the current criterion-to-test mapping.

@@ -34,4 +34,4 @@ Values, outcomes, point order, high-water sizes, work/result consumption, direct
 
 ## Status
 
-AC-1 through AC-9 have pre-IR-673 tags. AC-10 through AC-18 require direct new tests.
+FR-362-AC-1 through AC-9 retain earlier Trace bindings. PR #9 adds executable Trace bindings for FR-362-AC-11 through AC-18. FR-362-AC-10 remains planned and untagged for IR-667 because the public meter does not expose the normalize charge bit amount. Run `quire matrix` for the current criterion-to-test mapping.
