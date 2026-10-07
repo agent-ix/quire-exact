@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through FR-358-AC-7.
+Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-11. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
 
 ## Test Procedure
 
@@ -20,8 +20,9 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 4. Under `test-support`, admit 4096 charges with distinguishable points near the boundary, inspect the log and truncation flag, then admit one more and inspect the log, flag, admission count and work units.
 5. Without `test-support`, inspect production `Meter` for absence of an admitted-charge log and `Counters` for fixed-size, heap-free accounting state.
 
-6. Repeat the post-cap admissions with one retained result unit each; after truncation test ordinary work exhaustion, ordinary result exhaustion and an injected named denial followed by an admissible retry. Compare every counter and the diagnostic state around each stop.
-7. Check the public charge-point and limit-kind vocabularies exhaustively against their documented spellings and field order, including unknown charge-point rejection.
+6. For AC-8, repeat all 4097 admissions with one result unit each; read both cumulative counters and the bounded log.
+7. For AC-9 and AC-10, construct separate meters with work and result limits exactly 4097, admit 4097 matching charges, then attempt one more matching unit and compare every counter and diagnostic field to the snapshot.
+8. For AC-11, after 4097 admissions inject an occurrence-1 named denial, compare state before/after its refusal, then retry with ordinary limits sufficient.
 
 ## Expected Results
 
@@ -31,9 +32,10 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 4. The log holds the first 4096 admissions in order and remains length 4096. The flag changes from false to true only after admission 4097, while the count and work units reach 4097.
 5. Production `Meter` contains no admitted-charge log; its `Counters` accounting state remains fixed-size and heap-free.
 
-6. Results and work remain exact after the cap; limits and one-shot denial still enforce admission atomically, and the retry changes accounting without growing the log.
-7. Every variant is represented once, spellings are unique and documented, charge points round-trip, unknown points refuse, and limit kinds follow field order.
+6. Both cumulative counters and admissions reach 4097 while the ordered diagnostic prefix stays at 4096.
+7. Each ordinary shortage reports its own limit kind and leaves all admitted state unchanged.
+8. The injected refusal is atomic and spent; retry updates exact accounting once without extending the prefix.
 
 ## Status
 
-Planned.
+Existing AC-1..AC-6 evidence predates IR-673; AC-8..AC-11 require new executable tests.

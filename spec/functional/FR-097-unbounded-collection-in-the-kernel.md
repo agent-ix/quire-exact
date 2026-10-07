@@ -1,10 +1,10 @@
 ---
 id: FR-097
-title: "An unbounded collection never refuses for cardinality"
+title: "Collection cardinality bounds and unbounded construction"
 type: FR
 relationships: []
 ---
-# FR-097: An unbounded collection never refuses for cardinality
+# FR-097: Collection cardinality bounds and unbounded construction
 
 ## Description
 
