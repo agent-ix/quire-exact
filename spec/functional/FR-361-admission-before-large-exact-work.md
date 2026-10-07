@@ -32,10 +32,13 @@ For an integer or rational arithmetic, division or modulus fixture with operand 
 | FR-361-AC-4 | For valid decimal operands requiring a `2^20`-place scale expansion, set `scale_expansion` to one below the planned shift and leave other limits sufficient. The outcome is `Incomplete` at `decimal.scale-expansion` with `limit_kind = ScaleExpansion` and `next_charge` equal to the exact shift; the observed peak request is below 4,096 bytes. | Test |
 | FR-361-AC-5 | For decimal addition of small coefficients at scales 0 and `2^20`, set `integer_bits` to the admitted scale-expansion bit amount, one below the planned arithmetic bit amount, with other limits sufficient. The outcome is `Incomplete` at `decimal.arithmetic` with `limit_kind = IntegerBits` and `next_charge` equal to that planned bit amount; the observed peak request is below 4,096 bytes. | Test |
 | FR-361-AC-6 | For a decimal value retained at a target scale requiring a `2^20`-place power of ten, set `decimal_digits` one below the exact result-retain amount while permitting preceding charges. Evaluation returns `Incomplete` at `decimal.result-retain` with `limit_kind = DecimalDigits` and that exact `next_charge`; the observed peak request is below 4,096 bytes. | Test |
+| FR-361-AC-7 | On a fresh meter, floor division of a positive at-least-65,536-bit dividend by 3, exposing the quotient in the mathematical domain, completes to the independently calculated floor quotient with `integer_bits` limit equal to the dividend magnitude bit length. Final consumed `integer_bits` equals that exact bit length. | Test |
+| FR-361-AC-8 | For that floor quotient fixture, lower the `integer_bits` limit by one. The call returns `Incomplete` at `integer-division.operands` with `limit_kind = IntegerBits`, `consumed = 0` and `next_charge` equal to the dividend bit length; it admits no point and the measured peak allocation request stays below one eighth of the largest operand byte length. | Test |
+| FR-361-AC-9 | Multiply retained decimals `(1, 0)` and `(1, 0)` into an Exact target with coefficient bounds 0 through 1 and scales 0 through `2^20`. At `decimal_digits = 2^20`, the `decimal.result-retain` charge returns `Incomplete` with `limit_kind = DecimalDigits`, `limit = 2^20`, `consumed = 2`, `next_charge = 2^20 + 1`; only the three preceding decimal points are admitted, no result unit is consumed, and the peak request is below 4096 bytes. | Test |
 
 ## Status
 
-Planned.
+AC-1 through AC-6 have tagged pre-IR-673 tests. AC-7 through AC-9 are planned and untagged.
 
 ## Dependencies
 

@@ -12,18 +12,21 @@ relationships:
 
 Verify the kernel's optional bound end to end.
 
-Scope: FR-097-AC-7.
+Scope: FR-097-AC-7 and FR-097-AC-8.
 
 ## Test Procedure
 
 1. Form an unbounded `Sequence<Integer>` of 1000 elements, then the same elements under `[0, 1]`, then under a meter with 999 value occurrences.
 2. Compare the types `Sequence<Int[0,9]>` unbounded and at `[0, u64::MAX]`.
 
+3. From an integration test using only `quire_exact` exports, call the count query at the below/minimum/interior/maximum/above and extreme fixtures in AC-8, then call it repeatedly to check the same answer. For `[2, 4]` only, compare bounded collection admission at counts 1 through 5 using a sufficient public meter; extreme count queries do not require forming collections of those sizes.
+
 ## Expected Results
 
 - Step 1: completes; `AboveMaximum`; `Incomplete` at `collection.bound`.
 - Step 2: the types are different.
+- Step 3: the public query returns precisely the typed inclusive-bound decisions in AC-8 without constructing a collection or charging a meter. Ordinary collection admission makes the same decision.
 
 ## Status
 
-Implemented. The tests are in `src/collection.rs`, tagged `#[trace("TC-441", "FR-097-AC-7")]`.
+AC-8 planned for IR-673. AC-7 implemented. The existing tests are in `src/collection.rs`, tagged `#[trace("TC-441", "FR-097-AC-7")]`.
