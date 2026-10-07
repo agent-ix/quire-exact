@@ -766,8 +766,143 @@ impl Meter {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+
+    fn assert_unchanged(before: &Meter, after: &Meter) {
+        assert_eq!(after.admission_count(), before.admission_count());
+        for kind in LimitKind::ALL {
+            assert_eq!(after.consumed(kind), before.consumed(kind), "{kind:?}");
+        }
+        #[cfg(feature = "test-support")]
+        assert_eq!(after.admitted_charges(), before.admitted_charges());
+    }
+
+    /// Trace: FR-359-AC-1
+    #[test]
+    fn cumulative_work_reaches_max_then_refuses_atomically() {
+        let mut meter = Meter::new(unlimited());
+        let point = ChargePoint::FunctionCall;
+        meter
+            .charge(Charge::new(point).work(Integer::from(u64::MAX - 1)))
+            .unwrap();
+        meter.charge(Charge::new(point)).unwrap();
+        assert_eq!(meter.consumed(LimitKind::WorkUnits), u64::MAX);
+        let before = meter.clone();
+        let denial = meter.charge(Charge::new(point)).unwrap_err();
+        assert_eq!(
+            (
+                denial.limit_kind,
+                denial.limit,
+                denial.consumed,
+                denial.next_charge,
+                denial.charge_point
+            ),
+            (
+                LimitKind::WorkUnits,
+                u64::MAX,
+                u64::MAX,
+                Integer::one(),
+                point
+            )
+        );
+        assert_unchanged(&before, &meter);
+    }
+
+    /// Trace: FR-359-AC-2
+    #[test]
+    fn cumulative_results_reach_max_then_refuse_atomically() {
+        let mut meter = Meter::new(unlimited());
+        let point = ChargePoint::FunctionCall;
+        meter.charge(Charge::new(point).results(u64::MAX)).unwrap();
+        let before = meter.clone();
+        let denial = meter.charge(Charge::new(point).results(1)).unwrap_err();
+        assert_eq!(
+            (
+                denial.limit_kind,
+                denial.limit,
+                denial.consumed,
+                denial.next_charge,
+                denial.charge_point
+            ),
+            (
+                LimitKind::ResultUnits,
+                u64::MAX,
+                u64::MAX,
+                Integer::one(),
+                point
+            )
+        );
+        assert_eq!(meter.consumed(LimitKind::WorkUnits), 1);
+        assert_unchanged(&before, &meter);
+    }
+
+    /// Trace: FR-359-AC-3, FR-359-AC-4
+    #[test]
+    fn exact_cumulative_amount_above_max_refuses_without_changes() {
+        let excess = Integer::from(u64::MAX).add(&Integer::one());
+        let point = ChargePoint::FunctionCall;
+        for (charge, kind) in [
+            (
+                Charge::new(point).work(excess.clone()),
+                LimitKind::WorkUnits,
+            ),
+            (
+                Charge::new(point).exact_results(excess.clone()),
+                LimitKind::ResultUnits,
+            ),
+        ] {
+            let mut meter = Meter::new(unlimited());
+            let before = meter.clone();
+            let denial = meter.charge(charge).unwrap_err();
+            assert_eq!(
+                (
+                    denial.limit_kind,
+                    denial.limit,
+                    denial.consumed,
+                    denial.next_charge,
+                    denial.charge_point
+                ),
+                (kind, u64::MAX, 0, excess.clone(), point)
+            );
+            assert_unchanged(&before, &meter);
+        }
+    }
+
+    /// Trace: FR-359-AC-5
+    #[test]
+    fn result_refusal_preserves_prior_size_high_water() {
+        let mut limits = unlimited();
+        limits.result_units = 1;
+        let mut meter = Meter::new(limits);
+        let point = ChargePoint::FunctionCall;
+        meter
+            .charge(
+                Charge::new(point)
+                    .size(LimitKind::IntegerBits, 8)
+                    .results(1),
+            )
+            .unwrap();
+        let before = meter.clone();
+        let denial = meter
+            .charge(
+                Charge::new(point)
+                    .size(LimitKind::IntegerBits, 16)
+                    .results(1),
+            )
+            .unwrap_err();
+        assert_eq!(
+            (
+                denial.limit_kind,
+                denial.limit,
+                denial.consumed,
+                denial.next_charge,
+                denial.charge_point
+            ),
+            (LimitKind::ResultUnits, 1, 1, Integer::one(), point)
+        );
+        assert_eq!(meter.consumed(LimitKind::IntegerBits), 8);
+        assert_unchanged(&before, &meter);
+    }
 
     fn tight_limits() -> ScalarLimits {
         ScalarLimits {
