@@ -1,18 +1,21 @@
 //! `ValueType`'s structural traits, walked without native recursion.
 //!
 //! A `ValueType` nests through exactly two variants, `Option` and
-//! `Collection`, and each holds one nested type, so a type is a chain.
-//! `Clone`, `PartialEq`, `Hash` and `Drop` follow the chain with a cursor
-//! and need no stack at all: each step handles one link's own data
-//! (`ValueType::shallow_clone`, `ValueType::shallow_eq`,
-//! `ValueType::shallow_hash`) and moves to `ValueType::child`. `Debug`
-//! must close each link after its child, so it runs on `Value`'s `Debug`
-//! worklist, which holds a constant number of steps per link.
+//! `Collection`, and each holds one nested type behind an `Arc`, so a type
+//! is a chain whose links are shared: `Clone` is one `Arc` increment and a
+//! value of any depth keeps one node per level, not one copy of the chain
+//! below it. `PartialEq` and `Hash` follow the chain with a cursor and need
+//! no stack at all: each step handles one link's own data
+//! (`ValueType::shallow_eq`, `ValueType::shallow_hash`) and moves to
+//! `ValueType::child`. `Drop` detaches the links this handle owns one at a
+//! time. `Debug` must close each link after its child, so it runs on
+//! `Value`'s `Debug` worklist, which holds a constant number of steps per
+//! link.
 //!
 //! The derived traits of `CollectionType` stay derived: each calls these
 //! impls once for its element, and these impls never call back into them.
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{sync::Arc, vec::Vec};
 use core::fmt;
 use core::hash::{Hash, Hasher};
 
@@ -39,11 +42,16 @@ impl ValueType {
         }
     }
 
-    /// The slot of the one type nested directly in this type, if any.
-    fn child_mut(&mut self) -> Option<&mut ValueType> {
+    /// The one type nested directly in this type, taken out if this handle
+    /// is the only owner of the link that holds it, leaving the leaf
+    /// `Boolean` behind. A link another handle still shares keeps its
+    /// nested type: the last handle to drop it detaches it in turn.
+    fn take_unshared_child(&mut self) -> Option<ValueType> {
         match self {
-            Self::Option(payload) => Some(payload),
-            Self::Collection(collection) => Some(collection.element_mut()),
+            Self::Option(payload) => Arc::get_mut(payload).map(take_type),
+            Self::Collection(collection) => {
+                Arc::get_mut(collection).map(|owned| take_type(owned.element_mut()))
+            }
             Self::Boolean
             | Self::Integer
             | Self::Int(_)
@@ -56,31 +64,6 @@ impl ValueType {
             | Self::Composite(_)
             | Self::Reference(_)
             | Self::Population(_) => None,
-        }
-    }
-
-    /// A copy of this link alone: its nested type, if it has one, is the
-    /// placeholder `Boolean` for [`Clone::clone`] to overwrite.
-    fn shallow_clone(&self) -> Self {
-        match self {
-            Self::Boolean => Self::Boolean,
-            Self::Integer => Self::Integer,
-            Self::Int(interval) => Self::Int(interval.clone()),
-            Self::Rational(domain) => Self::Rational(domain.clone()),
-            Self::Decimal(declared) => Self::Decimal(declared.clone()),
-            Self::Float(declared) => Self::Float(*declared),
-            Self::Quantity(unit) => Self::Quantity(*unit),
-            Self::Text(declared) => Self::Text(*declared),
-            Self::Enum(shape) => Self::Enum(shape.clone()),
-            Self::Option(_) => Self::Option(Box::new(Self::Boolean)),
-            Self::Composite(declaration) => Self::Composite(*declaration),
-            Self::Collection(collection) => Self::collection(CollectionType::new(
-                collection.kind(),
-                Self::Boolean,
-                collection.bound(),
-            )),
-            Self::Reference(object_type) => Self::Reference(*object_type),
-            Self::Population(maximum) => Self::Population(*maximum),
         }
     }
 
@@ -149,18 +132,25 @@ impl ValueType {
 }
 
 impl Clone for ValueType {
-    /// Copies the chain top-down: each link is copied with a placeholder
-    /// child, which the next step overwrites in place.
+    /// Copies this link: a nested type is shared, not copied, so the clone
+    /// costs one `Arc` increment however deep the chain below it runs.
     fn clone(&self) -> Self {
-        let mut root = self.shallow_clone();
-        let mut source = self;
-        let mut target = &mut root;
-        while let (Some(next_source), Some(slot)) = (source.child(), target.child_mut()) {
-            *slot = next_source.shallow_clone();
-            source = next_source;
-            target = slot;
+        match self {
+            Self::Boolean => Self::Boolean,
+            Self::Integer => Self::Integer,
+            Self::Int(interval) => Self::Int(interval.clone()),
+            Self::Rational(domain) => Self::Rational(domain.clone()),
+            Self::Decimal(declared) => Self::Decimal(declared.clone()),
+            Self::Float(declared) => Self::Float(*declared),
+            Self::Quantity(unit) => Self::Quantity(*unit),
+            Self::Text(declared) => Self::Text(*declared),
+            Self::Enum(shape) => Self::Enum(shape.clone()),
+            Self::Option(payload) => Self::Option(Arc::clone(payload)),
+            Self::Composite(declaration) => Self::Composite(*declaration),
+            Self::Collection(collection) => Self::Collection(Arc::clone(collection)),
+            Self::Reference(object_type) => Self::Reference(*object_type),
+            Self::Population(maximum) => Self::Population(*maximum),
         }
-        root
     }
 }
 
@@ -195,11 +185,12 @@ impl Hash for ValueType {
 
 impl Drop for ValueType {
     /// Detaches the chain one link at a time, so each link drops with only
-    /// a leaf below it and the stack stays a fixed few frames deep.
+    /// a leaf below it and the stack stays a fixed few frames deep. A link
+    /// shared with another handle is only released here.
     fn drop(&mut self) {
-        let mut next = self.child_mut().map(take_type);
+        let mut next = self.take_unshared_child();
         while let Some(mut link) = next {
-            next = link.child_mut().map(take_type);
+            next = link.take_unshared_child();
         }
     }
 }
