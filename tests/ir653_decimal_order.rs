@@ -125,10 +125,20 @@ fn huge_retained_scale_refuses_analytically_before_comparison() {
     let mut configured = limits();
     configured.decimal_digits = 64;
     let mut meter = Meter::new(configured);
-    let denial = match compare(OrderingOperator::Less, &left, &right, &mut meter) {
+    let mut outcome = None;
+    let allocations = allocation_counter::measure(|| {
+        outcome = Some(compare(OrderingOperator::Less, &left, &right, &mut meter));
+    });
+    let denial = match outcome.expect("the measured call returned") {
         Outcome::Incomplete(record) => record,
         _ => panic!("large alignment must refuse at arithmetic"),
     };
+    // Total requested bytes bound every individual request in this thread.
+    assert!(
+        allocations.bytes_total < 4096,
+        "{} requested bytes",
+        allocations.bytes_total
+    );
     assert_eq!(
         (
             denial.charge_point,

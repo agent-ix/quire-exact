@@ -231,6 +231,27 @@ fn integer_and_rational_ordering_match_checked_oracle() {
             }
         }
     }
+
+    // Equal values must reach the ordering kernel: `<=` and `>=` differ
+    // from their strict counterparts exactly on these pairs.
+    let equal_integers = (Integer::from(7_i64), Integer::from(7_i64));
+    let equal_rationals = (rational(1, 2), rational(2, 4));
+    for operands in [
+        OrderedOperands::Integers(&equal_integers.0, &equal_integers.1),
+        OrderedOperands::Rationals(&equal_rationals.0, &equal_rationals.1),
+    ] {
+        for (operator, expected) in [
+            (OrderingOperator::Less, false),
+            (OrderingOperator::LessOrEqual, true),
+            (OrderingOperator::Greater, false),
+            (OrderingOperator::GreaterOrEqual, true),
+        ] {
+            assert_eq!(
+                order_numbers(operator, operands, &mut meter()).completed(),
+                Some(expected)
+            );
+        }
+    }
 }
 
 #[cfg(feature = "test-support")]
@@ -256,33 +277,39 @@ fn assert_charges(meter: &Meter, points: &[ChargePoint], bits: u64, occurrences:
 #[cfg(feature = "test-support")]
 #[test]
 fn scalar_families_charge_order_and_independent_size_maxima() {
-    let (a, b) = (Integer::from(5_i64), Integer::from(7_i64));
-    let ints = [
-        (IntegerArithmetic::Add(&a, &b), bit_len(7) + 1),
-        (IntegerArithmetic::Subtract(&a, &b), bit_len(7) + 1),
-        (IntegerArithmetic::Multiply(&a, &b), bit_len(5) + bit_len(7)),
-        (IntegerArithmetic::Negate(&a), bit_len(5)),
-    ];
-    for (operation, expected_bits) in ints {
-        let mut meter = meter();
-        assert!(matches!(
-            evaluate_integer_arithmetic(operation, None, &mut meter),
-            Outcome::Completed(_)
-        ));
-        assert_charges(
-            &meter,
-            &[
-                ChargePoint::IntegerArithmeticOperands,
-                ChargePoint::IntegerArithmeticArithmetic,
-                ChargePoint::IntegerArithmeticResultRetain,
-            ],
-            expected_bits,
-            if matches!(operation, IntegerArithmetic::Negate(_)) {
-                1
-            } else {
-                2
-            },
-        );
+    for (left, right) in [(5_i64, 128_i64), (128, 5)] {
+        let (a, b) = (Integer::from(left), Integer::from(right));
+        let operand_max = bit_len(i128::from(left)).max(bit_len(i128::from(right)));
+        let ints = [
+            (IntegerArithmetic::Add(&a, &b), operand_max + 1),
+            (IntegerArithmetic::Subtract(&a, &b), operand_max + 1),
+            (
+                IntegerArithmetic::Multiply(&a, &b),
+                bit_len(i128::from(left)) + bit_len(i128::from(right)),
+            ),
+            (IntegerArithmetic::Negate(&a), bit_len(i128::from(left))),
+        ];
+        for (operation, expected_bits) in ints {
+            let mut meter = meter();
+            assert!(matches!(
+                evaluate_integer_arithmetic(operation, None, &mut meter),
+                Outcome::Completed(_)
+            ));
+            assert_charges(
+                &meter,
+                &[
+                    ChargePoint::IntegerArithmeticOperands,
+                    ChargePoint::IntegerArithmeticArithmetic,
+                    ChargePoint::IntegerArithmeticResultRetain,
+                ],
+                expected_bits,
+                if matches!(operation, IntegerArithmetic::Negate(_)) {
+                    1
+                } else {
+                    2
+                },
+            );
+        }
     }
     let (left, right) = (rational(1, 2), rational(2, 3));
     // The final columns are the independently formed, unreduced parts.
@@ -318,8 +345,10 @@ fn scalar_families_charge_order_and_independent_size_maxima() {
             },
         );
     }
+    let (a, b) = (Integer::from(5_i64), Integer::from(128_i64));
     for (operands, bits) in [
-        (OrderedOperands::Integers(&a, &b), 3),
+        (OrderedOperands::Integers(&a, &b), 8),
+        (OrderedOperands::Integers(&b, &a), 8),
         (OrderedOperands::Rationals(&left, &right), 4),
     ] {
         let mut meter = meter();
@@ -341,6 +370,74 @@ fn scalar_families_charge_order_and_independent_size_maxima() {
     let mut meter = meter();
     assert_eq!(retain_boolean(true, &mut meter), Ok(true));
     assert_charges(&meter, &[ChargePoint::BooleanResultRetain], 0, 0);
+}
+
+/// Trace: FR-362-AC-6
+#[test]
+fn operand_size_refuses_at_its_own_point_with_asymmetric_widths() {
+    let (small, large) = (Integer::from(5_i64), Integer::from(128_i64));
+    let (small_fraction, large_fraction) = (rational(1, 2), rational(128, 3));
+    for (left, right) in [(&small, &large), (&large, &small)] {
+        let mut configured = limits();
+        configured.integer_bits = 7;
+        let mut meter = Meter::new(configured);
+        assert_operand_refusal(
+            evaluate_integer_arithmetic(IntegerArithmetic::Add(left, right), None, &mut meter),
+            &meter,
+            ChargePoint::IntegerArithmeticOperands,
+        );
+
+        let mut meter = Meter::new(configured);
+        assert_operand_refusal(
+            order_numbers(
+                OrderingOperator::Less,
+                OrderedOperands::Integers(left, right),
+                &mut meter,
+            ),
+            &meter,
+            ChargePoint::OrderingOperands,
+        );
+    }
+    for (left, right) in [
+        (&small_fraction, &large_fraction),
+        (&large_fraction, &small_fraction),
+    ] {
+        let mut configured = limits();
+        configured.integer_bits = 7;
+        let mut meter = Meter::new(configured);
+        assert_operand_refusal(
+            evaluate_rational_arithmetic(RationalArithmetic::Add(left, right), None, &mut meter),
+            &meter,
+            ChargePoint::RationalArithmeticOperands,
+        );
+
+        let mut meter = Meter::new(configured);
+        assert_operand_refusal(
+            order_numbers(
+                OrderingOperator::Less,
+                OrderedOperands::Rationals(left, right),
+                &mut meter,
+            ),
+            &meter,
+            ChargePoint::OrderingOperands,
+        );
+    }
+}
+
+fn assert_operand_refusal<T>(outcome: Outcome<T>, meter: &Meter, point: ChargePoint) {
+    let denial = outcome.map_incomplete();
+    assert_eq!(denial.charge_point, point);
+    assert_eq!(denial.limit_kind, LimitKind::IntegerBits);
+    assert_eq!(
+        (denial.limit, denial.consumed, denial.next_charge),
+        (7, 0, Integer::from(8_i64))
+    );
+    assert_eq!(meter.admission_count(), 0);
+    for kind in LimitKind::ALL {
+        assert_eq!(meter.consumed(kind), 0, "{kind:?}");
+    }
+    #[cfg(feature = "test-support")]
+    assert!(meter.admitted_charges().is_empty());
 }
 
 /// Trace: FR-362-AC-7
@@ -372,82 +469,65 @@ fn three_direct_atoms_consume_seven_work_and_three_results() {
 fn each_scalar_charge_point_can_stop_before_result() {
     let (a, b) = (Integer::from(5_i64), Integer::from(7_i64));
     let (left, right) = (rational(1, 2), rational(2, 3));
-    for (points, family) in [
-        (
-            &[
-                ChargePoint::IntegerArithmeticOperands,
-                ChargePoint::IntegerArithmeticArithmetic,
-                ChargePoint::IntegerArithmeticResultRetain,
-            ][..],
-            0,
-        ),
-        (
-            &[
-                ChargePoint::RationalArithmeticOperands,
-                ChargePoint::RationalArithmeticArithmetic,
-                ChargePoint::RationalArithmeticNormalize,
-                ChargePoint::RationalArithmeticResultRetain,
-            ][..],
-            1,
-        ),
-        (
-            &[
-                ChargePoint::OrderingOperands,
-                ChargePoint::OrderingArithmetic,
-                ChargePoint::OrderingResultRetain,
-            ][..],
-            2,
-        ),
-        (
-            &[
-                ChargePoint::OrderingOperands,
-                ChargePoint::OrderingArithmetic,
-                ChargePoint::OrderingResultRetain,
-            ][..],
-            3,
-        ),
-        (&[ChargePoint::BooleanResultRetain][..], 4),
-    ] {
-        for (index, &point) in points.iter().enumerate() {
-            let mut meter = meter().with_injected_denial(InjectedDenial {
-                point,
-                occurrence: NonZeroU64::new(1).unwrap(),
-            });
-            let denial = match family {
-                0 => evaluate_integer_arithmetic(IntegerArithmetic::Add(&a, &b), None, &mut meter)
-                    .map_incomplete(),
-                1 => evaluate_rational_arithmetic(
-                    RationalArithmetic::Add(&left, &right),
-                    None,
-                    &mut meter,
-                )
-                .map_incomplete(),
-                2 => order_numbers(
-                    OrderingOperator::Less,
-                    OrderedOperands::Integers(&a, &b),
-                    &mut meter,
-                )
-                .map_incomplete(),
-                3 => order_numbers(
-                    OrderingOperator::Less,
-                    OrderedOperands::Rationals(&left, &right),
-                    &mut meter,
-                )
-                .map_incomplete(),
-                4 => evaluate_boolean(BooleanConnective::Not(false), &mut meter).map_incomplete(),
-                _ => unreachable!(),
-            };
-            assert_eq!(denial.charge_point, point);
-            assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
-            assert_eq!(
-                (denial.limit, denial.consumed, denial.next_charge),
-                (index as u64, index as u64, Integer::one())
-            );
-            assert_eq!(meter.admission_count(), index as u64);
-            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
-            #[cfg(feature = "test-support")]
-            assert_eq!(meter.admitted_charges(), &points[..index]);
-        }
+    assert_denials(
+        &[
+            ChargePoint::IntegerArithmeticOperands,
+            ChargePoint::IntegerArithmeticArithmetic,
+            ChargePoint::IntegerArithmeticResultRetain,
+        ],
+        |meter| evaluate_integer_arithmetic(IntegerArithmetic::Add(&a, &b), None, meter),
+    );
+    assert_denials(
+        &[
+            ChargePoint::RationalArithmeticOperands,
+            ChargePoint::RationalArithmeticArithmetic,
+            ChargePoint::RationalArithmeticNormalize,
+            ChargePoint::RationalArithmeticResultRetain,
+        ],
+        |meter| evaluate_rational_arithmetic(RationalArithmetic::Add(&left, &right), None, meter),
+    );
+    let ordering_points = &[
+        ChargePoint::OrderingOperands,
+        ChargePoint::OrderingArithmetic,
+        ChargePoint::OrderingResultRetain,
+    ];
+    assert_denials(ordering_points, |meter| {
+        order_numbers(
+            OrderingOperator::Less,
+            OrderedOperands::Integers(&a, &b),
+            meter,
+        )
+    });
+    assert_denials(ordering_points, |meter| {
+        order_numbers(
+            OrderingOperator::Less,
+            OrderedOperands::Rationals(&left, &right),
+            meter,
+        )
+    });
+    assert_denials(&[ChargePoint::BooleanResultRetain], |meter| {
+        evaluate_boolean(BooleanConnective::Not(false), meter)
+    });
+}
+
+fn assert_denials<T>(points: &[ChargePoint], mut call: impl FnMut(&mut Meter) -> Outcome<T>) {
+    for (index, &point) in points.iter().enumerate() {
+        let mut meter = meter().with_injected_denial(InjectedDenial {
+            point,
+            occurrence: NonZeroU64::new(1).unwrap(),
+        });
+        let denial = call(&mut meter).map_incomplete();
+        let admitted = u64::try_from(index).unwrap();
+        assert_eq!(denial.charge_point, point);
+        assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(
+            (denial.limit, denial.consumed, denial.next_charge),
+            (admitted, admitted, Integer::one())
+        );
+        assert_eq!(meter.admission_count(), admitted);
+        assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+        #[cfg(feature = "test-support")]
+        assert_eq!(meter.admitted_charges(), &points[..index]);
     }
 }
 
