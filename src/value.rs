@@ -166,6 +166,11 @@ impl EnumMember {
 /// plain `{:#?}`, so the caller's format flags reach compact-mode leaves
 /// only.
 ///
+/// A nested type is shared behind an `Arc`, so cloning a type, or declaring
+/// a value's payload type from a type it already holds, costs one reference
+/// count however deep the type runs: a value `N` levels deep holds `O(N)`
+/// type nodes, not `O(N^2)`.
+///
 /// quire:canonical
 #[derive(Eq)]
 pub enum ValueType {
@@ -188,11 +193,11 @@ pub enum ValueType {
     /// An `Enum` type admitting exactly this inline variant set.
     Enum(EnumShape),
     /// `Option<T>`: `none` or a present `T`.
-    Option(Box<ValueType>),
+    Option(Arc<ValueType>),
     /// The record or tuple declaration with this node key.
     Composite(NodeKey),
     /// A collection type `K<T>[min, max]`, or the unbounded `K<T>`.
-    Collection(Box<CollectionType>),
+    Collection(Arc<CollectionType>),
     /// `Reference<T>` to an object of the object type with this effective
     /// identity.
     Reference(EffectiveId),
@@ -205,12 +210,12 @@ pub enum ValueType {
 impl ValueType {
     /// `K<element>[bound]`.
     pub fn collection(collection_type: CollectionType) -> Self {
-        Self::Collection(Box::new(collection_type))
+        Self::Collection(Arc::new(collection_type))
     }
 
     /// `Option<payload>`.
     pub fn option(payload: Self) -> Self {
-        Self::Option(Box::new(payload))
+        Self::Option(Arc::new(payload))
     }
 
     /// Whether `value` is a member of this declared type. Composite, option
@@ -2086,6 +2091,113 @@ mod tests {
                 crate::key::compare_keys(&left, &right),
                 Some(core::cmp::Ordering::Equal)
             );
+        });
+    }
+
+    /// A well-typed value `levels` deep whose declared type is as deep as
+    /// the value: levels alternate between `Option` and a `Sequence`, and
+    /// each level declares its payload type by cloning the type of the level
+    /// below it, as an admitting caller does.
+    fn deep_typed_value(levels: usize) -> (ValueType, Value) {
+        let mut value_type = ValueType::Integer;
+        let mut value = Value::Integer(Integer::one());
+        for level in 0..levels {
+            if level % 2 == 0 {
+                value = OptionValue::from_admitted(value_type.clone(), Some(value));
+                value_type = ValueType::option(value_type);
+            } else {
+                let sequence_type = CollectionType::new(
+                    crate::collection::CollectionKind::Sequence,
+                    value_type,
+                    None,
+                );
+                value = crate::collection::from_admitted(sequence_type.clone(), vec![value]);
+                value_type = ValueType::collection(sequence_type);
+            }
+        }
+        (value_type, value)
+    }
+
+    /// The number of distinct type nodes (`Option` and `Collection` links)
+    /// the declared types inside `value` own, counted by allocation
+    /// identity. A node already counted ends its chain's walk, so the count
+    /// is linear in what is allocated.
+    fn type_nodes(value: &Value) -> usize {
+        let mut seen = std::collections::HashSet::new();
+        let mut count_chain = |start: &ValueType| {
+            let mut link = Some(start);
+            while let Some(current) = link {
+                link = match current {
+                    ValueType::Option(payload) => seen
+                        .insert(Arc::as_ptr(payload) as usize)
+                        .then_some(&**payload),
+                    ValueType::Collection(collection) => seen
+                        .insert(Arc::as_ptr(collection) as usize)
+                        .then(|| collection.element()),
+                    _ => None,
+                };
+            }
+        };
+        let mut level = Some(value);
+        while let Some(current) = level {
+            level = match current {
+                Value::Option(option) => {
+                    count_chain(option.payload_type());
+                    option.payload()
+                }
+                Value::Collection(collection) => {
+                    count_chain(collection.collection_type().element());
+                    collection.elements().first()
+                }
+                _ => None,
+            };
+        }
+        seen.len()
+    }
+
+    /// A value `2N` levels deep, declared with types `2N` deep, holds about
+    /// twice the type nodes of a value `N` deep: payload types are shared,
+    /// not copied per level, so memory is linear in the value.
+    #[trace("TC-735", "FR-262-AC-3")]
+    #[test]
+    fn type_nodes_grow_linearly_with_value_depth() {
+        let small = type_nodes(&deep_typed_value(1_000).1);
+        let large = type_nodes(&deep_typed_value(2_000).1);
+        assert!(small >= 990, "{small}");
+        assert!(large <= 2 * small + 2, "{large} nodes at 2N, {small} at N");
+    }
+
+    /// FR-262-AC-3: a recursive value `DEEP` levels deep, declared with
+    /// types `DEEP` deep, is built, admitted, cloned, compared, hashed,
+    /// formatted and dropped on a 512 KiB stack.
+    #[trace("TC-735", "FR-262-AC-3")]
+    #[test]
+    fn a_deep_value_with_deep_types_is_admitted_in_linear_memory() {
+        on_small_stack(|| {
+            use core::hash::{Hash, Hasher};
+            let (value_type, value) = deep_typed_value(DEEP);
+            assert!(value_type.admits(&value));
+            assert!(type_nodes(&value) <= 2 * DEEP);
+
+            let clone = value_type.clone();
+            assert!(clone == value_type);
+            let mut left = std::collections::hash_map::DefaultHasher::new();
+            let mut right = std::collections::hash_map::DefaultHasher::new();
+            value_type.hash(&mut left);
+            clone.hash(&mut right);
+            assert_eq!(left.finish(), right.finish());
+
+            let mut sink = BracketCount::default();
+            core::fmt::write(&mut sink, format_args!("{value_type:?}")).expect("format");
+            assert!(sink.open >= DEEP);
+            assert_eq!(sink.open, sink.close);
+
+            // `value` holds a share of every level, `value_type` and `clone`
+            // share the whole chain: the last holder to drop must detach the
+            // rest of it, so this order exercises a shared-in-the-middle drop.
+            drop(value);
+            drop(value_type);
+            drop(clone);
         });
     }
 }
