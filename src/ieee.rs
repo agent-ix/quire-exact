@@ -1908,7 +1908,14 @@ mod rational_target_ieee {
                 expected.push(ChargePoint::FunctionCall);
             }
             expected.extend_from_slice(&POINTS[..admitted]);
-            assert_eq!(meter.admitted_charges(), expected);
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<alloc::vec::Vec<_>>(),
+                expected
+            );
             assert!(!meter.charge_log_truncated());
         }
     }
@@ -2137,7 +2144,14 @@ mod rational_target_ieee {
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
             assert_eq!(meter.admission_count(), 3);
             #[cfg(feature = "test-support")]
-            assert_eq!(meter.admitted_charges(), POINTS);
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<alloc::vec::Vec<_>>(),
+                POINTS
+            );
         }
     }
 

@@ -108,7 +108,11 @@ fn decimal_ordering_charges_retained_zero_and_equal_value_representations() {
         assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
         #[cfg(feature = "test-support")]
         assert_eq!(
-            meter.admitted_charges(),
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
             [
                 ChargePoint::OrderingOperands,
                 ChargePoint::OrderingArithmetic,
@@ -159,7 +163,14 @@ fn huge_retained_scale_refuses_analytically_before_comparison() {
     assert_eq!(meter.consumed(LimitKind::WorkUnits), 1);
     assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
     #[cfg(feature = "test-support")]
-    assert_eq!(meter.admitted_charges(), [ChargePoint::OrderingOperands]);
+    assert_eq!(
+        meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
+        [ChargePoint::OrderingOperands]
+    );
 }
 
 /// Trace: FR-363-AC-5
@@ -200,6 +211,13 @@ fn each_decimal_ordering_point_denies_its_suffix() {
         assert_eq!(meter.consumed(LimitKind::WorkUnits), prefix as u64);
         assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
         #[cfg(feature = "test-support")]
-        assert_eq!(meter.admitted_charges(), &points[..prefix]);
+        assert_eq!(
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            &points[..prefix]
+        );
     }
 }

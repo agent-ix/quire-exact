@@ -151,7 +151,11 @@ fn division_and_modulus_denial_precedes_large_quotient() {
         assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
         #[cfg(feature = "test-support")]
         assert_eq!(
-            meter.admitted_charges(),
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
             &[if point == ChargePoint::IntegerDivisionArithmetic {
                 ChargePoint::IntegerDivisionOperands
             } else {
@@ -342,7 +346,11 @@ fn huge_decimal_target_denies_retain_before_power_allocation() {
     assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
     #[cfg(feature = "test-support")]
     assert_eq!(
-        meter.admitted_charges(),
+        meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [
             ChargePoint::DecimalOperands,
             ChargePoint::DecimalScaleExpansion,
