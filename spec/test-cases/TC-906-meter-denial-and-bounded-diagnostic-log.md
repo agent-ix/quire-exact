@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-13. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
+Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-15. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
 
 ## Test Procedure
 
@@ -26,6 +26,9 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 9. For AC-12, on each of two fresh meters with work limits 10 and 100 and all other limits sufficient, admit two work units at an unrelated point, install an occurrence-1 denial at P, and request a three-work-unit `charge` at P. Compare every `Incomplete` field and the pre-refusal state across the two limits. Repeat on two fresh meters after admitting two work units, this time denying `charge_plan` at `equality.plan` with `pairs = 2`; compare its recorded reservation with the one work unit a successful plan would commit.
 10. For AC-13, first make a selected `charge` with a semantic size greater than its configured limit and independently confirm that the ordinary charge would refuse at that size counter, with other limits sufficient. Then inject occurrence 1 at the same point and repeat the charge. Separately, after admitting two work units under a configured work limit of 3 and otherwise sufficient limits, confirm that `charge_plan` with `pairs = 2` would refuse its four-unit work reservation, then inject occurrence 1 at `equality.plan` and repeat. Compare each returned record and every consumed counter and admission count to their pre-refusal values; keep cancellation inactive in both cases.
 
+11. For AC-14 under `test-support`, independently submit sizes 9 then 3, an absent-size charge, an explicit-zero charge and a charge with repeated same-kind requests; inspect each typed admission record and the separate high-water counter. Call `charge_plan` with pairs 2 on a sufficient meter and inspect its actual size record. On separate meters snapshot the records, counters, admission count and flag before an ordinary size refusal, ordinary work refusal, occurrence-1 injection and active cancellation, then compare those snapshots after each denial.
+12. For AC-15, admit 4097 one-work-unit charges whose size requests are independently specified; use IntegerBits 8 at admission 4096 and 9 at admission 4097, with earlier IntegerBits requests at most 7 and sufficient limits. Inspect records and flag at both admissions and read exact accounting after the omitted record.
+
 ## Expected Results
 
 1. The over-limit charge refuses without changing the first snapshot or advancing the named occurrence. The selected valid charge returns `Incomplete` at `FunctionCall` with `WorkUnits` as limit kind and preserves the second snapshot; its retry succeeds and updates accounting and the log once.
@@ -40,7 +43,12 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 9. The ordinary-point refusals under work limits 10 and 100 are identical: `WorkUnits`, point P, `limit = consumed = 2`, and `next_charge = 3`. Both plan refusals are `WorkUnits` at `equality.plan` with `limit = consumed = 2` and `next_charge = 4` (`pairs + 2`), rather than the plan's successful one-unit work commit. Neither configured limit appears in an injected record, and none of the refusals changes admitted state.
 10. The selected semantic-size charge returns its injected `WorkUnits` record rather than the otherwise first short size counter. The selected plan returns its injected `WorkUnits` record with `limit = consumed = 2` and `next_charge = 4`, rather than the ordinary work-refusal record whose `limit` would be the configured 3. No counter or admission count changes. This result does not assert precedence over cancellation.
 
+11. Recorded requests remain 9 then 3 despite a counter maximum of 9; absent size, zero and repeated requests remain distinct. The admitted plan records ValueOccurrences 2 and no size entry derived from its work reservation. Each denied charge leaves all snapshotted admitted state unchanged.
+12. Exactly the first 4096 records are retained, including IntegerBits 8 on record 4096; no record for admission 4097 is retained. The flag changes only at admission 4097, work and admissions both reach 4097 and the IntegerBits maximum becomes 9.
+
 ## Status
 
 PR #9 adds executable Trace bindings for FR-358-AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.
 FR-358-AC-12 and AC-13 have direct public-meter Trace bindings for the exact injected record and ordinary-limit precedence. Run `quire matrix` for the current criterion-to-test mapping.
+
+FR-358-AC-14 and AC-15 remain planned for IR-667; the specification does not claim their implementation or executable bindings. Test-support callers adapt directly to the enriched record surface.

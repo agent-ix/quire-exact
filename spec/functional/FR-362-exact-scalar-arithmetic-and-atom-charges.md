@@ -28,6 +28,8 @@ For the following amounts, `B(x)` is the bit length of the magnitude of `x`, wit
 | Rational ordering | `ordering.operands`, `ordering.arithmetic`, `ordering.result-retain` | Operands: `integer_bits = max(B(a), B(p), B(c), B(q))`, `value_occurrences = 2`. Arithmetic: `integer_bits = max(B(a)+B(q), B(c)+B(p))`. |
 | Already-decided Boolean retention | `boolean.result-retain` | No size amount; one work unit and one result unit. |
 
+Where `test-support` is enabled, the kernel SHALL expose each admitted rational normalize `integer_bits` request through the actual size observations defined by [FR-358](./FR-358-meter-denial-and-bounded-diagnostic-log.md), independently of the final high-water counter and the reduced result.
+
 An integer result outside an optional bound refuses after arithmetic and before result retention. A zero rational divisor is `Undefined(DivisionByZero)` after operands, with no arithmetic, normalize or result retention charge. A rational result outside its optional domain refuses after normalization and before result retention.
 
 ## Acceptance Criteria
@@ -53,10 +55,22 @@ An integer result outside an optional bound refuses after arithmetic and before 
 | FR-362-AC-17 | For integer `5 + 7`, work limit 2 stops at `integer-arithmetic.result-retain` after operands and arithmetic, with zero result units; work limit 3 completes to 12 with three work and one result unit. For rational `(2/3) * (3/2)`, work limit 2 stops at `rational-arithmetic.normalize`, work limit 3 stops at `rational-arithmetic.result-retain`, and work limit 4 completes to `1/1`; each denied call preserves exactly its admitted prefix and consumes zero result units. | Test |
 | FR-362-AC-18 | For `k` in 63, 64, 65, 127, 128, 200 and 511, compare exact results and charged bit high-water sizes around `2^k`: `(2^k - 1)(2^k + 1)` charges `2k + 1` bits for a `2k`-bit result, `(2^k)^2` charges `2k + 2` for a `2k + 1`-bit result, and adding `(2^k - 1) + 1` charges `k + 1` for a `k + 1`-bit result. Subtracting `(2^k + 1) - 2^k` or `2^k - 2^k` still charges `k + 2` bits despite a one-bit result. | Test |
 | FR-362-AC-19 | Through public `evaluate_integer_arithmetic` and a fresh public `Meter` for each call, add `8 + 3` and `3 + 8`, subtract `8 - 7`, and multiply `8 * 3`, without a result bound and with all non-bit limits sufficient. The independently calculated `integer-arithmetic.arithmetic` bit amounts are respectively 5, 5, 5 and 6: add/subtract use `max(B(a), B(c)) + 1`, including the larger right operand and a result that cancels to one bit; multiply uses `B(a) + B(c)`. At each exact `integer_bits` limit, the call completes to respectively 11, 11, 1 and 24, admits operands, arithmetic and result-retain in order, and reports `integer_bits` consumed equal to the arithmetic amount, `value_occurrences = 2`, three work units and one result unit. At one below each exact limit, it returns `Incomplete` with no value at `integer-arithmetic.arithmetic`, `limit_kind = IntegerBits`, `limit` one below the arithmetic amount, `consumed = 4`, and `next_charge` equal to the arithmetic amount; only `integer-arithmetic.operands` was admitted, leaving two value occurrences, one work unit and zero result units. | Test |
+| FR-362-AC-20 | On fresh sufficient public meters under `test-support`, evaluate the six rational calls listed below with no result domain. Each completes to the listed canonical value and admits operands, arithmetic, normalize and result-retain in order, consuming four work units and one result unit. The actual normalize record contains exactly one size request, IntegerBits with the listed amount independently derived from the unreduced parts and `B(0) = 1`. The recorded arithmetic amount equals its separate listed bound. The normalize observation is not replaced by that bound, the final bit maximum or the reduced value's part lengths. | Test |
+
+### FR-362-AC-20
+
+| Call | Unreduced numerator/denominator | Arithmetic IntegerBits | Normalize IntegerBits | Canonical result |
+| --- | --- | --- | --- | --- |
+| `(1/2) + (2/3)` | `7/6` | 5 | 3 | `7/6` |
+| `(5/7) - (4/7)` | `7/49` | 7 | 6 | `1/7` |
+| `(2/3) * (3/2)` | `6/6` | 4 | 3 | `1/1` |
+| `(3/4) / (5/7)` | `21/20` | 6 | 5 | `21/20` |
+| negate `-5/8` | `5/8` | 4 | 4 | `5/8` |
+| `(1/2) - (1/2)` | `0/4` | 4 | 3 | `0/1` |
 
 ## Status
 
-PR #9 adds executable Trace bindings for AC-11 through AC-18. AC-1 through AC-9 retain earlier bindings. AC-19 is the separately testable public-meter integer add/subtract/multiply boundary slice; its executable binding is planned under IR-678. AC-10 remains planned and untagged for IR-667 because the public meter does not expose the rational normalize charge bit amount. AC-19 does not discharge AC-10's negate, rational or ordering cases. Run `quire matrix` for the current criterion-to-test mapping.
+PR #9 adds executable Trace bindings for AC-11 through AC-18. AC-1 through AC-9 retain earlier bindings. AC-19 is the separately testable public-meter integer add/subtract/multiply boundary slice; its executable binding is planned under IR-678. AC-10 remains planned and untagged for IR-667; the current point-only public test-support log cannot expose the rational normalize charge bit amount. AC-20 allocates the direct normalize-size observation separately and remains planned until implementation and executable bindings land. The enriched observation contract alone does not discharge AC-10's complete exact-limit and one-under-limit scope or claim runtime conformance. AC-19 does not discharge AC-10's negate, rational or ordering cases. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 
