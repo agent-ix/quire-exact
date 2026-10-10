@@ -361,3 +361,60 @@ scope:
 
     test or source inspection claims QSL-503 full-size acceptance.'
 ```
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 470ea695f98c88de36bea9686b99d421e8dad885; round 1: The copied normative formula is removed and replaced by the authoritative QSpec FR-140 reference. |
+
+## Disposition round 1
+
+**PASS** — both recorded policy findings are fixed at 470ea695f98c88de36bea9686b99d421e8dad885. This section is the latest disposition; the original review verdict and findings above remain historical, unchanged.
+
+Verified actual fix commit parent is the original frozen review head. Both findings are fixed. The authoritative membership rule is referenced rather than copied; endpoint variables and nonnegative alignment shift remain defined for the kernel invariant. Scale refusal remains delegated to the owning rule and polls before returning without scratch. Scratch/limb bounds, quotient/remainder/sign and early-zero mechanism, borrowing, typed native allocation/capacity/cancellation, original-handle polling, allocator non-wall-clock caveat and initiating phase ownership remain unchanged. TC-920 is unchanged. No new finding arose from the changed boundary. Scoped FR-372/TC-920 validation passes 2/2 grammar clean. All implementation and runtime qualification remains PLANNED/UNRUN.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  fix_sha: 470ea695f98c88de36bea9686b99d421e8dad885
+  after_excerpt: "2. Completed membership SHALL conform to the authoritative Decimal value\n   membership rule in [QSpec FR-140](ix://agent-ix/quire-specification/FR-140)."
+scope:
+- id: FR-372-B2
+  path: spec/functional/FR-372-fallible-bounded-decimal-membership.md
+  role: examined
+  excerpt: "2. Completed membership SHALL conform to the authoritative Decimal value\n   membership rule in [QSpec FR-140](ix://agent-ix/quire-specification/FR-140)."
+- id: FR-372-B3
+  path: spec/functional/FR-372-fallible-bounded-decimal-membership.md
+  role: examined
+  excerpt: "3. When that owning rule rejects the normalized scale, the operation SHALL\n   complete with nonmembership after\n   polling cancellation and without requesting scratch storage. Sign and zero\n   comparisons SHALL use borrowed retained data without materializing absolute\n   values. Existing bool-only membership, Decimal construction/normalization,\n   ordering, placement and evaluation are outside this operation's scope."
+- id: FR-372-finite-premises
+  path: spec/functional/FR-372-fallible-bounded-decimal-membership.md
+  role: examined
+  excerpt: 'Let `lo` and `hi` denote the type''s borrowed endpoint coefficients, and let
+
+    `b = max(bits(c), bits(lo), bits(hi))`, with zero''s magnitude bit length one.
+
+    Let `k` denote the nonnegative coefficient-alignment shift requested by the
+
+    authoritative membership rule on its scale-admissible path. The consumer establishes
+
+    finite admitted maxima `B >= b` and `S >= k` for every operand and the actual
+
+    shift, including both type endpoints. Define:'
+- id: FR-372-AC-1
+  path: spec/functional/FR-372-fallible-bounded-decimal-membership.md
+  role: examined
+  excerpt: Completed results match the authoritative membership rule for inclusive lower/upper equality, adjacent outsiders, negative and zero values, scale refusal, all rounding spellings and equivalent retained representations; neither representation is changed. The `[0,100]`, scale bounds `2,2`, `(1,0)` fixture completes true at the exact upper bound.
+- id: FR-372-dependencies-domain
+  path: spec/functional/FR-372-fallible-bounded-decimal-membership.md
+  role: examined
+  excerpt: "- [QSpec FR-140](ix://agent-ix/quire-specification/FR-140) owns Decimal value\n  semantics and the membership rule invoked by this kernel helper."
+- id: FR-372-dependencies-source
+  path: spec/functional/FR-372-fallible-bounded-decimal-membership.md
+  role: examined
+  excerpt: "- The helper's maintained dependency provides the borrowed magnitude iterator\n  `BigInt::iter_u32_digits`. The new helper preserves `no_std` and\n  `#![forbid(unsafe_code)]`; it adds no dependency on another ecosystem crate."
+new_findings: []
+model_identity: Developer identifies GPT-6 family; exact configured/native model ID is not exposed to reviewer or root.
+```
