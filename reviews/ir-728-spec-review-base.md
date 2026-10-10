@@ -176,3 +176,46 @@ scope:
 ## Limitations
 
 Spec-only review at frozen revision. Code and every runtime control, Cargo/CI/Kani/replay, and consumer adoption are UNRUN. Exact model identifier unavailable; marker model=unavailable (configured Codex reviewer). No applicable AssuranceProfile was found under this repository spec tree. Jev criterion-strength unavailable per installed skill (no client); manual falsifier scrutiny is not that lens. Gap-analysis skipped: no production diff. Object/security/architecture/app methods skipped: no domain-object, security, architecture or application-spec edits. GitHub CLI metadata lookup failed HTTP 401; repo/PR visibility PUBLIC, PR25 frozen head/base were measured by dispatching root via its connector. Local origin independently confirms repo identity. Installed tools: quoin 0.28.3, quire 0.36.2 engine 0.50.2. Scoped validation emits existing module inline-schema/duplicate-archetype advisories; no artifact validation failure. The documented quoin write invocation needs a repo argument here; quoin write . --types SpecReview succeeded.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 1226cc3e36e5691dfa4ffcdbf0de58b975ed493e — Added FR-373-AC-7 and TC-921 step 6 with real precharge and independent original-meter success/stop assertions. |
+
+## Disposition round 1
+
+Reviewed: agent-ix/quire-exact@1226cc3e36e5691dfa4ffcdbf0de58b975ed493e. **PASS** — sole original finding fixed; no new findings.
+
+AC-7 and TC-921 step 6 now construct the prior prefix through the real public Charge/Meter seam and assert independently fixed precharge constants. Prefix work/result/admissions are 2/1/1; operands and intermediate add 1/0/1 each, yielding 4/1/3 at retain. Successful retain yields 5/2/4. Size maxima 80/5/7 exceed both source widths and the 3/2 parts, so they remain unchanged. Work limit 4 and result limit 1 independently reject retain atomically; injection and original-handle cancellation report prior WorkUnits=4. Attaching cancellation after precharge makes the third conversion poll precisely retain. Exact logs and unchanged limits are specified. Reset/refund of prior accounting now falsifies success totals and denial fields; no new defects found.
+
+Original Findings, Summary, Verdict and original frozen scope above remain unchanged as review-pass history. The current verdict is this round's PASS. Runtime controls, source changes, Cargo/CI/Kani/replay and consumer adoption remain PLANNED/UNRUN.
+
+```yaml
+scope:
+- id: FR-373-AC-7
+  path: spec/functional/FR-373-rational-target-ieee-outcome.md
+  role: examined
+  excerpt: 'Precharge the supplied meter once at FunctionCall with work 2, result 1, IntegerBits 80, ValueOccurrences 5 and TextScalars 7. Direct conversion of either width''s `3/2` under sufficient limits ends with work 5, results 2 and admission count 4, preserving all three high-water values and the FunctionCall log prefix. Independently repeat with work limit 4, result limit 1, an occurrence-1 retain injection and original-handle cancellation at the third conversion poll. Each stops at retain with work 4, results 1 and admission count 3; ordinary records report respectively WorkUnits(limit=consumed=4) '
+- id: FR-373-AC-7
+  path: spec/functional/FR-373-rational-target-ieee-outcome.md
+  role: examined
+  excerpt: and ResultUnits(limit=consumed=1), while injection/cancellation report WorkUnits(limit=consumed=4); all report next charge 1. High-water values, original limits and admitted prefix remain intact, and cancellation records the original Requested or Deadline cause. No already-spent accounting is reset or refunded.
+- id: TC-921
+  path: spec/test-cases/TC-921-rational-target-ieee-outcome.md
+  role: examined
+  excerpt: "6. Prepare an independently specified already-spent prefix through one real\n   `Charge` at `FunctionCall`: work 2, result 1, IntegerBits 80,\n   ValueOccurrences 5 and TextScalars 7; all other counters remain zero.\n   Check these constants before conversion, rather than deriving the oracle\n   from measured counters. For each width's `3/2`, a sufficient-limit call\n   must end at work 5, results 2 and four admissions, with the three size\n   high-water values unchanged and, under test-support, exactly the log\n   `[FunctionCall, IeeeOperands, IeeeExactIntermediate, IeeeResultRetain]`.\n   On separat"
+- id: TC-921
+  path: spec/test-cases/TC-921-rational-target-ieee-outcome.md
+  role: examined
+  excerpt: "ely precharged meters, set work limit 4 or result limit 1, install\n   an occurrence-1 `IeeeResultRetain` injection, or attach the original shared\n   cancellation handle and cancel at the third conversion poll with each cause.\n   Attach that observer after precharging so its poll positions are unambiguous.\n   Assert the exact AC-7 records, work 4, results 1, three admissions and log\n   `[FunctionCall, IeeeOperands, IeeeExactIntermediate]`. All other counters\n   equal their independent prefix constants. Check the supplied limits remain\n   exactly configured; injected denial is spent according to"
+- id: TC-921
+  path: spec/test-cases/TC-921-rational-target-ieee-outcome.md
+  role: examined
+  excerpt: " the existing meter\n   contract and cancellation trips the original handle. These success/shortage\n   controls must fail a mutant that resets already-spent counters or refunds\n   the prefix while retaining the limits, injected denial and cancellation\n   handle. No denied retain work or result unit is consumed."
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  fix_sha: 1226cc3e36e5691dfa4ffcdbf0de58b975ed493e
+  after_excerpt: "6. Prepare an independently specified already-spent prefix through one real\n   `Charge` at `FunctionCall`: work 2, result 1, IntegerBits 80,\n   ValueOccurrences 5 and TextScalars 7; all other counters remain zero."
+```
