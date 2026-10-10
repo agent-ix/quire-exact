@@ -388,8 +388,9 @@ fn mixed_union_composite_collection_paths_walk_and_drop_on_small_stack() {
         let left = build();
         let right = build();
         assert_eq!(left.occ(), Integer::from(30_001_u64));
-        // Each record's present slot adds a pair event of its own.
-        assert_eq!(plan_equality(&left, &right).unwrap().pair_events(), &Integer::from(40_001_u64));
+        // A present slot's pair is the contained value pair, so each link
+        // contributes union, record and collection events.
+        assert_eq!(plan_equality(&left, &right).unwrap().pair_events(), &Integer::from(30_001_u64));
         assert!(equal(&left, &right));
         assert_eq!(compare_keys(&left, &right), Some(Ordering::Equal));
         let Value::Union(root) = &left else { panic!("union") };
