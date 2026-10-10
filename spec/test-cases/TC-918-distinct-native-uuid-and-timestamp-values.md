@@ -27,16 +27,30 @@ interfaces. Scope: FR-370-AC-1 through FR-370-AC-8.
    Reference value to both native types.
    Mutate UUID case, group widths, separator positions, length and hex
    characters, braces, URN form and whitespace; mutate Timestamp spelling
-   with overflow, `-0`, `+`, a leading zero, fraction, exponent, Unicode digit,
-   calendar/offset form and whitespace. Call the public canonical-text
+   with overflow, `-0`, `+`, a leading zero, empty text, a lone `-`, fraction,
+   exponent, Unicode digit, calendar/offset form and whitespace. Also offer
+   `0170141183460469231731687303715884105728`, which is both noncanonical
+   and one above `i128::MAX`. Call the public canonical-text
    constructors directly and record the `ConstructionRefusal` component and
    cause for each rejected payload.
 2. For each native kind, compare the equal and unequal pair with
    `plan_equality` and `planned_equality` under the same allowance used for a
    Boolean-leaf control pair. Observe the Boolean, pair count and charged
    schedule.
-3. Directly pass UUID/Timestamp, Integer/Timestamp, UUID/Boolean and
-   Timestamp/Text pairs to `plan_equality` and `compare_keys`.
+3. Use one constructed representative of each existing `Value` variant in
+   this bounded kind table, not an enumeration of every payload or declared
+   type. The direct call does not assert that Population is kernel-admitted or
+   that Float has generic equality:
+
+   | Native kind | Other value kinds |
+   | --- | --- |
+   | UUID | Timestamp; Boolean, Integer (`Integer` and `Int` share this value variant), Rational, Decimal, Float, Quantity, Text, Enum, Population, Option, Composite, Collection, Reference |
+   | Timestamp | UUID; Boolean, Integer (`Integer` and `Int` share this value variant), Rational, Decimal, Float, Quantity, Text, Enum, Population, Option, Composite, Collection, Reference |
+
+   For every tabled pair, call `plan_equality` and `compare_keys` with the
+   native on the left and then with the operand order reversed. These are
+   direct kernel precondition violations; QSL's checked mixed-type refusal
+   remains at its caller boundary.
 4. Compare the equal and unequal same-kind native pairs with `compare_keys`,
    including their reverse order. Compare Timestamp `10` against `2` and
    `-1` against `-2` to distinguish canonical-content key order from
@@ -55,12 +69,16 @@ interfaces. Scope: FR-370-AC-1 through FR-370-AC-8.
   `ConstructionRefusal { component: Value, cause: UuidNoncanonical }`, every
   malformed Timestamp spelling returns `TimestampNoncanonical`, and a
   canonical decimal beyond either `i128` bound returns
-  `TimestampOutOfDomain`, all with no repaired or partially constructed value.
+  `TimestampOutOfDomain`. Empty text, a lone minus and the leading-zero
+  exterior value return `TimestampNoncanonical`; the latter establishes
+  noncanonical-before-range precedence. All refusals produce no repaired or
+  partially constructed value.
 - Step 2: equal pairs yield `true` and unequal pairs `false`; each is one
   terminal pair with the Boolean-leaf schedule's pair count and charges.
-- Step 3: each mixed equality pair returns the typed
-  `ValueKindMismatch` checked-invariant fault, and each mixed key pair yields
-  `None`; neither returns a Boolean or an equal key.
+- Step 3: in both operand orders, every tabled mixed equality pair returns
+  the typed `ValueKindMismatch` checked-invariant fault, and every mixed key
+  pair yields `None`; neither returns a Boolean or an equal key. The table
+  covers value kinds rather than every admitted value of those kinds.
 - Step 4: each same-kind key relation is total, reverses consistently, and
   returns `Equal` exactly for equal native values. The Timestamp key places
   `"10"` before `"2"` and `"-1"` before `"-2"` by unsigned ASCII byte order;
