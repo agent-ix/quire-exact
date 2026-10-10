@@ -134,9 +134,6 @@ fn leaf<'a>(
             return Some(None);
         }
         (Value::Union(left), Value::Union(right)) if left.declaration() == right.declaration() => {
-            if left.variant() != right.variant() {
-                return Some(Some(left.variant().cmp(&right.variant())));
-            }
             let ordering = left
                 .member()
                 .identifier()
