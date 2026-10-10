@@ -149,8 +149,8 @@ pub use text::{
     TextProfile, TextProvenance, TextType, UNICODE_TEXT_DEFINITION, UNICODE_VERSION,
 };
 pub use value::{
-    evaluate_record, evaluate_tuple, fill_slots, from_admitted_slots, record, retain_composite,
-    tuple, Component, CompositeValue, ConstructionCause, ConstructionRefusal, Deferred, EnumMember,
-    EnumShape, FieldDeclaration, FieldExpression, FieldValue, OptionValue, Presence, Timestamp,
-    Uuid, Value, ValueType,
+    evaluate_record, evaluate_tuple, evaluate_union, fill_slots, from_admitted_slots, record,
+    retain_composite, tuple, union, Component, CompositeValue, ConstructionCause,
+    ConstructionRefusal, Deferred, EnumMember, EnumShape, FieldDeclaration, FieldExpression,
+    FieldValue, OptionValue, Presence, Timestamp, UnionMember, UnionValue, Uuid, Value, ValueType,
 };

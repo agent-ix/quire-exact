@@ -33,6 +33,11 @@
 //!   the declared shape directly (`&[FieldDeclaration]` or `&[ValueType]`)
 //!   rather than looking it up in a registry. The kernel trusts the shape its
 //!   caller hands it.
+//! - [`UnionMember::from_admitted`] retains the checking stage's verified
+//!   (union declaration, FR-441 member key, identifier) binding. A union
+//!   value shares that binding with its positional payload; `Composite`
+//!   remains the type shape, and SV owns the member list. Identifier ASCII
+//!   bytes, not a digest or enum rank, supply its FR-144 canonical key.
 //! - [`from_admitted_slots`] is a trusted, unchecked composite constructor, `pub`
 //!   for a caller that has independently checked a value against its own
 //!   registry, mirroring [`OptionValue::from_admitted`]'s identical role.
@@ -47,7 +52,7 @@ use crate::decimal::{Decimal, DecimalType};
 use crate::identity::{EffectiveId, MemberId, PopulationId, UnitId, VariantId};
 use crate::ieee::{FloatType, IeeeValue};
 use crate::integer::{Integer, IntegerInterval};
-use crate::node::NodeKey;
+use crate::node::{Identifier, NodeKey};
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
 use crate::quantity::Quantity;
 use crate::rational::{Rational, RationalDomain};
@@ -57,6 +62,170 @@ use crate::text::{Text, TextType};
 mod native;
 mod value_type;
 pub use native::{Timestamp, Uuid};
+
+/// The admitted identity of one union member, retaining its FR-144 ASCII
+/// identifier key separately from its opaque FR-441 identity. This is a
+/// member handle, not a member registry or a declaration-position rank.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnionMember {
+    declaration: NodeKey,
+    variant: VariantId,
+    identifier: Identifier,
+}
+
+impl UnionMember {
+    /// Retain a member binding already admitted by the checking/package
+    /// identity stage. `member_key` must be the FR-441 key of exactly
+    /// (`declaration`, `identifier`), in the evaluating package, and must
+    /// name a union member, never an enum member. That stage owns the
+    /// canonical preimage and digest verification; the kernel hashes nothing.
+    /// Do not call this constructor on an unvalidated runtime label/key pair.
+    pub fn from_admitted(
+        declaration: NodeKey,
+        member_key: NodeKey,
+        identifier: Identifier,
+    ) -> Self {
+        Self {
+            declaration,
+            variant: VariantId::from_digest(*member_key.as_bytes()),
+            identifier,
+        }
+    }
+
+    /// The union declaration in the admitted package.
+    pub fn declaration(&self) -> NodeKey {
+        self.declaration
+    }
+
+    /// The FR-441 member key bytes, retyped without fresh computation.
+    pub fn variant(&self) -> VariantId {
+        self.variant
+    }
+
+    /// The admitted member identifier, whose ASCII bytes define key order.
+    pub fn identifier(&self) -> &Identifier {
+        &self.identifier
+    }
+}
+
+/// One completed union member with positional payload values. Cloning shares
+/// immutable children, just as [`CompositeValue`] does; dropping uses the
+/// same iterative worklist. Member lists and position types stay in SV.
+#[derive(Clone)]
+pub struct UnionValue {
+    member: UnionMember,
+    payload: Box<[Value]>,
+    occ: Integer,
+}
+
+impl UnionValue {
+    /// Materialize payload values already admitted against this member's
+    /// declared positions by the caller's type environment. The caller owns
+    /// membership, arity, reference validation and any construction charge.
+    pub fn from_admitted(member: UnionMember, payload: Vec<Value>) -> Value {
+        let occ = payload
+            .iter()
+            .fold(Integer::one(), |occ, value| occ.add(&value.occ()));
+        Value::Union(Arc::new(Self {
+            member,
+            payload: payload.into_boxed_slice(),
+            occ,
+        }))
+    }
+
+    /// The union declaration key.
+    pub fn declaration(&self) -> NodeKey {
+        self.member.declaration()
+    }
+
+    /// The active member's identity and admitted identifier key.
+    pub fn member(&self) -> &UnionMember {
+        &self.member
+    }
+
+    /// The active member's opaque identity.
+    pub fn variant(&self) -> VariantId {
+        self.member.variant()
+    }
+
+    /// Payload values in declared position order.
+    pub fn payload(&self) -> &[Value] {
+        &self.payload
+    }
+}
+
+impl Drop for UnionValue {
+    fn drop(&mut self) {
+        drop_nested(core::mem::take(&mut self.payload).into_vec());
+    }
+}
+
+impl fmt::Debug for UnionValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        DebugWriter::new(formatter)
+            .write(Step::Union(self))
+            .map(|_peak| ())
+    }
+}
+
+/// Construct an admitted member using its declared position types, looked
+/// up by the caller. This checks arity and kernel position admission, not
+/// registry membership or reference conformance.
+pub fn union(
+    shape: &[ValueType],
+    member: UnionMember,
+    payload: Vec<Value>,
+) -> Result<Value, ConstructionRefusal> {
+    check_union_arity(shape, payload.len())?;
+    if let Some(position) = shape
+        .iter()
+        .zip(&payload)
+        .position(|(value_type, value)| !value_type.admits(value))
+    {
+        return refuse(
+            Component::Position(position),
+            ConstructionCause::TypeMismatch,
+        );
+    }
+    Ok(UnionValue::from_admitted(member, payload))
+}
+
+/// Evaluate a checked union member in position order, stopping at the first
+/// unavailable argument, then charge `composite.result-retain`. Arity is
+/// checked before evaluating any argument. The member and shape must have
+/// been resolved together by the caller's type environment.
+pub fn evaluate_union(
+    shape: &[ValueType],
+    member: UnionMember,
+    payload: Vec<Deferred<'_>>,
+    meter: &mut Meter,
+) -> Result<Outcome<Value>, ConstructionRefusal> {
+    check_union_arity(shape, payload.len())?;
+    let mut values = Vec::with_capacity(shape.len());
+    for (value_type, expression) in shape.iter().zip(payload) {
+        match admitted(value_type, expression(meter)) {
+            Ok(value) => values.push(value),
+            Err(stop) => return Ok(Outcome::from_stop(Err(stop))),
+        }
+    }
+    Ok(retain_composite(
+        UnionValue::from_admitted(member, values),
+        meter,
+    ))
+}
+
+fn check_union_arity(shape: &[ValueType], supplied: usize) -> Result<(), ConstructionRefusal> {
+    if shape.len() != supplied {
+        return refuse(
+            Component::Value,
+            ConstructionCause::WrongArity {
+                declared: shape.len(),
+                supplied,
+            },
+        );
+    }
+    Ok(())
+}
 
 /// The inline, *ranked* set of an enum type's admitted variants. The kernel `ValueType::Enum` carries its variant set
 /// directly, as opaque [`VariantId`] digests, so `admits` is a pure
@@ -200,7 +369,7 @@ pub enum ValueType {
     Enum(EnumShape),
     /// `Option<T>`: `none` or a present `T`.
     Option(Arc<ValueType>),
-    /// The record or tuple declaration with this node key.
+    /// The record, tuple or union declaration with this node key.
     Composite(NodeKey),
     /// A collection type `K<T>[min, max]`, or the unbounded `K<T>`.
     Collection(Arc<CollectionType>),
@@ -247,6 +416,9 @@ impl ValueType {
             (Self::Composite(declaration), Value::Composite(composite)) => {
                 composite.declaration() == *declaration
             }
+            (Self::Composite(declaration), Value::Union(union)) => {
+                union.declaration() == *declaration
+            }
             (Self::Collection(declared), Value::Collection(collection)) => {
                 collection.collection_type() == &**declared
             }
@@ -276,7 +448,22 @@ impl ValueType {
                 | Self::Collection(_)
                 | Self::Reference(_)
                 | Self::Population(_),
-                _,
+                Value::Boolean(_)
+                | Value::Integer(_)
+                | Value::Rational(_)
+                | Value::Decimal(_)
+                | Value::Float(_)
+                | Value::Quantity(_)
+                | Value::Text(_)
+                | Value::Uuid(_)
+                | Value::Timestamp(_)
+                | Value::Enum(_)
+                | Value::Population(_)
+                | Value::Option(_)
+                | Value::Composite(_)
+                | Value::Union(_)
+                | Value::Collection(_)
+                | Value::Reference(_),
             ) => false,
         }
     }
@@ -291,7 +478,7 @@ impl ValueType {
 /// a small fixed stack, such as a no_std target's, where an overflow is not
 /// a clean panic:
 ///
-/// - `Debug`, and the `Drop` of the three node structs a nested value lives
+/// - `Debug`, and the `Drop` of the four node structs a nested value lives
 ///   in, are hand-written over an explicit worklist. `Value` itself has no
 ///   `Drop`, so a caller can still move a payload out of it by pattern.
 /// - `Clone` is shallow: a nested value is one `Arc`.
@@ -330,6 +517,8 @@ pub enum Value {
     Option(Arc<OptionValue>),
     /// A record or tuple value.
     Composite(Arc<CompositeValue>),
+    /// One admitted union member and its payload in declared position order.
+    Union(Arc<UnionValue>),
     /// A collection value.
     Collection(Arc<CollectionValue>),
     /// A terminal object reference.
@@ -344,6 +533,7 @@ impl Value {
         match self {
             Self::Option(option) => option.occ.clone(),
             Self::Composite(composite) => composite.occ.clone(),
+            Self::Union(union) => union.occ.clone(),
             Self::Collection(collection) => collection.occ().clone(),
             Self::Boolean(_)
             | Self::Integer(_)
@@ -386,7 +576,9 @@ pub(crate) fn drop_nested(children: impl IntoIterator<Item = Value>) {
 /// at once, which recurses nowhere.
 fn defer_node(pending: &mut Vec<Value>, value: Value) {
     match value {
-        Value::Option(_) | Value::Composite(_) | Value::Collection(_) => pending.push(value),
+        Value::Option(_) | Value::Composite(_) | Value::Union(_) | Value::Collection(_) => {
+            pending.push(value)
+        }
         Value::Boolean(_)
         | Value::Integer(_)
         | Value::Rational(_)
@@ -427,6 +619,14 @@ fn release_children(node: Value, pending: &mut Vec<Value>) {
                     .into_vec()
                     .into_iter()
                     .for_each(|element| defer_node(pending, element));
+            }
+        }
+        Value::Union(union) => {
+            if let Some(mut union) = Arc::into_inner(union) {
+                core::mem::take(&mut union.payload)
+                    .into_vec()
+                    .into_iter()
+                    .for_each(|payload| defer_node(pending, payload));
             }
         }
         Value::Boolean(_)
@@ -511,6 +711,7 @@ impl<'a> Items<'a> {
 #[derive(Clone, Copy)]
 enum Step<'a> {
     Value(&'a Value),
+    Union(&'a UnionValue),
     Type(&'a ValueType),
     CollectionType(&'a CollectionType),
     Slot(&'a FieldValue),
@@ -552,6 +753,7 @@ impl<'f, 'g> DebugWriter<'f, 'g> {
         while let Some(step) = steps.pop() {
             match step {
                 Step::Value(value) => schedule_value(&mut steps, value),
+                Step::Union(union) => schedule_union(&mut steps, union),
                 Step::Type(value_type) => value_type::schedule_type(&mut steps, value_type),
                 Step::CollectionType(collection_type) => {
                     value_type::schedule_collection_type(&mut steps, collection_type)
@@ -721,8 +923,35 @@ fn schedule_value<'a>(stack: &mut Vec<Step<'a>>, value: &'a Value) {
                 occ,
             );
         }
+        Value::Union(union) => {
+            return schedule(stack, tuple_steps("Union", Step::Union(union)));
+        }
     };
     schedule(stack, tuple_steps(name, Step::Leaf(leaf)));
+}
+
+fn schedule_union<'a>(stack: &mut Vec<Step<'a>>, union: &'a UnionValue) {
+    let UnionValue {
+        member,
+        payload,
+        occ,
+    } = union;
+    schedule(
+        stack,
+        [
+            Step::Text("UnionValue"),
+            Step::Open(Bracket::Brace),
+            Step::Text("member: "),
+            Step::Leaf(member),
+            Step::Next,
+            Step::Text("payload: "),
+            Step::List(Items::Elements(payload)),
+            Step::Next,
+            Step::Text("occ: "),
+            Step::Leaf(occ),
+            Step::Close(Bracket::Brace),
+        ],
+    );
 }
 
 /// The steps of a one-field tuple shape, `name(inner)`.
