@@ -249,14 +249,6 @@ pub fn evaluate_integer_arithmetic(
     bound: Option<&IntegerInterval>,
     meter: &mut Meter,
 ) -> Outcome<Integer> {
-    Outcome::from_stop(integer_arithmetic(operation, bound, meter))
-}
-
-fn integer_arithmetic(
-    operation: IntegerArithmetic<'_>,
-    bound: Option<&IntegerInterval>,
-    meter: &mut Meter,
-) -> Result<Integer, Stop> {
     let (bits, count) = match operation {
         IntegerArithmetic::Add(left, right)
         | IntegerArithmetic::Subtract(left, right)
@@ -265,15 +257,19 @@ fn integer_arithmetic(
         }
         IntegerArithmetic::Negate(operand) => (operand.magnitude_bits(), 1),
     };
-    meter.charge(
+    if let Err(record) = meter.charge(
         Charge::new(ChargePoint::IntegerArithmeticOperands)
             .size(LimitKind::IntegerBits, bits)
             .size(LimitKind::ValueOccurrences, count),
-    )?;
-    meter.charge(
+    ) {
+        return Outcome::Incomplete(record);
+    }
+    if let Err(record) = meter.charge(
         Charge::new(ChargePoint::IntegerArithmeticArithmetic)
             .exact_size(LimitKind::IntegerBits, integer_arithmetic_bits(operation)),
-    )?;
+    ) {
+        return Outcome::Incomplete(record);
+    }
     let result = match operation {
         IntegerArithmetic::Add(left, right) => left.add(right),
         IntegerArithmetic::Subtract(left, right) => left.sub(right),
@@ -281,12 +277,16 @@ fn integer_arithmetic(
         IntegerArithmetic::Multiply(left, right) => left.mul(right),
     };
     if let Some(bound) = bound.filter(|bound| !bound.contains(&result)) {
-        return Err(Stop::Refused(Refusal::IntegerOutOfDomain {
+        return Outcome::Refused(Refusal::IntegerOutOfDomain {
             target: Box::new(bound.clone()),
-        }));
+        });
     }
-    meter.charge(Charge::new(ChargePoint::IntegerArithmeticResultRetain).results(1))?;
-    Ok(result)
+    if let Err(record) =
+        meter.charge(Charge::new(ChargePoint::IntegerArithmeticResultRetain).results(1))
+    {
+        return Outcome::Incomplete(record);
+    }
+    Outcome::Completed(result)
 }
 
 /// One `Rational[..]` arithmetic operation. An `Integer` or `Int[..]` `/`
@@ -457,6 +457,123 @@ mod tests {
         let outcome =
             evaluate_integer_arithmetic(IntegerArithmetic::Add(&two, &three), None, &mut meter);
         assert_eq!(outcome.completed(), Some(Integer::from(5_u64)));
+    }
+
+    /// Trace: FR-362-AC-5, FR-362-AC-6, FR-362-AC-11, FR-096-AC-8
+    #[test]
+    fn integer_bounds_preserve_values_refusal_payloads_and_charge_order() {
+        let (left, right) = (Integer::from(-7_i64), Integer::from(3_i64));
+        for (operation, expected, bits, occurrences) in [
+            (IntegerArithmetic::Add(&left, &right), -4_i64, 4, 2),
+            (IntegerArithmetic::Subtract(&left, &right), -10, 4, 2),
+            (IntegerArithmetic::Multiply(&left, &right), -21, 5, 2),
+            (IntegerArithmetic::Negate(&left), 7, 3, 1),
+        ] {
+            let expected = Integer::from(expected);
+            let bound = IntegerInterval::new(expected.clone(), expected.clone()).unwrap();
+            let mut meter = generous_meter();
+            assert_eq!(
+                evaluate_integer_arithmetic(operation, Some(&bound), &mut meter),
+                Outcome::Completed(expected.clone())
+            );
+            assert_eq!(meter.consumed(LimitKind::IntegerBits), bits);
+            assert_eq!(meter.consumed(LimitKind::ValueOccurrences), occurrences);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 3);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+            assert_eq!(meter.admission_count(), 3);
+            #[cfg(feature = "test-support")]
+            assert_eq!(
+                meter.admitted_charges(),
+                &[
+                    ChargePoint::IntegerArithmeticOperands,
+                    ChargePoint::IntegerArithmeticArithmetic,
+                    ChargePoint::IntegerArithmeticResultRetain,
+                ]
+            );
+
+            let outside = expected.add(&Integer::one());
+            let bound = IntegerInterval::new(outside.clone(), outside).unwrap();
+            let mut limits = *generous_meter().limits();
+            // The bound refusal must precede an unavailable result retention.
+            limits.result_units = 0;
+            let mut meter = Meter::new(limits);
+            let Outcome::Refused(refusal) =
+                evaluate_integer_arithmetic(operation, Some(&bound), &mut meter)
+            else {
+                panic!("expected the bound refusal before result retention");
+            };
+            assert_eq!(refusal.code(), Some("integer_out_of_domain"));
+            assert_eq!(refusal.cause(), Some("outside-domain"));
+            assert_eq!(
+                refusal,
+                Refusal::IntegerOutOfDomain {
+                    target: Box::new(bound)
+                }
+            );
+            assert_eq!(meter.consumed(LimitKind::IntegerBits), bits);
+            assert_eq!(meter.consumed(LimitKind::ValueOccurrences), occurrences);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+            assert_eq!(meter.admission_count(), 2);
+            #[cfg(feature = "test-support")]
+            assert_eq!(
+                meter.admitted_charges(),
+                &[
+                    ChargePoint::IntegerArithmeticOperands,
+                    ChargePoint::IntegerArithmeticArithmetic,
+                ]
+            );
+        }
+    }
+
+    /// Trace: FR-362-AC-8
+    #[test]
+    fn integer_denials_preserve_each_operation_prefix_and_exact_record() {
+        let (left, right) = (Integer::from(-7_i64), Integer::from(3_i64));
+        let points = [
+            ChargePoint::IntegerArithmeticOperands,
+            ChargePoint::IntegerArithmeticArithmetic,
+            ChargePoint::IntegerArithmeticResultRetain,
+        ];
+        for (operation, arithmetic_bits, occurrences) in [
+            (IntegerArithmetic::Add(&left, &right), 4, 2),
+            (IntegerArithmetic::Subtract(&left, &right), 4, 2),
+            (IntegerArithmetic::Multiply(&left, &right), 5, 2),
+            (IntegerArithmetic::Negate(&left), 3, 1),
+        ] {
+            for (prior, point) in points.into_iter().enumerate() {
+                let mut meter =
+                    generous_meter().with_injected_denial(crate::accounting::InjectedDenial {
+                        point,
+                        occurrence: core::num::NonZeroU64::new(1).unwrap(),
+                    });
+                let outcome = evaluate_integer_arithmetic(operation, None, &mut meter);
+                let work = u64::try_from(prior).unwrap();
+                assert_eq!(
+                    outcome,
+                    Outcome::Incomplete(crate::accounting::Incomplete {
+                        limit_kind: LimitKind::WorkUnits,
+                        limit: work,
+                        consumed: work,
+                        next_charge: Integer::one(),
+                        charge_point: point,
+                    })
+                );
+                assert_eq!(meter.consumed(LimitKind::WorkUnits), work);
+                assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+                assert_eq!(meter.admission_count(), work);
+                assert_eq!(
+                    meter.consumed(LimitKind::IntegerBits),
+                    [0, 3, arithmetic_bits][prior]
+                );
+                assert_eq!(
+                    meter.consumed(LimitKind::ValueOccurrences),
+                    if prior == 0 { 0 } else { occurrences }
+                );
+                #[cfg(feature = "test-support")]
+                assert_eq!(meter.admitted_charges(), &points[..prior]);
+            }
+        }
     }
 
     /// `a implies b` is false only when `a` is true and `b` is
