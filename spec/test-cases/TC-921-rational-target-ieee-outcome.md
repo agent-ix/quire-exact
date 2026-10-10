@@ -53,6 +53,26 @@ legacy conversion API as a parity oracle or replace the conversion algorithm.
    with a live handle and assert completion. These controls must fail if the
    operation substitutes a fresh meter or cancellation handle; use no sleep or
    elapsed-time oracle. Caller projection to its cancellation result is separate.
+6. Prepare an independently specified already-spent prefix through one real
+   `Charge` at `FunctionCall`: work 2, result 1, IntegerBits 80,
+   ValueOccurrences 5 and TextScalars 7; all other counters remain zero.
+   Check these constants before conversion, rather than deriving the oracle
+   from measured counters. For each width's `3/2`, a sufficient-limit call
+   must end at work 5, results 2 and four admissions, with the three size
+   high-water values unchanged and, under test-support, exactly the log
+   `[FunctionCall, IeeeOperands, IeeeExactIntermediate, IeeeResultRetain]`.
+   On separately precharged meters, set work limit 4 or result limit 1, install
+   an occurrence-1 `IeeeResultRetain` injection, or attach the original shared
+   cancellation handle and cancel at the third conversion poll with each cause.
+   Attach that observer after precharging so its poll positions are unambiguous.
+   Assert the exact AC-7 records, work 4, results 1, three admissions and log
+   `[FunctionCall, IeeeOperands, IeeeExactIntermediate]`. All other counters
+   equal their independent prefix constants. Check the supplied limits remain
+   exactly configured; injected denial is spent according to the existing meter
+   contract and cancellation trips the original handle. These success/shortage
+   controls must fail a mutant that resets already-spent counters or refunds
+   the prefix while retaining the limits, injected denial and cancellation
+   handle. No denied retain work or result unit is consumed.
 
 ## Expected Results
 
