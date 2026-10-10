@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify [FR-362](../functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md), AC-1 through AC-18, at kernel scalar entry points without evaluating a caller expression or copying a caller-owned schedule.
+Verify [FR-362](../functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md), AC-1 through AC-19, at kernel scalar entry points without evaluating a caller expression or copying a caller-owned schedule.
 
 ## Test Procedure
 
@@ -27,11 +27,12 @@ Verify [FR-362](../functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md
 10. For AC-18, use independently constructed powers of two and compare exact result bit lengths with the specified charged amounts at each exponent and cancellation fixture.
 11. For AC-11, exercise the four public dispositions and extraction behavior, checking every counter and admitted prefix.
 12. For AC-12, check exposed numerator and denominator of `4/8`, `-4/-8`, `1/-2`, `0/5` and `0/-5`. A constructor that leaves an unreduced `4/8` fails this criterion.
+13. For AC-19, construct fresh public meters for both bit limits of each integer call `8 + 3`, `3 + 8`, `8 - 7` and `8 * 3`, with no result bound and sufficient other limits. Independently calculate both operand bit lengths and the arithmetic request from the FR formula. Call the public integer arithmetic entry point; inspect the completed value or all `Incomplete` fields, `Meter::consumed` for integer bits, value occurrences, work and results, and the admitted point sequence under `test-support`. The reversed add detects a left-only maximum, subtraction detects charging from the one-bit result, and multiplication detects using the add/subtract formula or the operand maximum.
 
 ## Expected Results
 
-Values, outcomes, point order, high-water sizes, work/result consumption, direct-call totals and denial stops equal their respective criteria. The five-atom schedule consumes 15/5 work/results and stops at 14/4 under work limit 14; the rational division consumes 4/1 and the two additions 6/2. Bit limits, work limits and power-of-two edge amounts each match their separate ACs. Exact-limit calls complete and one-under calls retain only their admitted prefixes. Domain refusals preserve arithmetic (and rational normalization), with no retained result. False remains a completed value. A reduced denominator outside its interval refuses despite an admitted numerator; removing the domain permits `1/3`. Construction reduces `4/8` and `-4/-8` to `1/2`, moves the single negative denominator sign to the numerator, and makes zero `0/1` under either denominator sign. No decimal ordering or caller-level short-circuit schedule is asserted.
+Values, outcomes, point order, high-water sizes, work/result consumption, direct-call totals and denial stops equal their respective criteria. The five-atom schedule consumes 15/5 work/results and stops at 14/4 under work limit 14; the rational division consumes 4/1 and the two additions 6/2. Bit limits, work limits and power-of-two edge amounts each match their separate ACs. AC-19 exact-limit calls complete with respective results 11, 11, 1 and 24 and bit consumption 5, 5, 5 and 6; one-under calls stop at the arithmetic point with requests 5, 5, 5 and 6 after admitting only operands. Domain refusals preserve arithmetic (and rational normalization), with no retained result. False remains a completed value. A reduced denominator outside its interval refuses despite an admitted numerator; removing the domain permits `1/3`. Construction reduces `4/8` and `-4/-8` to `1/2`, moves the single negative denominator sign to the numerator, and makes zero `0/1` under either denominator sign. No decimal ordering or caller-level short-circuit schedule is asserted.
 
 ## Status
 
-FR-362-AC-1 through AC-9 retain earlier Trace bindings. PR #9 adds executable Trace bindings for FR-362-AC-11 through AC-18. FR-362-AC-10 remains planned and untagged for IR-667 because the public meter does not expose the normalize charge bit amount. Run `quire matrix` for the current criterion-to-test mapping.
+FR-362-AC-1 through AC-9 retain earlier Trace bindings. PR #9 adds executable Trace bindings for FR-362-AC-11 through AC-18. FR-362-AC-19 is planned for IR-678 as an independently bindable integer boundary test. FR-362-AC-10 remains planned and untagged for IR-667 because the public meter does not expose the rational normalize charge bit amount; AC-19 does not claim its rational, negate or ordering coverage. Run `quire matrix` for the current criterion-to-test mapping.
