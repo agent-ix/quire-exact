@@ -13,16 +13,18 @@ relationships:
 Verify the public shared carrier and every kernel-produced cause of
 [FR-369](../functional/FR-369-typed-checked-invariant-causes.md) without
 substituting hand-built refusals for the production paths. The RT and QSV producers and
-CG/QSL mapping controls are exercised in their owning repositories after the
-kernel API lands. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
+CG/QSL mapping controls are exercised in their owning repositories during the
+coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
 
 ## Test Procedure
 
-1. Exhaustively match `CheckedInvariantCause` against thirty-one independently
+1. Exhaustively match `CheckedInvariantCause` against thirty independently
    named expectations, including `ScheduledComparisonRefused`,
    `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and
    `GeneratedEqualityCheckRejected` with
-   concrete kernel-owned `IllTypedCause` payloads.
+   concrete kernel-owned `IllTypedCause` payloads. Reject a
+   `CallDepthExceeded` variant: RT FR-273's final explicit-frame scheduler
+   has no depth-specific outcome, and denied `work_units` is `Incomplete`.
    Compile a use of the enum as `Copy`, `Clone`,
    `Debug`, `Eq`, `Hash` and `PartialEq`, and a `Refusal` as `Clone`, `Debug`,
    `Eq` and `PartialEq`. A source/compile check rejects construction of the
@@ -43,7 +45,7 @@ kernel API lands. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
    incompatible value-kind pair. Assert `CollectionKindMismatch`,
    `PopulationPair`, `ValueKindMismatch`, and `ValueKindMismatch` respectively.
    Check the pair is refused without a completed Boolean.
-5. For each of the thirty-one public cause variants, construct the typed
+5. For each of the thirty public cause variants, construct the typed
    `CheckedInvariant` and assert both catalog methods return `None` and that
    refusals with different causes compare unequal. Re-run FR-096's ordinary
    refusal table unchanged so the new path cannot erase a catalog code.
@@ -58,5 +60,9 @@ planned until their own tagged tests and inspection run.
 
 ## Status
 
-Planned for IR-707 kernel implementation. This spec-only slice runs no Rust
-test or Kani check.
+The current `tests/checked_invariant.rs` exhaustively tests the thirty-one-cause
+enum, including `CallDepthExceeded`; its target thirty-cause form awaits the
+IR-497 coordinated code cutover. Current `src/outcome.rs` still exports
+`CallDepthExceeded`, and IR-708's RT typed producer migration is in progress.
+This spec amendment changes no Rust constructor or test and claims no target
+test result.
