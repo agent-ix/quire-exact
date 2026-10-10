@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-11. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
+Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-13. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
 
 ## Test Procedure
 
@@ -23,6 +23,8 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 6. For AC-8, repeat all 4097 admissions with one result unit each; read both cumulative counters and the bounded log.
 7. For AC-9 and AC-10, construct separate meters with work and result limits exactly 4097, admit 4097 matching charges, then attempt one more matching unit and compare every counter and diagnostic field to the snapshot.
 8. For AC-11, after 4097 admissions inject an occurrence-1 named denial, compare state before/after its refusal, then retry with ordinary limits sufficient.
+9. For AC-12, on each of two fresh meters with work limits 10 and 100 and all other limits sufficient, admit two work units at an unrelated point, install an occurrence-1 denial at P, and request a three-work-unit `charge` at P. Compare every `Incomplete` field and the pre-refusal state across the two limits. Repeat on two fresh meters after admitting two work units, this time denying `charge_plan` at `equality.plan` with `pairs = 2`; compare its recorded reservation with the one work unit a successful plan would commit.
+10. For AC-13, first make a selected `charge` with a semantic size greater than its configured limit and independently confirm that the ordinary charge would refuse at that size counter, with other limits sufficient. Then inject occurrence 1 at the same point and repeat the charge. Separately, after admitting two work units under a configured work limit of 3 and otherwise sufficient limits, confirm that `charge_plan` with `pairs = 2` would refuse its four-unit work reservation, then inject occurrence 1 at `equality.plan` and repeat. Compare each returned record and every consumed counter and admission count to their pre-refusal values; keep cancellation inactive in both cases.
 
 ## Expected Results
 
@@ -35,7 +37,10 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 6. Both cumulative counters and admissions reach 4097 while the ordered diagnostic prefix stays at 4096.
 7. Each ordinary shortage reports its own limit kind and leaves all admitted state unchanged.
 8. The injected refusal is atomic and spent; retry updates exact accounting once without extending the prefix.
+9. The ordinary-point refusals under work limits 10 and 100 are identical: `WorkUnits`, point P, `limit = consumed = 2`, and `next_charge = 3`. Both plan refusals are `WorkUnits` at `equality.plan` with `limit = consumed = 2` and `next_charge = 4` (`pairs + 2`), rather than the plan's successful one-unit work commit. Neither configured limit appears in an injected record, and none of the refusals changes admitted state.
+10. The selected semantic-size charge returns its injected `WorkUnits` record rather than the otherwise first short size counter. The selected plan returns its injected `WorkUnits` record with `limit = consumed = 2` and `next_charge = 4`, rather than the ordinary work-refusal record whose `limit` would be the configured 3. No counter or admission count changes. This result does not assert precedence over cancellation.
 
 ## Status
 
 PR #9 adds executable Trace bindings for FR-358-AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.
+FR-358-AC-12 and AC-13 are specified here; their executable Trace bindings are follow-up work.
