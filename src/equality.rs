@@ -176,7 +176,7 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 continue;
             }
             (Value::Union(l), Value::Union(r)) if l.declaration() == r.declaration() => {
-                if l.variant() != r.variant() {
+                if l.variant() != r.variant() && l.payload().len() != r.payload().len() {
                     false
                 } else if l.payload().len() != r.payload().len() {
                     return Err(Refusal::CheckedInvariant {
