@@ -1823,8 +1823,8 @@ mod rational_target_ieee {
 
     use crate::{
         ieee_to_exact, Cancel, CancelCause, Charge, ChargePoint, IeeeExact, IeeeExactLoss,
-        IeeeValue, Incomplete, InjectedDenial, Integer, IntegerInterval, LimitKind, Meter,
-        Outcome, Rational, RationalDomain, Refusal, ScalarLimits, Undefined,
+        IeeeValue, Incomplete, InjectedDenial, Integer, IntegerInterval, LimitKind, Meter, Outcome,
+        Rational, RationalDomain, Refusal, ScalarLimits, Undefined,
     };
 
     const POINTS: [ChargePoint; 3] = [
@@ -1867,11 +1867,17 @@ mod rational_target_ieee {
         ]
     }
 
-    fn assert_value(outcome: Outcome<IeeeExact>, numerator: i64, denominator: i64,
-        loss: Option<IeeeExactLoss>) {
+    fn assert_value(
+        outcome: Outcome<IeeeExact>,
+        numerator: i64,
+        denominator: i64,
+        loss: Option<IeeeExactLoss>,
+    ) {
         let exact = outcome.completed().expect("conversion must complete");
-        assert_eq!(exact.value(), &Rational::new(Integer::from(numerator),
-            Integer::from(denominator)).unwrap());
+        assert_eq!(
+            exact.value(),
+            &Rational::new(Integer::from(numerator), Integer::from(denominator)).unwrap()
+        );
         assert_eq!(exact.loss(), loss);
     }
 
@@ -1891,8 +1897,10 @@ mod rational_target_ieee {
             };
             assert_eq!(meter.consumed(kind), expected, "{kind:?}");
         }
-        assert_eq!(meter.admission_count(), u64::try_from(admitted).unwrap()
-            + u64::from(precharged));
+        assert_eq!(
+            meter.admission_count(),
+            u64::try_from(admitted).unwrap() + u64::from(precharged)
+        );
         #[cfg(feature = "test-support")]
         {
             let mut expected = alloc::vec::Vec::new();
@@ -1905,24 +1913,38 @@ mod rational_target_ieee {
         }
     }
 
-    fn assert_incomplete(outcome: Outcome<IeeeExact>, point: ChargePoint,
-        kind: LimitKind, limit: u64, consumed: u64, next: u64) {
-        assert_eq!(outcome, Outcome::Incomplete(Incomplete {
-            limit_kind: kind,
-            limit,
-            consumed,
-            next_charge: Integer::from(next),
-            charge_point: point,
-        }));
+    fn assert_incomplete(
+        outcome: Outcome<IeeeExact>,
+        point: ChargePoint,
+        kind: LimitKind,
+        limit: u64,
+        consumed: u64,
+        next: u64,
+    ) {
+        assert_eq!(
+            outcome,
+            Outcome::Incomplete(Incomplete {
+                limit_kind: kind,
+                limit,
+                consumed,
+                next_charge: Integer::from(next),
+                charge_point: point,
+            })
+        );
     }
 
     fn precharge(limits: ScalarLimits) -> Meter {
         let mut meter = Meter::new(limits);
-        meter.charge(Charge::new(ChargePoint::FunctionCall)
-            .work(Integer::from(2_u64)).results(1)
-            .size(LimitKind::IntegerBits, 80)
-            .size(LimitKind::ValueOccurrences, 5)
-            .size(LimitKind::TextScalars, 7)).unwrap();
+        meter
+            .charge(
+                Charge::new(ChargePoint::FunctionCall)
+                    .work(Integer::from(2_u64))
+                    .results(1)
+                    .size(LimitKind::IntegerBits, 80)
+                    .size(LimitKind::ValueOccurrences, 5)
+                    .size(LimitKind::TextScalars, 7),
+            )
+            .unwrap();
         assert_prefix(&meter, 0, 0, true);
         assert_eq!(meter.limits(), &limits);
         meter
@@ -1936,7 +1958,14 @@ mod rational_target_ieee {
         let polls = AtomicUsize::new(0);
         let cancel = Cancel::observing(move || {
             if polls.fetch_add(1, Ordering::Relaxed) + 1 == poll {
-                observed.upgrade().unwrap().lock().unwrap().as_ref().unwrap().cancel(cause);
+                observed
+                    .upgrade()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .cancel(cause);
             }
         });
         *slot.lock().unwrap() = Some(cancel.clone());
@@ -1955,9 +1984,17 @@ mod rational_target_ieee {
         }
         for (value, width, loss) in [
             (IeeeValue::binary32(0), 32, None),
-            (IeeeValue::binary32(0x8000_0000), 32, Some(IeeeExactLoss::NegativeZeroSign)),
+            (
+                IeeeValue::binary32(0x8000_0000),
+                32,
+                Some(IeeeExactLoss::NegativeZeroSign),
+            ),
             (IeeeValue::binary64(0), 64, None),
-            (IeeeValue::binary64(0x8000_0000_0000_0000), 64, Some(IeeeExactLoss::NegativeZeroSign)),
+            (
+                IeeeValue::binary64(0x8000_0000_0000_0000),
+                64,
+                Some(IeeeExactLoss::NegativeZeroSign),
+            ),
         ] {
             let mut meter = Meter::new(limits());
             assert_value(ieee_to_exact(value, &domain, &mut meter), 0, 1, loss);
@@ -1980,8 +2017,10 @@ mod rational_target_ieee {
             (IeeeValue::binary64(0xfff0_0000_0000_0000), 64),
         ] {
             let mut meter = Meter::new(limits());
-            assert_eq!(ieee_to_exact(value, &domain, &mut meter),
-                Outcome::Undefined(Undefined::IeeeNotFinite));
+            assert_eq!(
+                ieee_to_exact(value, &domain, &mut meter),
+                Outcome::Undefined(Undefined::IeeeNotFinite)
+            );
             assert_prefix(&meter, width, 1, false);
         }
     }
@@ -1992,10 +2031,12 @@ mod rational_target_ieee {
         for domain in [domain(1, Integer::from(2_i64)), domain(3, Integer::one())] {
             for (value, width) in fixtures() {
                 let mut meter = Meter::new(limits());
-                assert_eq!(ieee_to_exact(value, &domain, &mut meter),
+                assert_eq!(
+                    ieee_to_exact(value, &domain, &mut meter),
                     Outcome::Refused(Refusal::IeeeRationalOutOfDomain {
                         target: alloc::boxed::Box::new(domain.clone()),
-                    }));
+                    })
+                );
                 assert_prefix(&meter, width, 2, false);
             }
         }
@@ -2008,26 +2049,51 @@ mod rational_target_ieee {
         for (value, width) in fixtures() {
             for (admitted, point) in POINTS.into_iter().enumerate() {
                 let work = u64::try_from(admitted).unwrap();
-                let configured = ScalarLimits { work_units: work, ..limits() };
+                let configured = ScalarLimits {
+                    work_units: work,
+                    ..limits()
+                };
                 let mut meter = Meter::new(configured);
-                assert_incomplete(ieee_to_exact(value, &domain, &mut meter), point,
-                    LimitKind::WorkUnits, work, work, 1);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    point,
+                    LimitKind::WorkUnits,
+                    work,
+                    work,
+                    1,
+                );
                 assert_prefix(&meter, width, admitted, false);
                 assert_eq!(meter.limits(), &configured);
 
                 let mut meter = Meter::new(limits()).with_injected_denial(InjectedDenial {
-                    point, occurrence: NonZeroU64::new(1).unwrap(),
+                    point,
+                    occurrence: NonZeroU64::new(1).unwrap(),
                 });
-                assert_incomplete(ieee_to_exact(value, &domain, &mut meter), point,
-                    LimitKind::WorkUnits, work, work, 1);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    point,
+                    LimitKind::WorkUnits,
+                    work,
+                    work,
+                    1,
+                );
                 assert_prefix(&meter, width, admitted, false);
                 // The real meter spends its one-shot injected denial.
                 assert_value(ieee_to_exact(value, &domain, &mut meter), 3, 2, None);
             }
-            let configured = ScalarLimits { result_units: 0, ..limits() };
+            let configured = ScalarLimits {
+                result_units: 0,
+                ..limits()
+            };
             let mut meter = Meter::new(configured);
-            assert_incomplete(ieee_to_exact(value, &domain, &mut meter), POINTS[2],
-                LimitKind::ResultUnits, 0, 0, 1);
+            assert_incomplete(
+                ieee_to_exact(value, &domain, &mut meter),
+                POINTS[2],
+                LimitKind::ResultUnits,
+                0,
+                0,
+                1,
+            );
             assert_prefix(&meter, width, 2, false);
             assert_eq!(meter.limits(), &configured);
         }
@@ -2042,15 +2108,29 @@ mod rational_target_ieee {
         ] {
             let denominator = Integer::one().shifted_left(exponent);
             let domain = domain(1, denominator.clone());
-            let configured = ScalarLimits { integer_bits: width, ..limits() };
+            let configured = ScalarLimits {
+                integer_bits: width,
+                ..limits()
+            };
             let mut meter = Meter::new(configured);
-            assert_incomplete(ieee_to_exact(value, &domain, &mut meter), POINTS[1],
-                LimitKind::IntegerBits, width, width, next);
+            assert_incomplete(
+                ieee_to_exact(value, &domain, &mut meter),
+                POINTS[1],
+                LimitKind::IntegerBits,
+                width,
+                width,
+                next,
+            );
             assert_prefix(&meter, width, 1, false);
             assert_eq!(meter.limits(), &configured);
             let mut meter = Meter::new(limits());
-            let exact = ieee_to_exact(value, &domain, &mut meter).completed().unwrap();
-            assert_eq!(exact.value(), &Rational::new(Integer::one(), denominator).unwrap());
+            let exact = ieee_to_exact(value, &domain, &mut meter)
+                .completed()
+                .unwrap();
+            assert_eq!(
+                exact.value(),
+                &Rational::new(Integer::one(), denominator).unwrap()
+            );
             assert_eq!(exact.loss(), None);
             assert_eq!(meter.consumed(LimitKind::IntegerBits), next);
             assert_eq!(meter.consumed(LimitKind::WorkUnits), 3);
@@ -2070,15 +2150,27 @@ mod rational_target_ieee {
                 let cancel = Cancel::new();
                 cancel.cancel(cause);
                 let mut meter = Meter::new(limits()).with_cancel(cancel.clone());
-                assert_incomplete(ieee_to_exact(value, &domain, &mut meter), POINTS[0],
-                    LimitKind::WorkUnits, 0, 0, 1);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    POINTS[0],
+                    LimitKind::WorkUnits,
+                    0,
+                    0,
+                    1,
+                );
                 assert_prefix(&meter, width, 0, false);
                 assert_eq!(cancel.tripped(), Some(cause));
                 for (poll, admitted, point, work) in [(2, 1, POINTS[1], 1), (3, 2, POINTS[2], 2)] {
                     let (cancel, _keep_observer) = cancel_at(poll, cause);
                     let mut meter = Meter::new(limits()).with_cancel(cancel.clone());
-                    assert_incomplete(ieee_to_exact(value, &domain, &mut meter), point,
-                        LimitKind::WorkUnits, work, work, 1);
+                    assert_incomplete(
+                        ieee_to_exact(value, &domain, &mut meter),
+                        point,
+                        LimitKind::WorkUnits,
+                        work,
+                        work,
+                        1,
+                    );
                     assert_prefix(&meter, width, admitted, false);
                     assert_eq!(cancel.tripped(), Some(cause));
                 }
@@ -2102,20 +2194,49 @@ mod rational_target_ieee {
             assert_prefix(&meter, width, 3, true);
             assert_eq!(meter.limits(), &configured);
             for (configured, kind, limit, consumed) in [
-                (ScalarLimits { work_units: 4, ..limits() }, LimitKind::WorkUnits, 4, 4),
-                (ScalarLimits { result_units: 1, ..limits() }, LimitKind::ResultUnits, 1, 1),
+                (
+                    ScalarLimits {
+                        work_units: 4,
+                        ..limits()
+                    },
+                    LimitKind::WorkUnits,
+                    4,
+                    4,
+                ),
+                (
+                    ScalarLimits {
+                        result_units: 1,
+                        ..limits()
+                    },
+                    LimitKind::ResultUnits,
+                    1,
+                    1,
+                ),
             ] {
                 let mut meter = precharge(configured);
-                assert_incomplete(ieee_to_exact(value, &domain, &mut meter), POINTS[2],
-                    kind, limit, consumed, 1);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    POINTS[2],
+                    kind,
+                    limit,
+                    consumed,
+                    1,
+                );
                 assert_prefix(&meter, width, 2, true);
                 assert_eq!(meter.limits(), &configured);
             }
             let mut meter = precharge(configured).with_injected_denial(InjectedDenial {
-                point: POINTS[2], occurrence: NonZeroU64::new(1).unwrap(),
+                point: POINTS[2],
+                occurrence: NonZeroU64::new(1).unwrap(),
             });
-            assert_incomplete(ieee_to_exact(value, &domain, &mut meter), POINTS[2],
-                LimitKind::WorkUnits, 4, 4, 1);
+            assert_incomplete(
+                ieee_to_exact(value, &domain, &mut meter),
+                POINTS[2],
+                LimitKind::WorkUnits,
+                4,
+                4,
+                1,
+            );
             assert_prefix(&meter, width, 2, true);
             assert_eq!(meter.limits(), &configured);
             assert_value(ieee_to_exact(value, &domain, &mut meter), 3, 2, None);
@@ -2123,8 +2244,14 @@ mod rational_target_ieee {
                 let meter = precharge(configured);
                 let (cancel, _keep_observer) = cancel_at(3, cause);
                 let mut meter = meter.with_cancel(cancel.clone());
-                assert_incomplete(ieee_to_exact(value, &domain, &mut meter), POINTS[2],
-                    LimitKind::WorkUnits, 4, 4, 1);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    POINTS[2],
+                    LimitKind::WorkUnits,
+                    4,
+                    4,
+                    1,
+                );
                 assert_prefix(&meter, width, 2, true);
                 assert_eq!(meter.limits(), &configured);
                 assert_eq!(cancel.tripped(), Some(cause));
