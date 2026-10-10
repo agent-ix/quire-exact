@@ -37,13 +37,26 @@ algorithm into QSV or infer an expected count from the counter under test.
    limb-step bounds. Include an endpoint requiring every available division
    pass, coefficient equality requiring the full comparison, native 32-bit
    limb crossings, and a shift exceeding the endpoint's decimal length.
+   Exercise actual inline and Large coefficient/endpoint paths through the
+   production helper. Include inline zero and i128 MIN/MAX and positive and
+   negative Large magnitudes beyond i128, with limb crossings on both paths.
+   Prepare independent expected limbs and membership oracles before observation;
+   a maintained BigInt iterator may serve as a stream oracle prepared outside
+   the observed interval, not as a replacement for the production inline path.
+   Observe each actual stream's least-significant-first limbs with no allocation,
+   at most four inline limbs, and initially empty inline caches remaining empty.
    Observe production scratch requests and limb steps through a seam that
    does not replace helper arithmetic. Assert the formula bound, one reusable
    reservation, no scale-sized scratch and early quotient-zero termination.
 4. Deny the actual fallible scratch reservation on a small otherwise-valid
    fixture, including the shifted upper-equality fixture from step 1. Compare
    its typed allocation request with the observed request, including additional
-   elements, element width and layout bytes. Separately exercise checked native
+   elements, element width and layout bytes. Repeat denial through actual inline
+   and Large production helper paths with independently prepared valid fixtures;
+   confirm that denial does not initialize an initially empty inline cache or
+   construct a BigInt image. Stream traversal requests no allocation; this does
+   not assert that the helper's one fallible scratch request is allocation-free.
+   Separately exercise checked native
    layout/capacity overflow through the production checked-layout calculation
    with boundary-sized measure inputs, without constructing an impossibly
    large Decimal; this is not an allocator-denial fixture. Remove the
@@ -67,7 +80,8 @@ algorithm into QSV or infer an expected count from the counter under test.
    evaluator meter remains unchanged. Exercise replay's final membership
    through the same admission owner and retain conversion ownership where
    that shared operation is initiated by conversion.
-7. Analyze the final production helper and maintained borrowed iterator against
+7. Analyze the final production helper, inline fixed-width unsigned-magnitude
+   stream and maintained Large borrowed iterator against
    the Euclidean decomposition, remainder accumulation, carry width, sign
    reversal, checked scratch layout and per-step polling claims. Account for
    every allocation and every input-sized loop. Record requested layout bytes
@@ -80,7 +94,11 @@ algorithm into QSV or infer an expected count from the counter under test.
 
 Membership agrees with the independent mathematical oracle, preserving all
 accepted forms and inclusive boundaries. Observed helper work and scratch
-requests satisfy the symbolic admitted envelope. Actual allocation denial,
+requests satisfy the symbolic admitted envelope on both actual representation
+paths. Inline streams yield at most four least-significant-first u32 limbs,
+preserve the full magnitude of i128 MIN, and leave initially empty caches empty.
+Neither stream allocates or constructs a BigInt image; the helper retains its
+one fallible scratch request. Actual allocation denial,
 checked capacity refusal and original-handle cancellation have distinct typed
 causes; stopped calls release scratch and expose no accepted result. Integrated
 N/N-1 controls preserve existing phase ownership, cumulative spend and event
