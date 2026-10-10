@@ -409,6 +409,9 @@ impl ValueType {
             (Self::Composite(declaration), Value::Composite(composite)) => {
                 composite.declaration() == *declaration
             }
+            (Self::Composite(declaration), Value::Union(union)) => {
+                union.declaration() == *declaration
+            }
             (Self::Collection(declared), Value::Collection(collection)) => {
                 collection.collection_type() == &**declared
             }
