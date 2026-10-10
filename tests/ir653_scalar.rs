@@ -6,9 +6,9 @@ use core::str::FromStr;
 
 use quire_exact::{
     evaluate_boolean, evaluate_integer_arithmetic, evaluate_rational_arithmetic, order_numbers,
-    retain_boolean, BooleanConnective, ChargePoint, InjectedDenial, Integer, IntegerArithmetic,
-    LimitKind, Meter, OrderedOperands, OrderingOperator, Outcome, Rational, RationalArithmetic,
-    ScalarLimits, Undefined,
+    retain_boolean, BooleanConnective, ChargePoint, Incomplete, InjectedDenial, Integer,
+    IntegerArithmetic, LimitKind, Meter, OrderedOperands, OrderingOperator, Outcome, Rational,
+    RationalArithmetic, ScalarLimits, Undefined,
 };
 
 fn limits() -> ScalarLimits {
@@ -28,6 +28,83 @@ fn limits() -> ScalarLimits {
 
 fn meter() -> Meter {
     Meter::new(limits())
+}
+
+/// Trace: FR-362-AC-19
+#[test]
+fn public_integer_arithmetic_admits_exact_bits_and_denies_one_under() {
+    #[derive(Clone, Copy)]
+    enum Operation {
+        Add,
+        Subtract,
+        Multiply,
+    }
+
+    use ChargePoint::IntegerArithmeticArithmetic as Arithmetic;
+    #[cfg(feature = "test-support")]
+    use ChargePoint::{
+        IntegerArithmeticOperands as Operands, IntegerArithmeticResultRetain as Retain,
+    };
+
+    let cases = [
+        (8_i64, 3_i64, 11_i64, 4_u64, 2_u64, 5_u64, Operation::Add),
+        (3, 8, 11, 2, 4, 5, Operation::Add),
+        (8, 7, 1, 4, 3, 5, Operation::Subtract),
+        (8, 3, 24, 4, 2, 6, Operation::Multiply),
+    ];
+    for (left, right, result, left_bits, right_bits, arithmetic_bits, operator) in cases {
+        let bit_length = |n: i64| u64::from(64 - n.unsigned_abs().leading_zeros()).max(1);
+        assert_eq!(
+            (bit_length(left), bit_length(right)),
+            (left_bits, right_bits)
+        );
+        let request = match operator {
+            Operation::Add | Operation::Subtract => left_bits.max(right_bits) + 1,
+            Operation::Multiply => left_bits + right_bits,
+        };
+        assert_eq!(request, arithmetic_bits);
+        let (left, right) = (Integer::from(left), Integer::from(right));
+        let operation = match operator {
+            Operation::Add => IntegerArithmetic::Add(&left, &right),
+            Operation::Subtract => IntegerArithmetic::Subtract(&left, &right),
+            Operation::Multiply => IntegerArithmetic::Multiply(&left, &right),
+        };
+
+        let mut exact_limits = limits();
+        exact_limits.integer_bits = arithmetic_bits;
+        let mut exact = Meter::new(exact_limits);
+        let outcome = evaluate_integer_arithmetic(operation, None, &mut exact);
+        assert_eq!(outcome, Outcome::Completed(Integer::from(result)));
+        assert_eq!(exact.consumed(LimitKind::IntegerBits), arithmetic_bits);
+        assert_eq!(exact.consumed(LimitKind::ValueOccurrences), 2);
+        assert_eq!(exact.consumed(LimitKind::WorkUnits), 3);
+        assert_eq!(exact.consumed(LimitKind::ResultUnits), 1);
+        assert_eq!(exact.admission_count(), 3);
+        #[cfg(feature = "test-support")]
+        assert_eq!(exact.admitted_charges(), [Operands, Arithmetic, Retain]);
+
+        let mut low_limits = limits();
+        low_limits.integer_bits = arithmetic_bits - 1;
+        let mut low = Meter::new(low_limits);
+        let outcome = evaluate_integer_arithmetic(operation, None, &mut low);
+        assert_eq!(
+            outcome,
+            Outcome::Incomplete(Incomplete {
+                limit_kind: LimitKind::IntegerBits,
+                limit: arithmetic_bits - 1,
+                consumed: left_bits.max(right_bits),
+                next_charge: Integer::from(arithmetic_bits),
+                charge_point: Arithmetic,
+            })
+        );
+        assert_eq!(low.consumed(LimitKind::IntegerBits), 4);
+        assert_eq!(low.consumed(LimitKind::ValueOccurrences), 2);
+        assert_eq!(low.consumed(LimitKind::WorkUnits), 1);
+        assert_eq!(low.consumed(LimitKind::ResultUnits), 0);
+        assert_eq!(low.admission_count(), 1);
+        #[cfg(feature = "test-support")]
+        assert_eq!(low.admitted_charges(), [Operands]);
+    }
 }
 
 fn rational(n: i128, d: i128) -> Rational {
