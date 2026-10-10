@@ -25,3 +25,14 @@ All eight FR-370 criteria have trace-tagged tests, and the changed behavior has 
 ## Coverage
 
 Reviewed the exact six-file PR diff against FR-370-AC-1 through AC-8 and TC-918. The computed Quire matrix tags all eight FR-370 criteria; repository-wide strict matrix reports unrelated planned criteria. Pre-PR `make ci` and changed-document Quire validation receipts at the reviewed SHA both report exit 0. Plan completion: not assessed.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 3c75079496ed49e720a87c0d6e1ee0bebe3eff59 |
+| FND-002 | fixed | 3c75079496ed49e720a87c0d6e1ee0bebe3eff59 |
+
+## Disposition verdict
+
+**PASS at 3c75079496ed49e720a87c0d6e1ee0bebe3eff59** — Both medium charge-evidence findings are fixed. The focused native-equality and existing-kind control tests pass on this head.
