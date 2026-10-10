@@ -78,10 +78,18 @@ inside a scalar check or iterator operation.
 
 4. The kernel SHALL enforce the above envelope using one reusable
    fallibly-reserved scratch buffer of `u32` magnitude limbs and borrowed
-   magnitude-limb iterators. The operation SHALL obtain magnitude limbs from
-   the maintained integer dependency's allocation-free borrowed iterator,
-   rather than allocating an absolute value, radix string, power of ten,
-   cloned BigInt or BigInt arithmetic result.
+   magnitude-limb streams. For an inline `i128`, the operation SHALL obtain
+   its unsigned magnitude using `unsigned_abs`, including `i128::MIN`, and
+   yield at most four `u32` limbs in least-significant-first order using
+   constant-sized fixed-width state; zero yields no limbs. For a Large
+   arbitrary-precision representation, the operation SHALL obtain magnitude
+   limbs from the maintained integer dependency's allocation-free borrowed
+   iterator. Neither stream SHALL initialize or change a materialization cache,
+   construct a BigInt image, or request allocation. The operation SHALL NOT
+   allocate an absolute value, radix string, power of ten, cloned BigInt or
+   BigInt arithmetic result. Each yielded limb SHALL participate in the existing
+   scratch-copy or coefficient-comparison limb step, without an additional
+   input-sized traversal.
 5. For a same-sign nonzero endpoint comparison, the helper SHALL copy the
    endpoint's magnitude into the scratch buffer, padding only within `L`.
    It SHALL divide that scratch magnitude by ten at most `k` times, stopping
@@ -157,11 +165,11 @@ semantic meter, replacement cancellation handle or partial admission output.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-372-AC-1 | Completed results match the authoritative membership rule for inclusive lower/upper equality, adjacent outsiders, negative and zero values, scale refusal, all rounding spellings and equivalent retained representations; neither representation is changed. The `[0,100]`, scale bounds `2,2`, `(1,0)` fixture completes true at the exact upper bound. | Test |
-| FR-372-AC-2 | Production helper observations on admitted `B,S` fixtures stay within the one-request `4 × L_B`-byte scratch envelope and `2 × (min(S,B)+2) × L_B` limb-step bound, including a longest-pass endpoint fixture and a large shift that terminates when quotient becomes zero. Borrowed dependency iterators and all scalar steps contain no input-sized hidden allocation or work. | Test |
+| FR-372-AC-2 | Production helper observations on admitted `B,S` fixtures stay within the one-request `4 × L_B`-byte scratch envelope and `2 × (min(S,B)+2) × L_B` limb-step bound, including a longest-pass endpoint fixture and a large shift that terminates when quotient becomes zero. Controls exercise actual inline and Large production paths, including zero, 32-bit limb crossings, i128 MIN/MAX and signed magnitudes beyond i128. Stream traversal requests no allocation and leaves cold inline caches empty; inline streams yield at most four least-significant-first u32 limbs. Both stream mechanisms and all scalar steps contain no input-sized hidden allocation or work. The helper retains its one fallible scratch request. | Test |
 | FR-372-AC-3 | Denying the actual scratch reservation reports its actual native request as typed allocation failure. A separate checked-capacity failure retains its own classification. Removing the allocation denial yields the same membership as a fresh call, with no partial accepted result after either refusal. | Test |
 | FR-372-AC-4 | A pre-cancelled original handle causes no scratch request. Cancellation observed during the longest admitted division/comparison path returns the original cause before another limb step or result; cancellation observed immediately after successful reservation prevents scratch work. Neither failure is classified as nonmembership or work exhaustion. | Test |
 | FR-372-AC-5 | An integrated supplied Decimal fixture with independently enumerated N owning logical events succeeds at N and denies its actual next event at N-1 before entering that event's helper. Its already-spent budget and original cancellation are retained across arguments, with no additional helper event, per-limb debit, evaluator meter change or partial descriptor. Allocation/capacity/cancellation causes retain their supplied-admission locus. | Test |
-| FR-372-AC-6 | Final implementation qualification establishes the Euclidean/remainder and sign invariants, exact reservation boundary, checked layout conversions, allocation-free borrowed dependency iterator and stated arithmetic polling gap. Its record distinguishes requested storage from allocator overhead and work latency from unbounded allocator elapsed time. | Analysis |
+| FR-372-AC-6 | Final implementation qualification establishes the Euclidean/remainder and sign invariants, exact reservation boundary, checked layout conversions, allocation-free inline unsigned-magnitude stream and Large borrowed dependency iterator, absence of cache initialization or BigInt-image construction on those streams, and stated arithmetic polling gap. Its record distinguishes requested storage from allocator overhead and work latency from unbounded allocator elapsed time. | Analysis |
 
 ## Dependencies
 
@@ -177,8 +185,11 @@ semantic meter, replacement cancellation handle or partial admission output.
 - IR-718 specifies this prerequisite; IR-719 owns subsequent production kernel
   and QSV integration. QSL-503's generic Decimal/full-size supplied path awaits
   the reviewed contract, implemented qualification and coherent released heads.
-- The helper's maintained dependency provides the borrowed magnitude iterator
-  `BigInt::iter_u32_digits`. The new helper preserves `no_std` and
+- The helper's maintained dependency provides the Large representation's
+  borrowed magnitude iterator `BigInt::iter_u32_digits`. The inline stream uses
+  the fixed-width unsigned magnitude specified above and preserves the cache
+  observations of [FR-371](./FR-371-bounded-integer-representation-refinement.md).
+  The new helper preserves `no_std` and
   `#![forbid(unsafe_code)]`; it adds no dependency on another ecosystem crate.
 
 ## Status
