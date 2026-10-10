@@ -64,6 +64,7 @@ mod cancel;
 mod collection;
 mod comparison;
 mod decimal;
+mod decimal_membership;
 mod division;
 mod equality;
 mod identity;
@@ -109,6 +110,7 @@ pub use decimal::{
     DecimalLoss, DecimalOperation, DecimalRepresentation, DecimalResult, DecimalType, Placed,
     Placement, RoundingMode,
 };
+pub use decimal_membership::DecimalMembershipFailure;
 pub use division::{divide, modulo, DivisionMember, DivisionProfile};
 pub use equality::{plan_equality, planned_equality, EqualityPlan};
 pub use identity::{
