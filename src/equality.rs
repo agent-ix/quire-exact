@@ -20,7 +20,7 @@
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::integer::Integer;
-use crate::outcome::{Outcome, Refusal, Stop};
+use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
 use crate::value::{FieldValue, Value};
 use alloc::vec;
 
@@ -178,7 +178,9 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
             (Value::Collection(l), Value::Collection(r)) => {
                 let kind = l.collection_type().kind();
                 if kind != r.collection_type().kind() {
-                    return Err(Refusal::CheckedInvariant);
+                    return Err(Refusal::CheckedInvariant {
+                        cause: CheckedInvariantCause::CollectionKindMismatch,
+                    });
                 }
                 let (l, r) = (l.elements(), r.elements());
                 if l.len() != r.len() {
@@ -188,6 +190,11 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                     pending.extend(ranks.map(|(l, r)| Pair::Values(l, r)));
                     continue;
                 }
+            }
+            (Value::Population(_), Value::Population(_)) => {
+                return Err(Refusal::CheckedInvariant {
+                    cause: CheckedInvariantCause::PopulationPair,
+                });
             }
             (
                 Value::Boolean(_)
@@ -204,7 +211,11 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 | Value::Composite(_)
                 | Value::Collection(_),
                 _,
-            ) => return Err(Refusal::CheckedInvariant),
+            ) => {
+                return Err(Refusal::CheckedInvariant {
+                    cause: CheckedInvariantCause::ValueKindMismatch,
+                });
+            }
         };
         equal = equal && leaf;
     }
@@ -280,7 +291,7 @@ mod tests {
 
     /// TC-297 (FR-089-AC-6): a population pair is not an equality operand
     /// pair in the kernel.
-    #[trace("TC-297", "FR-089-AC-6")]
+    #[trace("TC-297", "FR-089-AC-6", "FR-369-AC-2")]
     #[test]
     fn plan_pairs_refuses_a_population_pair() {
         use crate::identity::PopulationId;
@@ -295,8 +306,65 @@ mod tests {
         let right = Value::Population(PopulationId::from_digest(digest(2)));
         assert!(matches!(
             plan_pairs(&left, &right),
-            Err(Refusal::CheckedInvariant)
+            Err(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::PopulationPair,
+            })
         ));
+        assert!(matches!(
+            planned_equality(&left, &right, &mut Meter::new(generous_limits())),
+            Outcome::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::PopulationPair,
+            })
+        ));
+        assert!(matches!(
+            plan_pairs(&left, &left),
+            Err(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::PopulationPair,
+            })
+        ));
+    }
+
+    /// Trace: FR-369-AC-2
+    #[test]
+    fn incompatible_pairs_report_specific_causes_without_a_boolean() {
+        use crate::collection::{from_admitted, CollectionKind, CollectionType};
+        use crate::identity::PopulationId;
+        use crate::value::ValueType;
+
+        let collection =
+            |kind| from_admitted(CollectionType::new(kind, ValueType::Integer, None), vec![]);
+        let population = || Value::Population(PopulationId::from_digest([1; 32]));
+        let cases = [
+            (
+                collection(CollectionKind::Set),
+                collection(CollectionKind::Bag),
+                CheckedInvariantCause::CollectionKindMismatch,
+            ),
+            (
+                population(),
+                Value::Boolean(true),
+                CheckedInvariantCause::ValueKindMismatch,
+            ),
+            (
+                Value::Boolean(true),
+                population(),
+                CheckedInvariantCause::ValueKindMismatch,
+            ),
+            (
+                Value::Integer(Integer::one()),
+                Value::Boolean(true),
+                CheckedInvariantCause::ValueKindMismatch,
+            ),
+        ];
+        for (left, right, cause) in cases {
+            let expected = Refusal::CheckedInvariant { cause };
+            assert!(matches!(plan_pairs(&left, &right), Err(actual) if actual == expected));
+            assert_eq!(plan_equality(&left, &right), Err(expected.clone()));
+            assert_eq!(
+                planned_equality(&left, &right, &mut Meter::new(generous_limits())),
+                Outcome::Refused(expected)
+            );
+        }
     }
 
     /// a reference pair of different universes refuses with

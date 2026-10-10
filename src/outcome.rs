@@ -29,6 +29,7 @@
 
 use crate::accounting::Incomplete;
 use crate::collection::{CardinalityBound, CollectionKind};
+use crate::comparison::IllTypedCause;
 use crate::decimal::DecimalType;
 use crate::division::DivisionMember;
 use crate::identity::UniverseId;
@@ -109,6 +110,88 @@ pub enum Undefined {
     /// undefined reason and builds no record. Only a `sum` checked under
     /// `CheckMode::Kernel` can meet it.
     SumOutOfDomain,
+}
+
+/// The closed internal-fault causes shared by checked kernel operations,
+/// runtime checking residue, shared semantic values and generated checked
+/// oracles (FR-369).
+/// These are never catalog refusal codes or caller-supplied messages.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CheckedInvariantCause {
+    /// An evaluated collection element is outside its declared type.
+    CollectionElementNotAdmitted,
+    /// A deferred composite result is outside its declared type.
+    DeferredResultNotAdmitted,
+    /// A collection member has no canonical ordering key.
+    CanonicalKeyUnavailable,
+    /// A refused division member requires a bounded integer domain.
+    BoundedDivisionExpected,
+    /// Equality reached collections of different kinds.
+    CollectionKindMismatch,
+    /// The kernel cannot resolve equality of two populations.
+    PopulationPair,
+    /// Equality reached incompatible value kinds.
+    ValueKindMismatch,
+    /// A checked call exhausted its call-depth budget.
+    CallDepthExceeded,
+    /// A checked call names no known function.
+    UnknownCheckedFunction,
+    /// An expression was checked against another package.
+    ForeignCheckedExpression,
+    /// A checked call cannot borrow its shared meter mutably.
+    MeterBorrowConflict,
+    /// A checked equality schedule received another value shape.
+    EqualityScheduleMismatch,
+    /// A scheduled comparator refused after checking.
+    ScheduledComparisonRefused {
+        /// The original kernel-owned comparison cause.
+        cause: IllTypedCause,
+    },
+    /// A completed equality operand is outside its checked source type.
+    EqualityOperandSourceNotAdmitted,
+    /// An equality conversion to integer received a nonintegral decimal.
+    EqualityOperandNonIntegralDecimal,
+    /// A checked equality quantity conversion refused after checking.
+    EqualityQuantityConversionRejected {
+        /// The original kernel-owned quantity-conversion cause.
+        cause: IllTypedCause,
+    },
+    /// An exact equality quantity conversion returned decimal or integer placement.
+    EqualityQuantityNonExactPlacement,
+    /// An equality conversion received an incompatible source, target or value shape.
+    EqualityConversionShapeMismatch,
+    /// A converted equality operand is outside its checked target type.
+    EqualityOperandTargetNotAdmitted,
+    /// A checked equality quantity's unit could not be resolved.
+    EqualityUnitUnresolved,
+    /// A checked equality enum operand's variant could not be resolved.
+    EqualityEnumVariantUnresolved,
+    /// Scale-zero placement retained a value other than an integer.
+    ExpectedIntegerPlacement,
+    /// A generated declaration placeholder ran before replacement.
+    GeneratedBodyPlaceholderInvoked,
+    /// A generated body received the wrong argument count or shape.
+    GeneratedArgumentShapeMismatch,
+    /// A generated equality operand has an unsupported kind.
+    GeneratedOperandKindUnsupported,
+    /// A generated outcome adapter received an unexpected arm.
+    GeneratedUnexpectedOutcome,
+    /// Generated integer bounds did not form a nonempty interval.
+    GeneratedIntervalInvalid,
+    /// A generated body could not form its type environment.
+    GeneratedEnvironmentRejected,
+    /// A generated comparison type failed checking.
+    GeneratedTypeCheckRejected {
+        /// The original kernel-owned type-check cause.
+        cause: IllTypedCause,
+    },
+    /// A generated equality failed checking.
+    GeneratedEqualityCheckRejected {
+        /// The original kernel-owned equality-check cause.
+        cause: IllTypedCause,
+    },
+    /// A generated oracle could not reconstruct a declared type.
+    GeneratedDescriptorReconstructionFailed,
 }
 
 /// Why a defined result is refused. Refusals never carry the refused value.
@@ -212,7 +295,10 @@ pub enum Refusal {
     },
     /// A checked-program invariant failed during evaluation; unreachable
     /// for an admitted program.
-    CheckedInvariant,
+    CheckedInvariant {
+        /// The precise checked failure, never a catalog cause.
+        cause: CheckedInvariantCause,
+    },
 }
 
 impl Refusal {
@@ -236,7 +322,7 @@ impl Refusal {
             Self::IeeeRationalOutOfDomain { .. } => Some("ieee_rational_out_of_domain"),
             Self::ForeignReference { .. } => Some("foreign_reference"),
             Self::CardinalityOutOfBound { .. } => Some("cardinality_out_of_bound"),
-            Self::CheckedInvariant => None,
+            Self::CheckedInvariant { .. } => None,
         }
     }
 
@@ -259,7 +345,7 @@ impl Refusal {
             Self::IeeeNanPayloadNotRepresentable { .. } => Some("payload-exceeds-target"),
             Self::ForeignReference { .. } => Some("foreign-universe"),
             Self::CardinalityOutOfBound { violation, .. } => Some(violation.as_str()),
-            Self::CheckedInvariant => None,
+            Self::CheckedInvariant { .. } => None,
         }
     }
 }
@@ -327,7 +413,10 @@ mod tests {
             None
         );
         assert_eq!(
-            Outcome::<i32>::Refused(Refusal::CheckedInvariant).completed(),
+            Outcome::<i32>::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::ValueKindMismatch,
+            })
+            .completed(),
             None
         );
         assert_eq!(
@@ -343,9 +432,9 @@ mod tests {
         );
     }
 
-    /// TC-428 (FR-096-AC-8): every kernel refusal but `CheckedInvariant`
-    /// returns the catalog code and cause of its row, and
-    /// `CheckedInvariant` returns neither.
+    /// TC-428 (FR-096-AC-8): every catalogued kernel refusal returns the
+    /// code and cause of its row. The public carrier tests cover every
+    /// checked-invariant cause's separate `None` mapping.
     #[trace("TC-428", "FR-096-AC-8")]
     #[test]
     fn tc_428_every_record_building_refusal_names_code_and_cause() {
@@ -478,7 +567,5 @@ mod tests {
             assert_eq!(refusal.code(), Some(code), "{refusal:?}");
             assert_eq!(refusal.cause(), Some(cause), "{refusal:?}");
         }
-        assert_eq!(Refusal::CheckedInvariant.code(), None);
-        assert_eq!(Refusal::CheckedInvariant.cause(), None);
     }
 }
