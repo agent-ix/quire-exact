@@ -22,8 +22,15 @@ Scope: FR-089-AC-6.
 
 ## Expected Results
 
-Step 1 returns `false`. Step 2 returns `Err(Refusal::CheckedInvariant)`. Step 3 returns `None`.
+Step 1 returns `false`. Step 2 returns
+`Err(Refusal::CheckedInvariant { cause: PopulationPair })`. Step 3 returns
+`None`. A population paired with a non-population kind has the separate
+`ValueKindMismatch` cause under FR-369.
 
 ## Status
 
-Implemented. The tests are `value::tests::admits_refuses_a_population_pair` (step 1), `equality::tests::plan_pairs_refuses_a_population_pair` (step 2) and `key::tests::compare_keys_yields_no_key_for_a_population_pair` (step 3).
+Steps 1 and 3 are implemented by `value::tests::admits_refuses_a_population_pair`
+and `key::tests::compare_keys_yields_no_key_for_a_population_pair`. The existing
+`equality::tests::plan_pairs_refuses_a_population_pair` reaches step 2 with the
+unit refusal; its typed-cause assertion and the unlike-kind control are
+planned for IR-707.

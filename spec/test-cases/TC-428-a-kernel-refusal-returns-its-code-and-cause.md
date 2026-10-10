@@ -10,14 +10,18 @@ relationships:
 
 ## Description
 
-Verify FR-096-AC-8: every kernel cause returns its code and cause spelling, and a `CheckedInvariant` returns no code. This catches a cause that returns another cause's code.
+Verify FR-096-AC-8: every catalogued kernel refusal returns its code and cause
+spelling, and every typed `CheckedInvariant` returns neither. This catches a
+cause that returns another cause's code or turns an internal fault into an
+ordinary refusal.
 
 Scope: FR-096-AC-8.
 
 ## Test Procedure
 
 1. For each kernel refusal in FR-096-AC-8's list, build it and read `Refusal::code()` and `Refusal::cause()`.
-2. Build a `CheckedInvariant` and read `Refusal::code()` and `Refusal::cause()`.
+2. Build a `CheckedInvariant` with each of FR-369's twenty-three typed causes and
+   read `Refusal::code()` and `Refusal::cause()`.
 
 ## Expected Results
 
@@ -26,4 +30,6 @@ Scope: FR-096-AC-8.
 
 ## Status
 
-Implemented. The test is in `src/outcome.rs`, tagged `#[trace("TC-428", "FR-096-AC-8")]`.
+The existing `src/outcome.rs` test, tagged `#[trace("TC-428",
+"FR-096-AC-8")]`, covers the ordinary table and the former unit variant.
+The twenty-three typed step-2 cases are planned for IR-707.
