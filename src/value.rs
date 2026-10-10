@@ -1401,26 +1401,33 @@ mod tests {
                     .completed()
                     .expect("charged comparison")
             );
-            let charges = (
-                meter.admission_count(),
-                meter.consumed(LimitKind::ValueOccurrences),
-                meter.consumed(LimitKind::WorkUnits),
-                meter.consumed(LimitKind::ResultUnits),
-            );
+            let charges = equality_counters(&meter);
             if let Some(expected) = baseline {
                 assert_eq!(charges, expected);
             } else {
                 baseline = Some(charges);
             }
         }
+        let mut boolean_meter = generous_meter();
+        assert!(crate::equality::planned_equality(
+            &Value::Boolean(true),
+            &Value::Boolean(true),
+            &mut boolean_meter,
+        )
+        .completed()
+        .expect("charged Boolean control"));
+        let equal_boolean_charges = equality_counters(&boolean_meter);
+        assert_eq!(equal_boolean_charges, (4, 1, 5, 1));
         for value in [uuid("00000000-0000-0000-0000-000000000000"), timestamp("0")] {
             let plan = crate::equality::plan_equality(&value, &value).expect("same kind");
             assert_eq!(plan.pair_events(), &Integer::one());
+            let mut meter = generous_meter();
             assert!(
-                crate::equality::planned_equality(&value, &value, &mut generous_meter())
+                crate::equality::planned_equality(&value, &value, &mut meter)
                     .completed()
                     .expect("charged comparison")
             );
+            assert_eq!(equality_counters(&meter), equal_boolean_charges);
         }
     }
 
@@ -1514,45 +1521,57 @@ mod tests {
             None,
         );
         let controls = [
-            (ValueType::Boolean, Value::Boolean(true), Integer::one()),
+            (
+                ValueType::Boolean,
+                Value::Boolean(true),
+                Integer::one(),
+                (4, 1, 5, 1),
+            ),
             (
                 ValueType::Integer,
                 Value::Integer(Integer::one()),
                 Integer::one(),
+                (4, 1, 5, 1),
             ),
             (
                 ValueType::Text(text_type),
                 Value::Text(text),
                 Integer::one(),
+                (4, 1, 5, 1),
             ),
             (
                 ValueType::Reference(object_type),
                 Value::Reference(reference),
                 Integer::one(),
+                (4, 1, 5, 1),
             ),
             (
                 option_type.clone(),
                 OptionValue::none(ValueType::Boolean),
                 Integer::one(),
+                (4, 1, 5, 1),
             ),
             (
                 ValueType::collection(set_type.clone()),
                 crate::collection::from_admitted(set_type, vec![Value::Boolean(true)]),
                 Integer::from(2_i64),
+                (5, 2, 8, 1),
             ),
         ];
-        for (value_type, value, expected_occ) in controls {
+        for (value_type, value, expected_occ, expected_charges) in controls {
             assert!(value_type.admits(&value));
             assert_eq!(value.occ(), expected_occ);
             assert_eq!(
                 crate::key::compare_keys(&value, &value),
                 Some(core::cmp::Ordering::Equal)
             );
+            let mut meter = generous_meter();
             assert!(
-                crate::equality::planned_equality(&value, &value, &mut generous_meter())
+                crate::equality::planned_equality(&value, &value, &mut meter)
                     .completed()
                     .expect("charged comparison")
             );
+            assert_eq!(equality_counters(&meter), expected_charges);
         }
     }
 
@@ -1575,6 +1594,16 @@ mod tests {
             work_units: u64::MAX,
             result_units: u64::MAX,
         })
+    }
+
+    /// Admission count, maximum value occurrence size, work, and retained result units.
+    fn equality_counters(meter: &Meter) -> (u64, u64, u64, u64) {
+        (
+            meter.admission_count(),
+            meter.consumed(LimitKind::ValueOccurrences),
+            meter.consumed(LimitKind::WorkUnits),
+            meter.consumed(LimitKind::ResultUnits),
+        )
     }
 
     /// Trace: FR-369-AC-2
