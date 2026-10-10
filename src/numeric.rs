@@ -462,9 +462,9 @@ mod tests {
     /// Trace: FR-362-AC-5, FR-362-AC-6, FR-362-AC-11, FR-096-AC-8
     #[test]
     fn integer_bounds_preserve_values_refusal_payloads_and_charge_order() {
-        let (left, right) = (Integer::from(-7), Integer::from(3));
+        let (left, right) = (Integer::from(-7_i64), Integer::from(3_i64));
         for (operation, expected, bits, occurrences) in [
-            (IntegerArithmetic::Add(&left, &right), -4, 4, 2),
+            (IntegerArithmetic::Add(&left, &right), -4_i64, 4, 2),
             (IntegerArithmetic::Subtract(&left, &right), -10, 4, 2),
             (IntegerArithmetic::Multiply(&left, &right), -21, 5, 2),
             (IntegerArithmetic::Negate(&left), 7, 3, 1),
@@ -529,7 +529,7 @@ mod tests {
     /// Trace: FR-362-AC-8
     #[test]
     fn integer_denials_preserve_each_operation_prefix_and_exact_record() {
-        let (left, right) = (Integer::from(-7), Integer::from(3));
+        let (left, right) = (Integer::from(-7_i64), Integer::from(3_i64));
         let points = [
             ChargePoint::IntegerArithmeticOperands,
             ChargePoint::IntegerArithmeticArithmetic,
