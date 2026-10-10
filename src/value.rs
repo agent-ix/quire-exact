@@ -121,8 +121,14 @@ impl UnionValue {
     /// declared positions by the caller's type environment. The caller owns
     /// membership, arity, reference validation and any construction charge.
     pub fn from_admitted(member: UnionMember, payload: Vec<Value>) -> Value {
-        let occ = payload.iter().fold(Integer::one(), |occ, value| occ.add(&value.occ()));
-        Value::Union(Arc::new(Self { member, payload: payload.into_boxed_slice(), occ }))
+        let occ = payload
+            .iter()
+            .fold(Integer::one(), |occ, value| occ.add(&value.occ()));
+        Value::Union(Arc::new(Self {
+            member,
+            payload: payload.into_boxed_slice(),
+            occ,
+        }))
     }
 
     /// The union declaration key.
@@ -154,7 +160,9 @@ impl Drop for UnionValue {
 
 impl fmt::Debug for UnionValue {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        DebugWriter::new(formatter).write(Step::Union(self)).map(|_peak| ())
+        DebugWriter::new(formatter)
+            .write(Step::Union(self))
+            .map(|_peak| ())
     }
 }
 
@@ -167,9 +175,15 @@ pub fn union(
     payload: Vec<Value>,
 ) -> Result<Value, ConstructionRefusal> {
     check_union_arity(shape, payload.len())?;
-    if let Some(position) = shape.iter().zip(&payload)
-        .position(|(value_type, value)| !value_type.admits(value)) {
-        return refuse(Component::Position(position), ConstructionCause::TypeMismatch);
+    if let Some(position) = shape
+        .iter()
+        .zip(&payload)
+        .position(|(value_type, value)| !value_type.admits(value))
+    {
+        return refuse(
+            Component::Position(position),
+            ConstructionCause::TypeMismatch,
+        );
     }
     Ok(UnionValue::from_admitted(member, payload))
 }
@@ -192,14 +206,21 @@ pub fn evaluate_union(
             Err(stop) => return Ok(Outcome::from_stop(Err(stop))),
         }
     }
-    Ok(retain_composite(UnionValue::from_admitted(member, values), meter))
+    Ok(retain_composite(
+        UnionValue::from_admitted(member, values),
+        meter,
+    ))
 }
 
 fn check_union_arity(shape: &[ValueType], supplied: usize) -> Result<(), ConstructionRefusal> {
     if shape.len() != supplied {
-        return refuse(Component::Value, ConstructionCause::WrongArity {
-            declared: shape.len(), supplied,
-        });
+        return refuse(
+            Component::Value,
+            ConstructionCause::WrongArity {
+                declared: shape.len(),
+                supplied,
+            },
+        );
     }
     Ok(())
 }
@@ -887,13 +908,27 @@ fn schedule_value<'a>(stack: &mut Vec<Step<'a>>, value: &'a Value) {
 }
 
 fn schedule_union<'a>(stack: &mut Vec<Step<'a>>, union: &'a UnionValue) {
-    let UnionValue { member, payload, occ } = union;
-    schedule(stack, [
-        Step::Text("UnionValue"), Step::Open(Bracket::Brace),
-        Step::Text("member: "), Step::Leaf(member), Step::Next,
-        Step::Text("payload: "), Step::List(Items::Elements(payload)), Step::Next,
-        Step::Text("occ: "), Step::Leaf(occ), Step::Close(Bracket::Brace),
-    ]);
+    let UnionValue {
+        member,
+        payload,
+        occ,
+    } = union;
+    schedule(
+        stack,
+        [
+            Step::Text("UnionValue"),
+            Step::Open(Bracket::Brace),
+            Step::Text("member: "),
+            Step::Leaf(member),
+            Step::Next,
+            Step::Text("payload: "),
+            Step::List(Items::Elements(payload)),
+            Step::Next,
+            Step::Text("occ: "),
+            Step::Leaf(occ),
+            Step::Close(Bracket::Brace),
+        ],
+    );
 }
 
 /// The steps of a one-field tuple shape, `name(inner)`.

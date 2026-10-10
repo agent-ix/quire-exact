@@ -183,8 +183,13 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                         cause: CheckedInvariantCause::ValueKindMismatch,
                     });
                 } else {
-                    pending.extend(l.payload().iter().zip(r.payload()).rev()
-                        .map(|(l, r)| Pair::Values(l, r)));
+                    pending.extend(
+                        l.payload()
+                            .iter()
+                            .zip(r.payload())
+                            .rev()
+                            .map(|(l, r)| Pair::Values(l, r)),
+                    );
                     continue;
                 }
             }

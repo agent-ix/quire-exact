@@ -134,14 +134,25 @@ fn leaf<'a>(
             return Some(None);
         }
         (Value::Union(left), Value::Union(right)) if left.declaration() == right.declaration() => {
-            let ordering = left.member().identifier().as_str().as_bytes()
+            let ordering = left
+                .member()
+                .identifier()
+                .as_str()
+                .as_bytes()
                 .cmp(right.member().identifier().as_str().as_bytes());
             if ordering.is_eq() {
-                if left.variant() != right.variant() || left.payload().len() != right.payload().len() {
+                if left.variant() != right.variant()
+                    || left.payload().len() != right.payload().len()
+                {
                     return None;
                 }
-                tasks.extend(left.payload().iter().zip(right.payload()).rev()
-                    .map(|(left, right)| Task::Values(left, right)));
+                tasks.extend(
+                    left.payload()
+                        .iter()
+                        .zip(right.payload())
+                        .rev()
+                        .map(|(left, right)| Task::Values(left, right)),
+                );
                 return Some(None);
             }
             if left.variant() == right.variant() {
