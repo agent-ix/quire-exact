@@ -54,7 +54,9 @@ use crate::rational::{Rational, RationalDomain};
 use crate::reference::ObjectReference;
 use crate::text::{Text, TextType};
 
+mod native;
 mod value_type;
+pub use native::{Timestamp, Uuid};
 
 /// The inline, *ranked* set of an enum type's admitted variants. The kernel `ValueType::Enum` carries its variant set
 /// directly, as opaque [`VariantId`] digests, so `admits` is a pure
@@ -190,6 +192,10 @@ pub enum ValueType {
     Quantity(UnitId),
     /// A `Text[min, max; profile]`.
     Text(TextType),
+    /// A native opaque UUID.
+    Uuid,
+    /// A native signed POSIX-epoch nanosecond Timestamp.
+    Timestamp,
     /// An `Enum` type admitting exactly this inline variant set.
     Enum(EnumShape),
     /// `Option<T>`: `none` or a present `T`.
@@ -233,6 +239,7 @@ impl ValueType {
             (Self::Float(declared), Value::Float(float)) => float.width() == declared.width(),
             (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == *unit,
             (Self::Text(declared), Value::Text(text)) => text.text_type() == declared,
+            (Self::Uuid, Value::Uuid(_)) | (Self::Timestamp, Value::Timestamp(_)) => true,
             (Self::Enum(shape), Value::Enum(member)) => {
                 shape.rank(member.variant()) == Some(member.rank())
             }
@@ -261,6 +268,8 @@ impl ValueType {
                 | Self::Float(_)
                 | Self::Quantity(_)
                 | Self::Text(_)
+                | Self::Uuid
+                | Self::Timestamp
                 | Self::Enum(_)
                 | Self::Option(_)
                 | Self::Composite(_)
@@ -308,6 +317,10 @@ pub enum Value {
     Quantity(Quantity),
     /// A text value of its declared type.
     Text(Text),
+    /// An opaque native UUID.
+    Uuid(Uuid),
+    /// A signed POSIX-epoch nanosecond Timestamp.
+    Timestamp(Timestamp),
     /// A bare enum member identity and its canonical rank.
     Enum(EnumMember),
     /// An opaque population admission identity: never the population binding itself, which
@@ -339,6 +352,8 @@ impl Value {
             | Self::Float(_)
             | Self::Quantity(_)
             | Self::Text(_)
+            | Self::Uuid(_)
+            | Self::Timestamp(_)
             | Self::Enum(_)
             | Self::Population(_)
             | Self::Reference(_) => Integer::one(),
@@ -379,6 +394,8 @@ fn defer_node(pending: &mut Vec<Value>, value: Value) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::Uuid(_)
+        | Value::Timestamp(_)
         | Value::Enum(_)
         | Value::Population(_)
         | Value::Reference(_) => {}
@@ -419,6 +436,8 @@ fn release_children(node: Value, pending: &mut Vec<Value>) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::Uuid(_)
+        | Value::Timestamp(_)
         | Value::Enum(_)
         | Value::Population(_)
         | Value::Reference(_) => {}
@@ -652,6 +671,8 @@ fn schedule_value<'a>(stack: &mut Vec<Step<'a>>, value: &'a Value) {
         Value::Float(leaf) => ("Float", leaf),
         Value::Quantity(leaf) => ("Quantity", leaf),
         Value::Text(leaf) => ("Text", leaf),
+        Value::Uuid(leaf) => ("Uuid", leaf),
+        Value::Timestamp(leaf) => ("Timestamp", leaf),
         Value::Enum(leaf) => ("Enum", leaf),
         Value::Population(leaf) => ("Population", leaf),
         Value::Reference(leaf) => ("Reference", leaf),
@@ -1122,6 +1143,12 @@ pub enum ConstructionCause {
     },
     /// A value that is not a member of the declared type.
     TypeMismatch,
+    /// UUID text is not lowercase ASCII `8-4-4-4-12` hexadecimal.
+    UuidNoncanonical,
+    /// Timestamp text is not canonical signed ASCII decimal.
+    TimestampNoncanonical,
+    /// Canonical Timestamp text is outside the signed `i128` range.
+    TimestampOutOfDomain,
 }
 
 /// A typed construction refusal at its originating component.
@@ -1244,6 +1271,290 @@ mod tests {
 
     use super::*;
     use crate::accounting::ScalarLimits;
+
+    fn uuid(text: &str) -> Value {
+        Value::Uuid(Uuid::from_canonical_text(text).expect("canonical UUID"))
+    }
+
+    fn timestamp(text: &str) -> Value {
+        Value::Timestamp(Timestamp::from_canonical_text(text).expect("canonical Timestamp"))
+    }
+
+    /// Native types admit their own payload and reject existing and crossed kinds.
+    #[trace("TC-918", "FR-370-AC-1", "FR-370-AC-5")]
+    #[test]
+    fn native_type_admission_has_no_alias() {
+        let uuid = uuid("00112233-4455-6677-8899-aabbccddeeff");
+        let timestamp = timestamp("1");
+        assert!(ValueType::Uuid.admits(&uuid));
+        assert!(ValueType::Timestamp.admits(&timestamp));
+        assert!(!ValueType::Uuid.admits(&timestamp));
+        assert!(!ValueType::Timestamp.admits(&uuid));
+        assert!(!ValueType::Integer.admits(&timestamp));
+        assert!(!ValueType::Uuid.admits(&Value::Integer(Integer::one())));
+        assert!(!ValueType::Timestamp.admits(&Value::Integer(Integer::one())));
+        let text_type =
+            TextType::new(0, 10, crate::text::TextProfile::UnicodeScalars).expect("bounds");
+        let text = crate::text::admit_text(
+            &crate::text::TextPayload::from_utf8(b"hi").expect("UTF-8"),
+            &text_type,
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("admitted text");
+        let text = Value::Text(text);
+        assert!(!ValueType::Uuid.admits(&text));
+        assert!(!ValueType::Timestamp.admits(&text));
+        assert!(ValueType::Text(text_type).admits(&text));
+        let object_type = EffectiveId::from_digest(digest(6));
+        let reference = Value::Reference(ObjectReference::new(
+            crate::identity::UniverseId::from_digest(digest(5)),
+            object_type,
+            crate::identity::ObjectId::new("o-1").expect("non-empty"),
+        ));
+        assert!(!ValueType::Uuid.admits(&reference));
+        assert!(!ValueType::Timestamp.admits(&reference));
+        assert!(ValueType::Reference(object_type).admits(&reference));
+    }
+
+    /// Every existing value kind remains distinct from both new native kinds.
+    #[trace("TC-918", "FR-370-AC-3", "FR-370-AC-5")]
+    #[test]
+    fn native_mixed_kind_plans_refuse_in_both_orders() {
+        use crate::outcome::CheckedInvariantCause;
+
+        let key = NodeKey::from_digest(digest(9));
+        let half = Rational::new(Integer::one(), Integer::from(2_i64)).expect("nonzero");
+        let text_type =
+            TextType::new(0, 10, crate::text::TextProfile::UnicodeScalars).expect("bounds");
+        let text = crate::text::admit_text(
+            &crate::text::TextPayload::from_utf8(b"hi").expect("UTF-8"),
+            &text_type,
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("admitted text");
+        let others = vec![
+            Value::Boolean(true),
+            Value::Integer(Integer::one()),
+            Value::Rational(half.clone()),
+            Value::Decimal(Decimal::new(Integer::one(), 0)),
+            Value::Float(IeeeValue::binary64(0x3ff0_0000_0000_0000)),
+            Value::Quantity(Quantity::new(half, UnitId::declared(key))),
+            Value::Text(text),
+            Value::Enum(EnumMember::new(VariantId::from_digest(digest(3)), 0)),
+            Value::Population(PopulationId::from_digest(digest(4))),
+            OptionValue::none(ValueType::option(ValueType::Boolean)),
+            from_admitted_slots(key, vec![FieldValue::Absent].into_boxed_slice()),
+            crate::collection::from_admitted(
+                CollectionType::new(
+                    crate::collection::CollectionKind::Set,
+                    ValueType::Boolean,
+                    None,
+                ),
+                vec![],
+            ),
+            Value::Reference(ObjectReference::new(
+                crate::identity::UniverseId::from_digest(digest(5)),
+                EffectiveId::from_digest(digest(6)),
+                crate::identity::ObjectId::new("o-1").expect("non-empty"),
+            )),
+        ];
+        let native = [uuid("00112233-4455-6677-8899-aabbccddeeff"), timestamp("1")];
+        for left in &native {
+            for right in native.iter().chain(others.iter()) {
+                if core::mem::discriminant(left) == core::mem::discriminant(right) {
+                    continue;
+                }
+                for (first, second) in [(left, right), (right, left)] {
+                    assert_eq!(
+                        crate::equality::plan_equality(first, second),
+                        Err(Refusal::CheckedInvariant {
+                            cause: CheckedInvariantCause::ValueKindMismatch,
+                        })
+                    );
+                    assert_eq!(crate::key::compare_keys(first, second), None);
+                }
+            }
+        }
+    }
+
+    /// Both native leaves use the same one-pair plan and charges as Boolean.
+    #[trace("TC-918", "FR-370-AC-2", "FR-370-AC-5")]
+    #[test]
+    fn native_equality_uses_boolean_leaf_schedule() {
+        let pairs = [
+            (Value::Boolean(true), Value::Boolean(false)),
+            (
+                uuid("00000000-0000-0000-0000-000000000000"),
+                uuid("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            ),
+            (timestamp("-1"), timestamp("1")),
+        ];
+        let mut baseline = None;
+        for (left, right) in pairs {
+            let plan = crate::equality::plan_equality(&left, &right).expect("same kind");
+            assert_eq!(plan.pair_events(), &Integer::one());
+            let mut meter = generous_meter();
+            assert!(
+                !crate::equality::planned_equality(&left, &right, &mut meter)
+                    .completed()
+                    .expect("charged comparison")
+            );
+            let charges = (
+                meter.admission_count(),
+                meter.consumed(LimitKind::ValueOccurrences),
+                meter.consumed(LimitKind::WorkUnits),
+                meter.consumed(LimitKind::ResultUnits),
+            );
+            if let Some(expected) = baseline {
+                assert_eq!(charges, expected);
+            } else {
+                baseline = Some(charges);
+            }
+        }
+        for value in [uuid("00000000-0000-0000-0000-000000000000"), timestamp("0")] {
+            let plan = crate::equality::plan_equality(&value, &value).expect("same kind");
+            assert_eq!(plan.pair_events(), &Integer::one());
+            assert!(
+                crate::equality::planned_equality(&value, &value, &mut generous_meter())
+                    .completed()
+                    .expect("charged comparison")
+            );
+        }
+    }
+
+    /// Native keys order canonical ASCII payloads and set visiting order is stable.
+    #[trace("TC-918", "FR-370-AC-4", "FR-370-AC-5")]
+    #[test]
+    fn native_keys_order_canonical_content_and_sets() {
+        use core::cmp::Ordering;
+        let pairs = [
+            (timestamp("10"), timestamp("2")),
+            (timestamp("-1"), timestamp("-2")),
+            (
+                uuid("00000000-0000-0000-0000-000000000000"),
+                uuid("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            ),
+        ];
+        for (left, right) in pairs {
+            assert_eq!(
+                crate::key::compare_keys(&left, &right),
+                Some(Ordering::Less)
+            );
+            assert_eq!(
+                crate::key::compare_keys(&right, &left),
+                Some(Ordering::Greater)
+            );
+            assert_eq!(
+                crate::key::compare_keys(&left, &left),
+                Some(Ordering::Equal)
+            );
+        }
+        let set_type = CollectionType::new(
+            crate::collection::CollectionKind::Set,
+            ValueType::Timestamp,
+            None,
+        );
+        let first = crate::collection::form(
+            &set_type,
+            vec![timestamp("2"), timestamp("10")],
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("formed set");
+        let reversed = crate::collection::form(
+            &set_type,
+            vec![timestamp("10"), timestamp("2")],
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("formed set");
+        assert_eq!(
+            crate::key::compare_keys(&first, &reversed),
+            Some(Ordering::Equal)
+        );
+        let Value::Collection(set) = first else {
+            panic!("set value")
+        };
+        let actual: Vec<_> = set
+            .elements()
+            .iter()
+            .map(|value| match value {
+                Value::Timestamp(value) => value.nanoseconds(),
+                _ => panic!("Timestamp member"),
+            })
+            .collect();
+        assert_eq!(actual, [10, 2]);
+    }
+
+    /// Existing admitted leaves and nested forms retain their equality and keys.
+    #[trace("TC-918", "FR-370-AC-5")]
+    #[test]
+    fn existing_kind_controls_remain_admitted_and_keyed() {
+        let text_type =
+            TextType::new(0, 10, crate::text::TextProfile::UnicodeScalars).expect("bounds");
+        let text = crate::text::admit_text(
+            &crate::text::TextPayload::from_utf8(b"hi").expect("UTF-8"),
+            &text_type,
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("admitted text");
+        let object_type = EffectiveId::from_digest(digest(6));
+        let reference = ObjectReference::new(
+            crate::identity::UniverseId::from_digest(digest(5)),
+            object_type,
+            crate::identity::ObjectId::new("o-1").expect("non-empty"),
+        );
+        let option_type = ValueType::option(ValueType::Boolean);
+        let set_type = CollectionType::new(
+            crate::collection::CollectionKind::Set,
+            ValueType::Boolean,
+            None,
+        );
+        let controls = [
+            (ValueType::Boolean, Value::Boolean(true), Integer::one()),
+            (
+                ValueType::Integer,
+                Value::Integer(Integer::one()),
+                Integer::one(),
+            ),
+            (
+                ValueType::Text(text_type),
+                Value::Text(text),
+                Integer::one(),
+            ),
+            (
+                ValueType::Reference(object_type),
+                Value::Reference(reference),
+                Integer::one(),
+            ),
+            (
+                option_type.clone(),
+                OptionValue::none(ValueType::Boolean),
+                Integer::one(),
+            ),
+            (
+                ValueType::collection(set_type.clone()),
+                crate::collection::from_admitted(set_type, vec![Value::Boolean(true)]),
+                Integer::from(2_i64),
+            ),
+        ];
+        for (value_type, value, expected_occ) in controls {
+            assert!(value_type.admits(&value));
+            assert_eq!(value.occ(), expected_occ);
+            assert_eq!(
+                crate::key::compare_keys(&value, &value),
+                Some(core::cmp::Ordering::Equal)
+            );
+            assert!(
+                crate::equality::planned_equality(&value, &value, &mut generous_meter())
+                    .completed()
+                    .expect("charged comparison")
+            );
+        }
+    }
 
     fn digest(byte: u8) -> [u8; 32] {
         let mut bytes = [0_u8; 32];
