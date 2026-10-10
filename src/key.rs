@@ -150,6 +150,7 @@ fn leaf<'a>(
                     left.payload()
                         .iter()
                         .zip(right.payload())
+                        .rev()
                         .map(|(left, right)| Task::Values(left, right)),
                 );
                 return Some(None);
