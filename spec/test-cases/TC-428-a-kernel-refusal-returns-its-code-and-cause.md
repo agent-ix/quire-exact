@@ -20,7 +20,7 @@ Scope: FR-096-AC-8.
 ## Test Procedure
 
 1. For each kernel refusal in FR-096-AC-8's list, build it and read `Refusal::code()` and `Refusal::cause()`.
-2. Build a `CheckedInvariant` with each of FR-369's thirty-one typed causes and
+2. Build a `CheckedInvariant` with each of FR-369's thirty typed causes and
    read `Refusal::code()` and `Refusal::cause()`.
 
 ## Expected Results
@@ -31,5 +31,8 @@ Scope: FR-096-AC-8.
 ## Status
 
 The existing `src/outcome.rs` test, tagged `#[trace("TC-428",
-"FR-096-AC-8")]`, covers the ordinary table and the former unit variant.
-The thirty-one typed step-2 cases remain planned for the typed-carrier implementation.
+"FR-096-AC-8")]`, covers the ordinary table. The current
+`tests/checked_invariant.rs` test covers thirty-one typed causes, including
+`CallDepthExceeded`, and their `None` mapping. The target thirty-cause step 2
+awaits the IR-497 coordinated enum and tagged-test cutover; this target count
+is not a claim about the current Rust enum.

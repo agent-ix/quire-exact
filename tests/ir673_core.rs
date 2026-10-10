@@ -115,7 +115,14 @@ fn truncated_meter_log_preserves_accounting_and_denial_atomicity() {
     assert_eq!(meter.admission_count(), 4097);
     assert_eq!(meter.consumed(LimitKind::WorkUnits), 4097);
     assert_eq!(meter.consumed(LimitKind::ResultUnits), 4097);
-    assert_eq!(meter.admitted_charges(), vec![point; 4096]);
+    assert_eq!(
+        meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
+        vec![point; 4096]
+    );
     assert!(meter.charge_log_truncated());
     let before = meter.clone();
     let denial = meter.charge(Charge::new(other)).unwrap_err();
@@ -186,7 +193,14 @@ fn truncated_meter_log_preserves_accounting_and_denial_atomicity() {
     injected.charge(Charge::new(other)).unwrap();
     assert_eq!(injected.admission_count(), 4098);
     assert_eq!(injected.consumed(LimitKind::WorkUnits), 4098);
-    assert_eq!(injected.admitted_charges(), vec![point; 4096]);
+    assert_eq!(
+        injected
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
+        vec![point; 4096]
+    );
 }
 
 /// Trace: TC-907, FR-359-AC-6, FR-359-AC-7

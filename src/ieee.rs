@@ -26,8 +26,8 @@ use num_traits::{One, Zero};
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::comparison::{IllTyped, IllTypedCause};
-use crate::decimal::{Decimal, DecimalType, RoundingMode};
-use crate::integer::{Integer, IntegerInterval};
+use crate::decimal::{Decimal, RoundingMode};
+use crate::integer::Integer;
 use crate::outcome::{Outcome, Refusal, Stop, Undefined};
 use crate::rational::{Rational, RationalDomain};
 
@@ -672,39 +672,16 @@ pub fn convert_ieee_width(
     Outcome::from_stop(convert_width(value, target, rounding, meter))
 }
 
-/// The type an explicit IEEE-to-exact conversion names.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IeeeExactTarget<'a> {
-    /// A grammar-named `Rational[lo, hi; dmin, dmax]`, the only defined target.
-    Rational(&'a RationalDomain),
-    /// A `Decimal[..]` type; a direct conversion is ill-typed.
-    Decimal(&'a DecimalType),
-    /// The unbounded `Integer`; a direct conversion is ill-typed.
-    Integer,
-    /// A bounded `Int[..]`; a direct conversion is ill-typed.
-    BoundedInteger(&'a IntegerInterval),
-}
-
-/// Explicitly convert a finite IEEE value to a `Rational[..]` target. NaN and
-/// the infinities have no exact value and are undefined; an exact value
-/// outside the target domain is refused before it is retained. A direct
-/// `Decimal`, `Integer` or `Int[..]` target is ill-typed with no charge.
+/// Explicitly convert an IEEE value to a declared `Rational[..]` target.
+/// NaN and the infinities are undefined; a finite exact value outside the
+/// target domain is refused before retention. Charges use the supplied meter,
+/// preserving its already-spent accounting and original cancellation handle.
 pub fn ieee_to_exact(
     value: IeeeValue,
-    target: IeeeExactTarget<'_>,
+    domain: &RationalDomain,
     meter: &mut Meter,
-) -> Result<Outcome<IeeeExact>, IllTyped> {
-    let domain = match target {
-        IeeeExactTarget::Rational(domain) => domain,
-        IeeeExactTarget::Decimal(_)
-        | IeeeExactTarget::Integer
-        | IeeeExactTarget::BoundedInteger(_) => {
-            return Err(IllTyped {
-                cause: IllTypedCause::IeeeToNonRationalExact,
-            })
-        }
-    };
-    Ok(Outcome::from_stop(to_exact(value, domain, meter)))
+) -> Outcome<IeeeExact> {
+    Outcome::from_stop(to_exact(value, domain, meter))
 }
 
 fn to_exact(
@@ -1806,14 +1783,12 @@ mod tests {
         let mut meter = generous_meter();
 
         let one64 = IeeeValue::binary64(0x3ff0_0000_0000_0000);
-        let outcome = ieee_to_exact(one64, IeeeExactTarget::Rational(&domain), &mut meter)
-            .expect("finite operand");
+        let outcome = ieee_to_exact(one64, &domain, &mut meter);
         let exact = outcome.completed().expect("within the generous domain");
         assert_eq!(exact.value(), &Rational::from_integer(Integer::one()));
 
         let nan = IeeeValue::binary64(0x7ff8_0000_0000_0000);
-        let outcome = ieee_to_exact(nan, IeeeExactTarget::Rational(&domain), &mut meter)
-            .expect("finite operand");
+        let outcome = ieee_to_exact(nan, &domain, &mut meter);
         assert!(matches!(
             outcome,
             Outcome::Undefined(Undefined::IeeeNotFinite)
@@ -1836,5 +1811,465 @@ mod tests {
         let result = outcome.completed().expect("1 is exactly representable");
         assert_eq!(result.value().bits(), 0x3ff0_0000_0000_0000);
         assert!(result.flags().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod rational_target_ieee {
+    use alloc::sync::Arc;
+    use core::num::NonZeroU64;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    use crate::{
+        ieee_to_exact, Cancel, CancelCause, Charge, ChargePoint, IeeeExact, IeeeExactLoss,
+        IeeeValue, Incomplete, InjectedDenial, Integer, IntegerInterval, LimitKind, Meter, Outcome,
+        Rational, RationalDomain, Refusal, ScalarLimits, Undefined,
+    };
+
+    const POINTS: [ChargePoint; 3] = [
+        ChargePoint::IeeeOperands,
+        ChargePoint::IeeeExactIntermediate,
+        ChargePoint::IeeeResultRetain,
+    ];
+
+    fn limits() -> ScalarLimits {
+        ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        }
+    }
+
+    fn domain(numerator_bound: i64, denominator_bound: Integer) -> RationalDomain {
+        RationalDomain::new(
+            IntegerInterval::new(
+                Integer::from(-numerator_bound),
+                Integer::from(numerator_bound),
+            )
+            .unwrap(),
+            IntegerInterval::new(Integer::one(), denominator_bound).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn fixtures() -> [(IeeeValue, u64); 2] {
+        [
+            (IeeeValue::binary32(0x3fc0_0000), 32),
+            (IeeeValue::binary64(0x3ff8_0000_0000_0000), 64),
+        ]
+    }
+
+    fn assert_value(
+        outcome: Outcome<IeeeExact>,
+        numerator: i64,
+        denominator: i64,
+        loss: Option<IeeeExactLoss>,
+    ) {
+        let exact = outcome.completed().expect("conversion must complete");
+        assert_eq!(
+            exact.value(),
+            &Rational::new(Integer::from(numerator), Integer::from(denominator)).unwrap()
+        );
+        assert_eq!(exact.loss(), loss);
+    }
+
+    fn assert_prefix(meter: &Meter, width: u64, admitted: usize, precharged: bool) {
+        let work = if precharged { 2 } else { 0 } + u64::try_from(admitted).unwrap();
+        let results = u64::from(precharged) + u64::from(admitted == 3);
+        for kind in LimitKind::ALL {
+            let expected = match kind {
+                LimitKind::WorkUnits => work,
+                LimitKind::ResultUnits => results,
+                LimitKind::IntegerBits if precharged => 80,
+                LimitKind::IntegerBits if admitted > 0 => width,
+                LimitKind::ValueOccurrences if precharged => 5,
+                LimitKind::ValueOccurrences if admitted > 0 => 1,
+                LimitKind::TextScalars if precharged => 7,
+                _ => 0,
+            };
+            assert_eq!(meter.consumed(kind), expected, "{kind:?}");
+        }
+        assert_eq!(
+            meter.admission_count(),
+            u64::try_from(admitted).unwrap() + u64::from(precharged)
+        );
+        #[cfg(feature = "test-support")]
+        {
+            let mut expected = alloc::vec::Vec::new();
+            if precharged {
+                expected.push(ChargePoint::FunctionCall);
+            }
+            expected.extend_from_slice(&POINTS[..admitted]);
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<alloc::vec::Vec<_>>(),
+                expected
+            );
+            assert!(!meter.charge_log_truncated());
+        }
+    }
+
+    fn assert_incomplete(
+        outcome: Outcome<IeeeExact>,
+        point: ChargePoint,
+        kind: LimitKind,
+        limit: u64,
+        consumed: u64,
+        next: u64,
+    ) {
+        assert_eq!(
+            outcome,
+            Outcome::Incomplete(Incomplete {
+                limit_kind: kind,
+                limit,
+                consumed,
+                next_charge: Integer::from(next),
+                charge_point: point,
+            })
+        );
+    }
+
+    fn precharge(limits: ScalarLimits) -> Meter {
+        let mut meter = Meter::new(limits);
+        meter
+            .charge(
+                Charge::new(ChargePoint::FunctionCall)
+                    .work(Integer::from(2_u64))
+                    .results(1)
+                    .size(LimitKind::IntegerBits, 80)
+                    .size(LimitKind::ValueOccurrences, 5)
+                    .size(LimitKind::TextScalars, 7),
+            )
+            .unwrap();
+        assert_prefix(&meter, 0, 0, true);
+        assert_eq!(meter.limits(), &limits);
+        meter
+    }
+
+    // The weak observer reference keeps the original handle reachable without
+    // introducing a reference cycle through its own observer.
+    fn cancel_at(poll: usize, cause: CancelCause) -> (Cancel, Arc<Mutex<Option<Cancel>>>) {
+        let slot = Arc::new(Mutex::new(None::<Cancel>));
+        let observed = Arc::downgrade(&slot);
+        let polls = AtomicUsize::new(0);
+        let cancel = Cancel::observing(move || {
+            if polls.fetch_add(1, Ordering::Relaxed) + 1 == poll {
+                observed
+                    .upgrade()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .cancel(cause);
+            }
+        });
+        *slot.lock().unwrap() = Some(cancel.clone());
+        (cancel, slot)
+    }
+
+    /// Trace: FR-373-AC-1, FR-373-AC-2, FR-373-AC-5
+    #[test]
+    fn finite_values_and_both_signed_zeros_complete_directly() {
+        let domain = domain(3, Integer::from(2_i64));
+        for (value, width) in fixtures() {
+            let mut meter = Meter::new(limits());
+            let outcome: Outcome<IeeeExact> = ieee_to_exact(value, &domain, &mut meter);
+            assert_value(outcome, 3, 2, None);
+            assert_prefix(&meter, width, 3, false);
+        }
+        for (value, width, loss) in [
+            (IeeeValue::binary32(0), 32, None),
+            (
+                IeeeValue::binary32(0x8000_0000),
+                32,
+                Some(IeeeExactLoss::NegativeZeroSign),
+            ),
+            (IeeeValue::binary64(0), 64, None),
+            (
+                IeeeValue::binary64(0x8000_0000_0000_0000),
+                64,
+                Some(IeeeExactLoss::NegativeZeroSign),
+            ),
+        ] {
+            let mut meter = Meter::new(limits());
+            assert_value(ieee_to_exact(value, &domain, &mut meter), 0, 1, loss);
+            assert_prefix(&meter, width, 3, false);
+        }
+    }
+
+    /// Trace: FR-373-AC-3
+    #[test]
+    fn nonfinite_values_stop_after_operands() {
+        let domain = domain(3, Integer::from(2_i64));
+        for (value, width) in [
+            (IeeeValue::binary32(0x7fc0_0001), 32),
+            (IeeeValue::binary32(0x7f80_0001), 32),
+            (IeeeValue::binary32(0x7f80_0000), 32),
+            (IeeeValue::binary32(0xff80_0000), 32),
+            (IeeeValue::binary64(0x7ff8_0000_0000_0001), 64),
+            (IeeeValue::binary64(0x7ff0_0000_0000_0001), 64),
+            (IeeeValue::binary64(0x7ff0_0000_0000_0000), 64),
+            (IeeeValue::binary64(0xfff0_0000_0000_0000), 64),
+        ] {
+            let mut meter = Meter::new(limits());
+            assert_eq!(
+                ieee_to_exact(value, &domain, &mut meter),
+                Outcome::Undefined(Undefined::IeeeNotFinite)
+            );
+            assert_prefix(&meter, width, 1, false);
+        }
+    }
+
+    /// Trace: FR-373-AC-4
+    #[test]
+    fn numerator_and_denominator_refusals_retain_the_declared_target() {
+        for domain in [domain(1, Integer::from(2_i64)), domain(3, Integer::one())] {
+            for (value, width) in fixtures() {
+                let mut meter = Meter::new(limits());
+                assert_eq!(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    Outcome::Refused(Refusal::IeeeRationalOutOfDomain {
+                        target: alloc::boxed::Box::new(domain.clone()),
+                    })
+                );
+                assert_prefix(&meter, width, 2, false);
+            }
+        }
+    }
+
+    /// Trace: FR-373-AC-5
+    #[test]
+    fn ordinary_and_injected_denials_preserve_the_admitted_prefix() {
+        let domain = domain(3, Integer::from(2_i64));
+        for (value, width) in fixtures() {
+            for (admitted, point) in POINTS.into_iter().enumerate() {
+                let work = u64::try_from(admitted).unwrap();
+                let configured = ScalarLimits {
+                    work_units: work,
+                    ..limits()
+                };
+                let mut meter = Meter::new(configured);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    point,
+                    LimitKind::WorkUnits,
+                    work,
+                    work,
+                    1,
+                );
+                assert_prefix(&meter, width, admitted, false);
+                assert_eq!(meter.limits(), &configured);
+
+                let mut meter = Meter::new(limits()).with_injected_denial(InjectedDenial {
+                    point,
+                    occurrence: NonZeroU64::new(1).unwrap(),
+                });
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    point,
+                    LimitKind::WorkUnits,
+                    work,
+                    work,
+                    1,
+                );
+                assert_prefix(&meter, width, admitted, false);
+                // The real meter spends its one-shot injected denial.
+                assert_value(ieee_to_exact(value, &domain, &mut meter), 3, 2, None);
+            }
+            let configured = ScalarLimits {
+                result_units: 0,
+                ..limits()
+            };
+            let mut meter = Meter::new(configured);
+            assert_incomplete(
+                ieee_to_exact(value, &domain, &mut meter),
+                POINTS[2],
+                LimitKind::ResultUnits,
+                0,
+                0,
+                1,
+            );
+            assert_prefix(&meter, width, 2, false);
+            assert_eq!(meter.limits(), &configured);
+        }
+    }
+
+    /// Trace: FR-373-AC-5
+    #[test]
+    fn subnormal_intermediates_require_the_exact_denominator_bits() {
+        for (value, width, next, exponent) in [
+            (IeeeValue::binary32(1), 32, 150, 149),
+            (IeeeValue::binary64(1), 64, 1075, 1074),
+        ] {
+            let denominator = Integer::one().shifted_left(exponent);
+            let domain = domain(1, denominator.clone());
+            let configured = ScalarLimits {
+                integer_bits: width,
+                ..limits()
+            };
+            let mut meter = Meter::new(configured);
+            assert_incomplete(
+                ieee_to_exact(value, &domain, &mut meter),
+                POINTS[1],
+                LimitKind::IntegerBits,
+                width,
+                width,
+                next,
+            );
+            assert_prefix(&meter, width, 1, false);
+            assert_eq!(meter.limits(), &configured);
+            let mut meter = Meter::new(limits());
+            let exact = ieee_to_exact(value, &domain, &mut meter)
+                .completed()
+                .unwrap();
+            assert_eq!(
+                exact.value(),
+                &Rational::new(Integer::one(), denominator).unwrap()
+            );
+            assert_eq!(exact.loss(), None);
+            assert_eq!(meter.consumed(LimitKind::IntegerBits), next);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 3);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+            assert_eq!(meter.admission_count(), 3);
+            #[cfg(feature = "test-support")]
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<alloc::vec::Vec<_>>(),
+                POINTS
+            );
+        }
+    }
+
+    /// Trace: FR-373-AC-6
+    #[test]
+    fn original_cancellation_handle_stops_each_poll_and_live_handle_completes() {
+        let domain = domain(3, Integer::from(2_i64));
+        for (value, width) in fixtures() {
+            for cause in [CancelCause::Requested, CancelCause::Deadline] {
+                let cancel = Cancel::new();
+                cancel.cancel(cause);
+                let mut meter = Meter::new(limits()).with_cancel(cancel.clone());
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    POINTS[0],
+                    LimitKind::WorkUnits,
+                    0,
+                    0,
+                    1,
+                );
+                assert_prefix(&meter, width, 0, false);
+                assert_eq!(cancel.tripped(), Some(cause));
+                for (poll, admitted, point, work) in [(2, 1, POINTS[1], 1), (3, 2, POINTS[2], 2)] {
+                    let (cancel, _keep_observer) = cancel_at(poll, cause);
+                    let mut meter = Meter::new(limits()).with_cancel(cancel.clone());
+                    assert_incomplete(
+                        ieee_to_exact(value, &domain, &mut meter),
+                        point,
+                        LimitKind::WorkUnits,
+                        work,
+                        work,
+                        1,
+                    );
+                    assert_prefix(&meter, width, admitted, false);
+                    assert_eq!(cancel.tripped(), Some(cause));
+                }
+            }
+            let cancel = Cancel::new();
+            let mut meter = Meter::new(limits()).with_cancel(cancel.clone());
+            assert_value(ieee_to_exact(value, &domain, &mut meter), 3, 2, None);
+            assert_prefix(&meter, width, 3, false);
+            assert_eq!(cancel.tripped(), None);
+        }
+    }
+
+    /// Trace: FR-373-AC-7
+    #[test]
+    fn already_spent_meter_prefix_survives_success_and_every_retain_stop() {
+        let domain = domain(3, Integer::from(2_i64));
+        for (value, width) in fixtures() {
+            let configured = limits();
+            let mut meter = precharge(configured);
+            assert_value(ieee_to_exact(value, &domain, &mut meter), 3, 2, None);
+            assert_prefix(&meter, width, 3, true);
+            assert_eq!(meter.limits(), &configured);
+            for (configured, kind, limit, consumed) in [
+                (
+                    ScalarLimits {
+                        work_units: 4,
+                        ..limits()
+                    },
+                    LimitKind::WorkUnits,
+                    4,
+                    4,
+                ),
+                (
+                    ScalarLimits {
+                        result_units: 1,
+                        ..limits()
+                    },
+                    LimitKind::ResultUnits,
+                    1,
+                    1,
+                ),
+            ] {
+                let mut meter = precharge(configured);
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    POINTS[2],
+                    kind,
+                    limit,
+                    consumed,
+                    1,
+                );
+                assert_prefix(&meter, width, 2, true);
+                assert_eq!(meter.limits(), &configured);
+            }
+            let mut meter = precharge(configured).with_injected_denial(InjectedDenial {
+                point: POINTS[2],
+                occurrence: NonZeroU64::new(1).unwrap(),
+            });
+            assert_incomplete(
+                ieee_to_exact(value, &domain, &mut meter),
+                POINTS[2],
+                LimitKind::WorkUnits,
+                4,
+                4,
+                1,
+            );
+            assert_prefix(&meter, width, 2, true);
+            assert_eq!(meter.limits(), &configured);
+            assert_value(ieee_to_exact(value, &domain, &mut meter), 3, 2, None);
+            for cause in [CancelCause::Requested, CancelCause::Deadline] {
+                let meter = precharge(configured);
+                let (cancel, _keep_observer) = cancel_at(3, cause);
+                let mut meter = meter.with_cancel(cancel.clone());
+                assert_incomplete(
+                    ieee_to_exact(value, &domain, &mut meter),
+                    POINTS[2],
+                    LimitKind::WorkUnits,
+                    4,
+                    4,
+                    1,
+                );
+                assert_prefix(&meter, width, 2, true);
+                assert_eq!(meter.limits(), &configured);
+                assert_eq!(cancel.tripped(), Some(cause));
+            }
+        }
     }
 }

@@ -441,7 +441,9 @@ impl ChargePoint {
 pub struct Incomplete {
     /// First unavailable counter in `ScalarLimitsV1` field order.
     pub limit_kind: LimitKind,
-    /// That counter's configured limit.
+    /// The configured counter limit for an ordinary shortage. For an injected
+    /// denial or cancellation, this is the work consumed before the charge,
+    /// equal to [`Self::consumed`] rather than `ScalarLimits::work_units`.
     pub limit: u64,
     /// That counter's consumed value before the denied charge.
     pub consumed: u64,
@@ -516,6 +518,70 @@ impl Charge {
     }
 }
 
+/// One admitted charge's point and actual per-admission semantic-size maxima.
+///
+/// Each absent field means the charge made no request for that size kind;
+/// `Some(0)` records an explicit zero request. Repeated requests coalesce
+/// within this admission, independently of the meter's high-water counters.
+#[cfg(feature = "test-support")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdmittedCharge {
+    /// The admitted charge point.
+    pub point: ChargePoint,
+    /// Maximum actual `integer_bits` request in this admission, if present.
+    pub integer_bits: Option<u64>,
+    /// Maximum actual `decimal_digits` request in this admission, if present.
+    pub decimal_digits: Option<u64>,
+    /// Maximum actual `scale_expansion` request in this admission, if present.
+    pub scale_expansion: Option<u64>,
+    /// Maximum actual `text_input_bytes` request in this admission, if present.
+    pub text_input_bytes: Option<u64>,
+    /// Maximum actual `text_scalars` request in this admission, if present.
+    pub text_scalars: Option<u64>,
+    /// Maximum actual `normalized_scalars` request in this admission, if present.
+    pub normalized_scalars: Option<u64>,
+    /// Maximum actual `unit_edges` request in this admission, if present.
+    pub unit_edges: Option<u64>,
+    /// Maximum actual `value_occurrences` request in this admission, if present.
+    pub value_occurrences: Option<u64>,
+}
+
+#[cfg(feature = "test-support")]
+impl AdmittedCharge {
+    fn new(point: ChargePoint) -> Self {
+        Self {
+            point,
+            integer_bits: None,
+            decimal_digits: None,
+            scale_expansion: None,
+            text_input_bytes: None,
+            text_scalars: None,
+            normalized_scalars: None,
+            unit_edges: None,
+            value_occurrences: None,
+        }
+    }
+
+    fn observe(&mut self, kind: LimitKind, amount: u64) {
+        let slot = match kind {
+            LimitKind::IntegerBits => &mut self.integer_bits,
+            LimitKind::DecimalDigits => &mut self.decimal_digits,
+            LimitKind::ScaleExpansion => &mut self.scale_expansion,
+            LimitKind::TextInputBytes => &mut self.text_input_bytes,
+            LimitKind::TextScalars => &mut self.text_scalars,
+            LimitKind::NormalizedScalars => &mut self.normalized_scalars,
+            LimitKind::UnitEdges => &mut self.unit_edges,
+            LimitKind::ValueOccurrences => &mut self.value_occurrences,
+            LimitKind::WorkUnits | LimitKind::ResultUnits => return,
+        };
+        *slot = Some(slot.map_or(amount, |previous| previous.max(amount)));
+    }
+}
+
+// No admission payload owns a request collection or any other heap storage.
+#[cfg(feature = "test-support")]
+const _: () = assert!(!core::mem::needs_drop::<AdmittedCharge>());
+
 /// A per-request scalar meter.
 ///
 /// **A count, not a log.** A production meter holds only fixed-size
@@ -536,7 +602,7 @@ pub struct Meter {
     /// The handle every charge polls, when the caller gave one.
     cancel: Option<Cancel>,
     #[cfg(feature = "test-support")]
-    admitted: Vec<ChargePoint>,
+    admitted: Vec<AdmittedCharge>,
     #[cfg(feature = "test-support")]
     charge_log_truncated: bool,
 }
@@ -607,10 +673,10 @@ impl Meter {
         self.counters.admissions
     }
 
-    /// Every admitted charge point in admission order. Test-only: a
+    /// The first 4096 admitted charge records in admission order. Test-only: a
     /// production meter keeps [`Self::admission_count`], not a log.
     #[cfg(feature = "test-support")]
-    pub fn admitted_charges(&self) -> &[ChargePoint] {
+    pub fn admitted_charges(&self) -> &[AdmittedCharge] {
         &self.admitted
     }
 
@@ -701,17 +767,29 @@ impl Meter {
         };
         let work = cumulative(LimitKind::WorkUnits, charge.work_units)?;
         let results = cumulative(LimitKind::ResultUnits, charge.result_units)?;
+        #[cfg(feature = "test-support")]
+        let mut record = AdmittedCharge::new(point);
         for (kind, amount) in sizes {
+            #[cfg(feature = "test-support")]
+            record.observe(kind, amount);
             let slot = &mut self.counters.consumed[kind.index()];
             *slot = (*slot).max(amount);
         }
         self.counters.consumed[LimitKind::WorkUnits.index()] = work;
         self.counters.consumed[LimitKind::ResultUnits.index()] = results;
-        self.admit(point);
+        self.admit(
+            point,
+            #[cfg(feature = "test-support")]
+            record,
+        );
         Ok(())
     }
 
-    fn admit(&mut self, point: ChargePoint) {
+    fn admit(
+        &mut self,
+        point: ChargePoint,
+        #[cfg(feature = "test-support")] record: AdmittedCharge,
+    ) {
         if self
             .counters
             .denial
@@ -723,7 +801,7 @@ impl Meter {
         self.counters.admissions = self.counters.admissions.saturating_add(1);
         #[cfg(feature = "test-support")]
         if self.admitted.len() < CHARGE_LOG_CAPACITY {
-            self.admitted.push(point);
+            self.admitted.push(record);
         } else {
             self.charge_log_truncated = true;
         }
@@ -759,7 +837,14 @@ impl Meter {
         *slot = (*slot).max(size);
         let work = &mut self.counters.consumed[LimitKind::WorkUnits.index()];
         *work = work.saturating_add(1);
-        self.admit(point);
+        self.admit(
+            point,
+            #[cfg(feature = "test-support")]
+            AdmittedCharge {
+                value_occurrences: Some(size),
+                ..AdmittedCharge::new(point)
+            },
+        );
         Ok(())
     }
 }
@@ -1094,7 +1179,11 @@ mod tests {
         assert_eq!(meter.consumed(LimitKind::IntegerBits), 4);
         #[cfg(feature = "test-support")]
         assert_eq!(
-            meter.admitted_charges(),
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<alloc::vec::Vec<_>>(),
             [
                 ChargePoint::FunctionCall,
                 ChargePoint::CollectionVisit,
@@ -1130,7 +1219,206 @@ mod tests {
         assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 2);
         assert_eq!(meter.consumed(LimitKind::WorkUnits), 1);
         #[cfg(feature = "test-support")]
-        assert_eq!(meter.admitted_charges(), [ChargePoint::EqualityPlan]);
+        assert_eq!(
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<alloc::vec::Vec<_>>(),
+            [ChargePoint::EqualityPlan]
+        );
+    }
+
+    /// Trace: FR-358-AC-12
+    #[test]
+    fn injected_record_uses_precharge_work_and_plan_reservation() {
+        for work_limit in [10, 100] {
+            let limits = ScalarLimits {
+                work_units: work_limit,
+                ..unlimited()
+            };
+            let mut meter = Meter::new(limits);
+            meter
+                .charge(Charge::new(ChargePoint::CollectionVisit).work(Integer::from(2_u64)))
+                .expect("two work units are admitted before injection");
+            let mut meter = meter.with_injected_denial(InjectedDenial {
+                point: ChargePoint::FunctionCall,
+                occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+            });
+            let before = meter.clone();
+            assert_eq!(
+                meter
+                    .charge(Charge::new(ChargePoint::FunctionCall).work(Integer::from(3_u64)))
+                    .expect_err("selected charge is denied"),
+                Incomplete {
+                    limit_kind: LimitKind::WorkUnits,
+                    limit: 2,
+                    consumed: 2,
+                    next_charge: Integer::from(3_u64),
+                    charge_point: ChargePoint::FunctionCall,
+                }
+            );
+            assert_unchanged(&before, &meter);
+
+            let mut plan_meter = Meter::new(limits);
+            plan_meter
+                .charge(Charge::new(ChargePoint::CollectionVisit).work(Integer::from(2_u64)))
+                .expect("two work units are admitted before the plan");
+            let mut plan_meter = plan_meter.with_injected_denial(InjectedDenial {
+                point: ChargePoint::EqualityPlan,
+                occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+            });
+            let before = plan_meter.clone();
+            assert_eq!(
+                plan_meter
+                    .charge_plan(&Integer::from(2_u64))
+                    .expect_err("selected plan is denied"),
+                Incomplete {
+                    limit_kind: LimitKind::WorkUnits,
+                    limit: 2,
+                    consumed: 2,
+                    next_charge: Integer::from(4_u64),
+                    charge_point: ChargePoint::EqualityPlan,
+                }
+            );
+            assert_unchanged(&before, &plan_meter);
+            plan_meter
+                .charge_plan(&Integer::from(2_u64))
+                .expect("the spent injection permits a valid plan");
+            assert_eq!(plan_meter.consumed(LimitKind::WorkUnits), 3);
+            assert_eq!(plan_meter.admission_count(), 2);
+        }
+    }
+
+    /// Trace: FR-358-AC-13
+    #[test]
+    fn injected_denial_precedes_ordinary_size_and_plan_shortages() {
+        let size_limits = ScalarLimits {
+            integer_bits: 8,
+            work_units: 10,
+            ..unlimited()
+        };
+        let size_charge = || {
+            Charge::new(ChargePoint::FunctionCall)
+                .size(LimitKind::IntegerBits, 9)
+                .work(Integer::from(3_u64))
+        };
+        let mut ordinary = Meter::new(size_limits);
+        assert_eq!(
+            ordinary
+                .charge(size_charge())
+                .expect_err("size exceeds eight"),
+            Incomplete {
+                limit_kind: LimitKind::IntegerBits,
+                limit: 8,
+                consumed: 0,
+                next_charge: Integer::from(9_u64),
+                charge_point: ChargePoint::FunctionCall,
+            }
+        );
+        let mut injected = Meter::new(size_limits).with_injected_denial(InjectedDenial {
+            point: ChargePoint::FunctionCall,
+            occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+        });
+        let before = injected.clone();
+        assert_eq!(
+            injected
+                .charge(size_charge())
+                .expect_err("injection precedes size"),
+            Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: 0,
+                consumed: 0,
+                next_charge: Integer::from(3_u64),
+                charge_point: ChargePoint::FunctionCall,
+            }
+        );
+        assert_unchanged(&before, &injected);
+
+        let plan_limits = ScalarLimits {
+            work_units: 3,
+            ..unlimited()
+        };
+        let mut plan_meter = Meter::new(plan_limits);
+        plan_meter
+            .charge(Charge::new(ChargePoint::CollectionVisit).work(Integer::from(2_u64)))
+            .expect("two work units are admitted");
+        let mut ordinary = plan_meter.clone();
+        assert_eq!(
+            ordinary
+                .charge_plan(&Integer::from(2_u64))
+                .expect_err("four-unit reservation exceeds one remaining unit"),
+            Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: 3,
+                consumed: 2,
+                next_charge: Integer::from(4_u64),
+                charge_point: ChargePoint::EqualityPlan,
+            }
+        );
+        let mut injected = plan_meter.with_injected_denial(InjectedDenial {
+            point: ChargePoint::EqualityPlan,
+            occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+        });
+        let before = injected.clone();
+        assert_eq!(
+            injected
+                .charge_plan(&Integer::from(2_u64))
+                .expect_err("injection precedes the reservation shortage"),
+            Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: 2,
+                consumed: 2,
+                next_charge: Integer::from(4_u64),
+                charge_point: ChargePoint::EqualityPlan,
+            }
+        );
+        assert_unchanged(&before, &injected);
+
+        let cancel = Cancel::new();
+        let mut cancelled = Meter::new(size_limits)
+            .with_cancel(cancel.clone())
+            .with_injected_denial(InjectedDenial {
+                point: ChargePoint::FunctionCall,
+                occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+            });
+        cancel.cancel(crate::CancelCause::Deadline);
+        let before = cancelled.clone();
+        assert_eq!(
+            cancelled
+                .charge(size_charge())
+                .expect_err("cancellation precedes injection"),
+            Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: 0,
+                consumed: 0,
+                next_charge: Integer::from(3_u64),
+                charge_point: ChargePoint::FunctionCall,
+            }
+        );
+        assert_eq!(cancel.tripped(), Some(crate::CancelCause::Deadline));
+        assert_unchanged(&before, &cancelled);
+
+        let mut resumed = cancelled.with_cancel(Cancel::new());
+        let before_injection = resumed.clone();
+        assert_eq!(
+            resumed
+                .charge(size_charge())
+                .expect_err("cancellation left the selected injection pending"),
+            Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: 0,
+                consumed: 0,
+                next_charge: Integer::from(3_u64),
+                charge_point: ChargePoint::FunctionCall,
+            }
+        );
+        assert_unchanged(&before_injection, &resumed);
+        resumed
+            .charge(Charge::new(ChargePoint::FunctionCall))
+            .expect("the spent injection allows an ordinary valid charge");
+        assert_eq!(resumed.admission_count(), 1);
+        assert_eq!(resumed.consumed(LimitKind::WorkUnits), 1);
     }
 
     /// Trace: FR-358-AC-3
@@ -1164,14 +1452,28 @@ mod tests {
                 .charge(Charge::new(*point))
                 .expect("unlimited meter admits each charge");
         }
-        assert_eq!(meter.admitted_charges(), expected);
+        assert_eq!(
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<alloc::vec::Vec<_>>(),
+            expected
+        );
         assert!(!meter.charge_log_truncated());
         assert_eq!(meter.admission_count(), 4096);
 
         meter
             .charge(Charge::new(ChargePoint::EqualityPlan))
             .expect("the charge beyond the log cap is still admitted");
-        assert_eq!(meter.admitted_charges(), expected);
+        assert_eq!(
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<alloc::vec::Vec<_>>(),
+            expected
+        );
         assert!(meter.charge_log_truncated());
         assert_eq!(meter.admission_count(), 4097);
         assert_eq!(meter.consumed(LimitKind::WorkUnits), 4097);

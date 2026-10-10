@@ -102,6 +102,13 @@ fn leaf<'a>(
         (Value::Text(left), Value::Text(right)) => {
             left.retained().as_bytes().cmp(right.retained().as_bytes())
         }
+        (Value::Uuid(left), Value::Uuid(right)) => {
+            left.canonical_bytes().cmp(&right.canonical_bytes())
+        }
+        (Value::Timestamp(left), Value::Timestamp(right)) => left
+            .canonical_text()
+            .as_bytes()
+            .cmp(right.canonical_text().as_bytes()),
         // A rank alone does not name a declaration. Two
         // members of *different* enum declarations can share a rank without
         // being equal under `crate::equality` (they have different
@@ -175,6 +182,8 @@ fn leaf<'a>(
             | Value::Float(_)
             | Value::Quantity(_)
             | Value::Text(_)
+            | Value::Uuid(_)
+            | Value::Timestamp(_)
             | Value::Enum(_)
             | Value::Population(_)
             | Value::Reference(_)
