@@ -330,7 +330,7 @@ mod tests {
         // Expected lifted coefficients are calculated directly from these
         // bounded authored pairs, independently of the endpoint algorithm.
         let cases = [
-            (0, 100, 2, 2, 1, 0, true),
+            (0_i64, 100_i64, 2, 2, 1_i64, 0, true),
             (100, 200, 2, 2, 1, 0, true),
             (0, 99, 2, 2, 1, 0, false),
             (101, 200, 2, 2, 1, 0, false),
