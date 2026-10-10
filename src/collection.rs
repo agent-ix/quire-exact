@@ -39,7 +39,7 @@ use crate::accounting::{length_amount, Charge, ChargePoint, LimitKind, Meter};
 use crate::equality::plan_pairs;
 use crate::integer::Integer;
 use crate::key::compare_keys;
-use crate::outcome::{BoundViolation, Outcome, Refusal, Stop};
+use crate::outcome::{BoundViolation, CheckedInvariantCause, Outcome, Refusal, Stop};
 use crate::value::{
     drop_nested, Component, ConstructionCause, ConstructionRefusal, Deferred, Value, ValueType,
 };
@@ -283,7 +283,9 @@ fn construct(
         meter.charge(Charge::new(ChargePoint::CollectionElement))?;
         let value = element(meter).into_stop()?;
         if !collection_type.element.admits(&value) {
-            return Err(Stop::Refused(Refusal::CheckedInvariant));
+            return Err(Stop::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::CollectionElementNotAdmitted,
+            }));
         }
         occurrences.push(value);
     }
@@ -493,7 +495,9 @@ fn sort_by_key(elements: &mut [Value]) -> Result<(), Stop> {
         })
     });
     if unkeyed.get() {
-        return Err(Stop::Refused(Refusal::CheckedInvariant));
+        return Err(Stop::Refused(Refusal::CheckedInvariant {
+            cause: CheckedInvariantCause::CanonicalKeyUnavailable,
+        }));
     }
     Ok(())
 }
@@ -531,6 +535,43 @@ mod tests {
         let outcome = form_collection(&collection_type, vec![], &mut meter).unwrap();
         let value = outcome.completed().expect("within bound");
         assert_eq!(value.occ(), Integer::one());
+    }
+
+    /// Trace: FR-369-AC-2
+    #[test]
+    fn evaluated_element_outside_its_type_reports_exact_cause() {
+        let collection_type =
+            CollectionType::new(CollectionKind::Sequence, ValueType::Integer, None);
+        let elements: Vec<Deferred<'_>> =
+            vec![Box::new(|_| Outcome::Completed(Value::Boolean(true)))];
+        assert!(matches!(
+            construct_collection(&collection_type, elements, &mut generous_meter()),
+            Outcome::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::CollectionElementNotAdmitted,
+            })
+        ));
+    }
+
+    /// Trace: FR-369-AC-2
+    #[test]
+    fn grouped_float_members_without_keys_report_exact_cause() {
+        use crate::ieee::{FloatType, IeeeValue, IeeeWidth};
+
+        let collection_type = CollectionType::new(
+            CollectionKind::Set,
+            ValueType::Float(FloatType::exact(IeeeWidth::Binary32)),
+            None,
+        );
+        let members = vec![
+            Value::Float(IeeeValue::binary32(0)),
+            Value::Float(IeeeValue::binary32(0x3f80_0000)),
+        ];
+        assert!(matches!(
+            form_grouped(&collection_type, members, &mut generous_meter()),
+            Outcome::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::CanonicalKeyUnavailable,
+            })
+        ));
     }
 
     /// forming a sequence past its declared maximum is refused with

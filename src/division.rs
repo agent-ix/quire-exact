@@ -11,7 +11,7 @@
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::integer::{Integer, IntegerDomain, IntegerInterval};
-use crate::outcome::{Outcome, Refusal, Stop, Undefined};
+use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop, Undefined};
 use alloc::boxed::Box;
 
 /// A selectable `div`/`rem` law.
@@ -124,7 +124,9 @@ fn reject_zero_divisor(divisor: &Integer) -> Result<(), Stop> {
 fn refused_interval(domain: &IntegerDomain) -> Result<Box<IntegerInterval>, Stop> {
     match domain {
         IntegerDomain::Bounded(interval) => Ok(Box::new(interval.clone())),
-        IntegerDomain::Mathematical => Err(Stop::Refused(Refusal::CheckedInvariant)),
+        IntegerDomain::Mathematical => Err(Stop::Refused(Refusal::CheckedInvariant {
+            cause: CheckedInvariantCause::BoundedDivisionExpected,
+        })),
     }
 }
 
@@ -220,6 +222,22 @@ mod tests {
 
     fn range(low: i64, high: i64) -> IntegerDomain {
         IntegerDomain::Bounded(IntegerInterval::new(int(low), int(high)).unwrap())
+    }
+
+    /// Trace: FR-369-AC-2
+    #[test]
+    fn refused_interval_requires_a_bounded_domain() {
+        assert_eq!(
+            refused_interval(&IntegerDomain::Mathematical),
+            Err(Stop::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::BoundedDivisionExpected,
+            }))
+        );
+        let interval = IntegerInterval::new(int(0), int(1)).unwrap();
+        assert_eq!(
+            refused_interval(&IntegerDomain::Bounded(interval.clone())),
+            Ok(Box::new(interval))
+        );
     }
 
     fn run(

@@ -48,7 +48,7 @@ use crate::identity::{EffectiveId, MemberId, PopulationId, UnitId, VariantId};
 use crate::ieee::{FloatType, IeeeValue};
 use crate::integer::{Integer, IntegerInterval};
 use crate::node::NodeKey;
-use crate::outcome::{Outcome, Refusal, Stop};
+use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
 use crate::quantity::Quantity;
 use crate::rational::{Rational, RationalDomain};
 use crate::reference::ObjectReference;
@@ -1061,7 +1061,9 @@ fn admitted(value_type: &ValueType, outcome: Outcome<Value>) -> Result<Value, St
     if value_type.admits(&value) {
         Ok(value)
     } else {
-        Err(Stop::Refused(Refusal::CheckedInvariant))
+        Err(Stop::Refused(Refusal::CheckedInvariant {
+            cause: CheckedInvariantCause::DeferredResultNotAdmitted,
+        }))
     }
 }
 
@@ -1262,6 +1264,55 @@ mod tests {
             work_units: u64::MAX,
             result_units: u64::MAX,
         })
+    }
+
+    /// Trace: FR-369-AC-2
+    #[test]
+    fn deferred_record_field_outside_its_type_reports_exact_cause() {
+        let member = MemberId::from_digest(digest(1));
+        let shape = [FieldDeclaration::new(
+            member,
+            "count",
+            ValueType::Integer,
+            Presence::Required,
+        )];
+        let fields = vec![(
+            member,
+            FieldExpression::Evaluate(Box::new(|_| Outcome::Completed(Value::Boolean(true)))),
+        )];
+        let outcome = evaluate_record(
+            &shape,
+            NodeKey::from_digest(digest(2)),
+            fields,
+            &mut generous_meter(),
+        )
+        .expect("field shape is valid before deferred evaluation");
+        assert!(matches!(
+            outcome,
+            Outcome::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::DeferredResultNotAdmitted,
+            })
+        ));
+    }
+
+    /// Trace: FR-369-AC-2
+    #[test]
+    fn deferred_tuple_position_outside_its_type_reports_exact_cause() {
+        let positions: Vec<Deferred<'_>> =
+            vec![Box::new(|_| Outcome::Completed(Value::Boolean(true)))];
+        let outcome = evaluate_tuple(
+            &[ValueType::Integer],
+            NodeKey::from_digest(digest(2)),
+            positions,
+            &mut generous_meter(),
+        )
+        .expect("arity is valid before deferred evaluation");
+        assert!(matches!(
+            outcome,
+            Outcome::Refused(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::DeferredResultNotAdmitted,
+            })
+        ));
     }
 
     /// `ValueType::Boolean` admits only `Value::Boolean`, refusing
