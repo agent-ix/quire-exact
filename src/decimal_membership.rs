@@ -87,7 +87,7 @@ fn poll(cancel: &Cancel) -> Result<(), DecimalMembershipFailure> {
 }
 
 fn scratch_layout(magnitude_bits: u64) -> Result<(usize, Layout), DecimalMembershipFailure> {
-    let limbs = magnitude_bits / 32 + u64::from(magnitude_bits % 32 != 0);
+    let limbs = magnitude_bits.div_ceil(32);
     checked_scratch_layout(limbs, magnitude_bits)
 }
 
