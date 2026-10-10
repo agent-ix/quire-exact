@@ -117,7 +117,10 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             CheckedInvariantCause::EqualityOperandTargetNotAdmitted,
             "equality-target-admission",
         ),
-        (CheckedInvariantCause::EqualityUnitUnresolved, "equality-unit"),
+        (
+            CheckedInvariantCause::EqualityUnitUnresolved,
+            "equality-unit",
+        ),
         (
             CheckedInvariantCause::EqualityEnumVariantUnresolved,
             "equality-enum-variant",
