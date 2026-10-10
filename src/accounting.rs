@@ -1304,6 +1304,27 @@ mod tests {
         );
         assert_eq!(cancel.tripped(), Some(crate::CancelCause::Deadline));
         assert_unchanged(&before, &cancelled);
+
+        let mut resumed = cancelled.with_cancel(Cancel::new());
+        let before_injection = resumed.clone();
+        assert_eq!(
+            resumed
+                .charge(size_charge())
+                .expect_err("cancellation left the selected injection pending"),
+            Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: 0,
+                consumed: 0,
+                next_charge: Integer::from(3_u64),
+                charge_point: ChargePoint::FunctionCall,
+            }
+        );
+        assert_unchanged(&before_injection, &resumed);
+        resumed
+            .charge(Charge::new(ChargePoint::FunctionCall))
+            .expect("the spent injection allows an ordinary valid charge");
+        assert_eq!(resumed.admission_count(), 1);
+        assert_eq!(resumed.consumed(LimitKind::WorkUnits), 1);
     }
 
     /// Trace: FR-358-AC-3
