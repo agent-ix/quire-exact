@@ -148,6 +148,8 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
             {
                 l.retained() == r.retained()
             }
+            (Value::Uuid(l), Value::Uuid(r)) => l == r,
+            (Value::Timestamp(l), Value::Timestamp(r)) => l == r,
             // Identity and equality use the `VariantId` only
             // -- the paired rank is ignored here, exactly as it is
             // absent from `ValueType::Enum`'s own admission-checked identity.
@@ -204,6 +206,8 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 | Value::Float(_)
                 | Value::Quantity(_)
                 | Value::Text(_)
+                | Value::Uuid(_)
+                | Value::Timestamp(_)
                 | Value::Enum(_)
                 | Value::Population(_)
                 | Value::Reference(_)
