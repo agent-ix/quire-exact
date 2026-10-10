@@ -43,4 +43,4 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 ## Status
 
 PR #9 adds executable Trace bindings for FR-358-AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.
-FR-358-AC-12 and AC-13 are specified here; their executable Trace bindings are follow-up work.
+FR-358-AC-12 and AC-13 have direct public-meter Trace bindings for the exact injected record and ordinary-limit precedence. Run `quire matrix` for the current criterion-to-test mapping.
