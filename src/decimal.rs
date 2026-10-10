@@ -38,7 +38,7 @@ use core::cmp::Ordering;
 
 use crate::accounting::{length_amount, Charge, ChargePoint, LimitKind, Meter};
 use crate::comparison::{IllTyped, IllTypedCause};
-use crate::integer::Integer;
+use crate::integer::{Integer, NonZeroInteger};
 use crate::outcome::{InexactTarget, Outcome, Refusal, Stop, Undefined};
 use crate::rational::Rational;
 
@@ -72,10 +72,12 @@ impl DecimalRepresentation {
             return Self::new(Integer::zero(), 0);
         }
         let ten = Integer::from(10_i64);
+        // The authored literal ten is positive.
+        let divisor = NonZeroInteger::from_proven_nonzero(&ten);
         let mut coefficient = self.coefficient.clone();
         let mut scale = self.scale;
         while scale > 0 {
-            let (quotient, remainder) = coefficient.div_rem_truncating(&ten);
+            let (quotient, remainder) = coefficient.div_rem_truncating(divisor);
             if !remainder.is_zero() {
                 break;
             }
@@ -279,7 +281,9 @@ fn split_factor_five(value: &Integer, limit: u64) -> (Integer, u64) {
         if *width > limit - count {
             break;
         }
-        let (quotient, remainder) = remaining.div_rem_truncating(power);
+        // Every ladder entry starts at positive five and is only squared.
+        let divisor = NonZeroInteger::from_proven_nonzero(power);
+        let (quotient, remainder) = remaining.div_rem_truncating(divisor);
         if !remainder.is_zero() {
             break;
         }
@@ -293,7 +297,9 @@ fn split_factor_five(value: &Integer, limit: u64) -> (Integer, u64) {
         if *width > limit - count {
             continue;
         }
-        let (quotient, remainder) = remaining.div_rem_truncating(power);
+        // Every ladder entry starts at positive five and is only squared.
+        let divisor = NonZeroInteger::from_proven_nonzero(power);
+        let (quotient, remainder) = remaining.div_rem_truncating(divisor);
         if remainder.is_zero() {
             remaining = quotient;
             count += width;
@@ -827,7 +833,9 @@ impl DecimalType {
             .filter(|scale| *scale <= self.max_scale);
         let placing = if let Some(scale) = terminating {
             // `n/d = n × (10^k / d) × 10^-k` with `k <= bits(d)`.
-            let factor = Integer::power_of_ten(u64::from(scale)).exact_div(denominator);
+            // Canonical Rational construction establishes a positive denominator.
+            let divisor = NonZeroInteger::from_proven_nonzero(denominator);
+            let factor = Integer::power_of_ten(u64::from(scale)).exact_div(divisor);
             Placing::Placed(Coefficient {
                 coefficient: numerator.mul(&factor),
                 scale,
@@ -943,8 +951,10 @@ fn terminating_scale(denominator: &Integer) -> Option<u64> {
     let mut counts = [0_u64; 2];
     for (count, prime) in counts.iter_mut().zip([2_i64, 5]) {
         let prime = Integer::from(prime);
+        // The authored prime list contains only positive two and five.
+        let divisor = NonZeroInteger::from_proven_nonzero(&prime);
         loop {
-            let (quotient, remainder) = remaining.div_mod_floor(&prime);
+            let (quotient, remainder) = remaining.div_mod_floor(divisor);
             if !remainder.is_zero() {
                 break;
             }
@@ -1075,7 +1085,9 @@ fn in_target_units(intermediate: &Intermediate, target_scale: u32) -> TargetUnit
         return TargetUnits::RoundingStep(proxy);
     }
     let power = Integer::power_of_ten(excess);
-    let (quotient, remainder) = value.div_rem_truncating(&power);
+    // Ten to any nonnegative exponent is positive.
+    let divisor = NonZeroInteger::from_proven_nonzero(&power);
+    let (quotient, remainder) = value.div_rem_truncating(divisor);
     if remainder.is_zero() {
         TargetUnits::Exact {
             coefficient: quotient,
@@ -1134,7 +1146,9 @@ fn shifted_digits(value: &Integer, shift: u64) -> u64 {
 
 /// Round a non-integer reduced rational to an integer, or `None` for `exact`.
 fn round(value: &Rational, mode: RoundingMode) -> Option<Integer> {
-    let (floor, remainder) = value.numerator().div_mod_floor(value.denominator());
+    // Canonical Rational construction establishes a positive denominator.
+    let divisor = NonZeroInteger::from_proven_nonzero(value.denominator());
+    let (floor, remainder) = value.numerator().div_mod_floor(divisor);
     let ceiling = floor.add(&Integer::one());
     let negative = value.numerator().is_negative();
     let nearest = || match remainder.add(&remainder).cmp(value.denominator()) {

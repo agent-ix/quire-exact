@@ -10,7 +10,7 @@
 //! directly.
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
-use crate::integer::{Integer, IntegerDomain, IntegerInterval};
+use crate::integer::{Integer, IntegerDomain, IntegerInterval, NonZeroInteger};
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop, Undefined};
 use alloc::boxed::Box;
 
@@ -39,7 +39,7 @@ impl DivisionProfile {
     }
 
     /// The unique `(q, r)` with `a = b*q + r` under this law; `b` is nonzero.
-    fn apply(self, dividend: &Integer, divisor: &Integer) -> (Integer, Integer) {
+    fn apply(self, dividend: &Integer, divisor: NonZeroInteger<'_>) -> (Integer, Integer) {
         match self {
             Self::Truncating => dividend.div_rem_truncating(divisor),
             Self::Floor => dividend.div_mod_floor(divisor),
@@ -47,7 +47,7 @@ impl DivisionProfile {
                 let (quotient, remainder) = dividend.div_mod_floor(divisor);
                 if remainder.is_negative() {
                     // Only a negative divisor yields a negative floor remainder.
-                    (quotient.add(&Integer::one()), remainder.sub(divisor))
+                    (quotient.add(&Integer::one()), remainder.sub(divisor.get()))
                 } else {
                     (quotient, remainder)
                 }
@@ -110,12 +110,8 @@ fn arithmetic_bits(dividend: &Integer, divisor: &Integer) -> u64 {
     operand_bits(dividend, divisor)
 }
 
-fn reject_zero_divisor(divisor: &Integer) -> Result<(), Stop> {
-    if divisor.is_zero() {
-        Err(Stop::Undefined(Undefined::DivisionByZero))
-    } else {
-        Ok(())
-    }
+fn admit_divisor(divisor: &Integer) -> Result<NonZeroInteger<'_>, Stop> {
+    NonZeroInteger::try_from(divisor).map_err(|_| Stop::Undefined(Undefined::DivisionByZero))
 }
 
 /// The bounded consumer interval a failed membership decision was made
@@ -145,12 +141,12 @@ fn member_of(
             .size(LimitKind::IntegerBits, operand_bits(dividend, divisor))
             .size(LimitKind::ValueOccurrences, 2),
     )?;
-    reject_zero_divisor(divisor)?;
+    let admitted_divisor = admit_divisor(divisor)?;
     meter.charge(
         Charge::new(ChargePoint::IntegerDivisionArithmetic)
             .size(LimitKind::IntegerBits, arithmetic_bits(dividend, divisor)),
     )?;
-    let (quotient, remainder) = profile.apply(dividend, divisor);
+    let (quotient, remainder) = profile.apply(dividend, admitted_divisor);
     let exposed = member.select(quotient, remainder);
     meter.charge(
         Charge::new(ChargePoint::IntegerDivisionDomain).size(LimitKind::ValueOccurrences, 1),
@@ -176,12 +172,12 @@ fn euclidean_remainder(
             .size(LimitKind::IntegerBits, operand_bits(dividend, divisor))
             .size(LimitKind::ValueOccurrences, 2),
     )?;
-    reject_zero_divisor(divisor)?;
+    let admitted_divisor = admit_divisor(divisor)?;
     meter.charge(
         Charge::new(ChargePoint::IntegerModulusArithmetic)
             .size(LimitKind::IntegerBits, arithmetic_bits(dividend, divisor)),
     )?;
-    let (_, remainder) = DivisionProfile::Euclidean.apply(dividend, divisor);
+    let (_, remainder) = DivisionProfile::Euclidean.apply(dividend, admitted_divisor);
     meter.charge(
         Charge::new(ChargePoint::IntegerModulusDomain).size(LimitKind::ValueOccurrences, 1),
     )?;

@@ -15,7 +15,7 @@
 use core::cmp::Ordering;
 use core::fmt;
 
-use crate::integer::{Integer, IntegerInterval};
+use crate::integer::{Integer, IntegerInterval, NonZeroInteger};
 use crate::numeric::ArithmeticOperator;
 
 /// A reduced rational: positive denominator, `gcd(numerator, denominator) = 1`,
@@ -46,10 +46,10 @@ impl Rational {
             return Self::from_integer(Integer::zero());
         }
         let divisor = numerator.gcd(&denominator);
-        let (mut numerator, mut denominator) = (
-            numerator.exact_div(&divisor),
-            denominator.exact_div(&divisor),
-        );
+        // The nonzero denominator makes this gcd strictly positive.
+        let divisor = NonZeroInteger::from_proven_nonzero(&divisor);
+        let (mut numerator, mut denominator) =
+            (numerator.exact_div(divisor), denominator.exact_div(divisor));
         if denominator.is_negative() {
             numerator = numerator.neg();
             denominator = denominator.neg();
@@ -88,9 +88,12 @@ impl Rational {
     pub fn divided_by_power_of_ten(&self, exponent: u64) -> Self {
         let denominator = self.denominator.mul(&Integer::power_of_ten(exponent));
         let divisor = self.numerator.gcd(&denominator);
+        // The positive denominator times 10^exponent stays positive, so its
+        // gcd is nonzero even when the numerator is zero.
+        let divisor = NonZeroInteger::from_proven_nonzero(&divisor);
         Self {
-            numerator: self.numerator.exact_div(&divisor),
-            denominator: denominator.exact_div(&divisor),
+            numerator: self.numerator.exact_div(divisor),
+            denominator: denominator.exact_div(divisor),
         }
     }
 
