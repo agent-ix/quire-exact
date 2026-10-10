@@ -113,7 +113,8 @@ pub enum Undefined {
 }
 
 /// The closed internal-fault causes shared by checked kernel operations,
-/// runtime checking residue and generated checked oracles (FR-369).
+/// runtime checking residue, shared semantic values and generated checked
+/// oracles (FR-369).
 /// These are never catalog refusal codes or caller-supplied messages.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CheckedInvariantCause {
@@ -146,6 +147,25 @@ pub enum CheckedInvariantCause {
         /// The original kernel-owned comparison cause.
         cause: IllTypedCause,
     },
+    /// A completed equality operand is outside its checked source type.
+    EqualityOperandSourceNotAdmitted,
+    /// An equality conversion to integer received a nonintegral decimal.
+    EqualityOperandNonIntegralDecimal,
+    /// A checked equality quantity conversion refused after checking.
+    EqualityQuantityConversionRejected {
+        /// The original kernel-owned quantity-conversion cause.
+        cause: IllTypedCause,
+    },
+    /// An exact equality quantity conversion returned decimal or integer placement.
+    EqualityQuantityNonExactPlacement,
+    /// An equality conversion received an incompatible source, target or value shape.
+    EqualityConversionShapeMismatch,
+    /// A converted equality operand is outside its checked target type.
+    EqualityOperandTargetNotAdmitted,
+    /// A checked equality quantity's unit could not be resolved.
+    EqualityUnitUnresolved,
+    /// A checked equality enum operand's variant could not be resolved.
+    EqualityEnumVariantUnresolved,
     /// Scale-zero placement retained a value other than an integer.
     ExpectedIntegerPlacement,
     /// A generated declaration placeholder ran before replacement.

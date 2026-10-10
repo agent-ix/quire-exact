@@ -19,6 +19,14 @@ fn expected_name(cause: CheckedInvariantCause) -> &'static str {
         CheckedInvariantCause::MeterBorrowConflict => "meter-borrow",
         CheckedInvariantCause::EqualityScheduleMismatch => "equality-schedule",
         CheckedInvariantCause::ScheduledComparisonRefused { .. } => "scheduled-comparison",
+        CheckedInvariantCause::EqualityOperandSourceNotAdmitted => "equality-source-admission",
+        CheckedInvariantCause::EqualityOperandNonIntegralDecimal => "equality-nonintegral-decimal",
+        CheckedInvariantCause::EqualityQuantityConversionRejected { .. } => "equality-conversion",
+        CheckedInvariantCause::EqualityQuantityNonExactPlacement => "equality-placement",
+        CheckedInvariantCause::EqualityConversionShapeMismatch => "equality-conversion-shape",
+        CheckedInvariantCause::EqualityOperandTargetNotAdmitted => "equality-target-admission",
+        CheckedInvariantCause::EqualityUnitUnresolved => "equality-unit",
+        CheckedInvariantCause::EqualityEnumVariantUnresolved => "equality-enum-variant",
         CheckedInvariantCause::ExpectedIntegerPlacement => "integer-placement",
         CheckedInvariantCause::GeneratedBodyPlaceholderInvoked => "generated-placeholder",
         CheckedInvariantCause::GeneratedArgumentShapeMismatch => "generated-arguments",
@@ -84,6 +92,37 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             "scheduled-comparison",
         ),
         (
+            CheckedInvariantCause::EqualityOperandSourceNotAdmitted,
+            "equality-source-admission",
+        ),
+        (
+            CheckedInvariantCause::EqualityOperandNonIntegralDecimal,
+            "equality-nonintegral-decimal",
+        ),
+        (
+            CheckedInvariantCause::EqualityQuantityConversionRejected {
+                cause: IllTypedCause::IncompatibleDimensions,
+            },
+            "equality-conversion",
+        ),
+        (
+            CheckedInvariantCause::EqualityQuantityNonExactPlacement,
+            "equality-placement",
+        ),
+        (
+            CheckedInvariantCause::EqualityConversionShapeMismatch,
+            "equality-conversion-shape",
+        ),
+        (
+            CheckedInvariantCause::EqualityOperandTargetNotAdmitted,
+            "equality-target-admission",
+        ),
+        (CheckedInvariantCause::EqualityUnitUnresolved, "equality-unit"),
+        (
+            CheckedInvariantCause::EqualityEnumVariantUnresolved,
+            "equality-enum-variant",
+        ),
+        (
             CheckedInvariantCause::ExpectedIntegerPlacement,
             "integer-placement",
         ),
@@ -147,8 +186,9 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
 /// Trace: FR-369-AC-1, FR-369-AC-5
 #[test]
 fn comparison_payloads_retain_the_original_typed_cause() {
-    let constructors: [fn(IllTypedCause) -> CheckedInvariantCause; 3] = [
+    let constructors: [fn(IllTypedCause) -> CheckedInvariantCause; 4] = [
         |cause| CheckedInvariantCause::ScheduledComparisonRefused { cause },
+        |cause| CheckedInvariantCause::EqualityQuantityConversionRejected { cause },
         |cause| CheckedInvariantCause::GeneratedTypeCheckRejected { cause },
         |cause| CheckedInvariantCause::GeneratedEqualityCheckRejected { cause },
     ];
@@ -164,6 +204,7 @@ fn comparison_payloads_retain_the_original_typed_cause() {
                 Refusal::CheckedInvariant {
                     cause:
                         CheckedInvariantCause::ScheduledComparisonRefused { cause }
+                        | CheckedInvariantCause::EqualityQuantityConversionRejected { cause }
                         | CheckedInvariantCause::GeneratedTypeCheckRejected { cause }
                         | CheckedInvariantCause::GeneratedEqualityCheckRejected { cause },
                 } => cause,
@@ -181,14 +222,14 @@ fn comparison_payloads_retain_the_original_typed_cause() {
     }
 }
 
-/// Trace: FR-369-AC-1
+/// Trace: FR-369-AC-1, FR-369-AC-5
 #[test]
 fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
     use std::{fs, process::Command};
 
     let executable = std::env::current_exe().expect("integration test executable");
     let dependencies = executable.parent().expect("Cargo dependency directory");
-    let mut libraries: Vec<_> = fs::read_dir(dependencies)
+    let library = fs::read_dir(dependencies)
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
@@ -201,16 +242,22 @@ fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
                     .extension()
                     .is_some_and(|extension| extension == "rlib")
         })
-        .collect();
-    libraries.sort();
-    let library = libraries.first().expect("Cargo built the kernel rlib");
+        // Feature variants can coexist; Cargo just built this lane's dependency.
+        .max_by_key(|path| fs::metadata(path).unwrap().modified().unwrap())
+        .expect("Cargo built the kernel rlib");
     let directory = dependencies.join(format!("checked-invariant-controls-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
-    let compile = |name: &str, source: &str| {
+    let compile = |name: &str, source: &str, executable: bool| {
         let input = directory.join(format!("{name}.rs"));
         fs::write(&input, source).unwrap();
         Command::new("rustc")
-            .args(["--edition=2021", "--crate-type=lib", "--emit=metadata"])
+            .args([
+                "--edition=2021",
+                "--crate-type",
+                if executable { "bin" } else { "lib" },
+                "--emit",
+                if executable { "link" } else { "metadata" },
+            ])
             .arg("--extern")
             .arg(format!("quire_exact={}", library.display()))
             .arg("-L")
@@ -225,6 +272,7 @@ fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
         "required_payload",
         "use quire_exact::{Refusal, CheckedInvariantCause};\n\
          pub fn refusal() -> Refusal { Refusal::CheckedInvariant { cause: CheckedInvariantCause::PopulationPair } }",
+        false,
     );
     assert!(
         valid.status.success(),
@@ -234,6 +282,7 @@ fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
     let invalid = compile(
         "former_unit",
         "pub fn refusal() -> quire_exact::Refusal { quire_exact::Refusal::CheckedInvariant }",
+        false,
     );
     let error = String::from_utf8_lossy(&invalid.stderr);
     assert!(!invalid.status.success());
@@ -255,7 +304,7 @@ fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
     let end = start + test_source[start..].find("\n}\n").unwrap() + 2;
     let matcher = &test_source[start..end];
     let source = format!("use quire_exact::IllTypedCause;\n{declaration}\n{matcher}");
-    let valid = compile("exhaustive_current", &source);
+    let valid = compile("exhaustive_current", &source, false);
     assert!(
         valid.status.success(),
         "{}",
@@ -266,12 +315,65 @@ fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
         "pub enum CheckedInvariantCause {\n    UnhandledControlCause,",
         1,
     );
-    let invalid = compile("exhaustive_extended", &extended);
+    let invalid = compile("exhaustive_extended", &extended, false);
     let error = String::from_utf8_lossy(&invalid.stderr);
     assert!(!invalid.status.success());
     assert!(
         error.contains("E0004") && error.contains("UnhandledControlCause"),
         "{error}"
     );
+
+    // Mutate the actual public carrier mapping, keeping the same successful
+    // compiler setup and payload. The intended None assertion must then fail.
+    let start = owning_source.find("pub enum Refusal {").unwrap();
+    let end = start + owning_source[start..].find("\n}\n").unwrap() + 2;
+    let refusal = &owning_source[start..end];
+    let start = owning_source.find("impl Refusal {").unwrap();
+    let end = start + owning_source[start..].find("\n}\n").unwrap() + 2;
+    let mappings = &owning_source[start..end];
+    let source = format!(
+        "use quire_exact::{{BoundViolation, CardinalityBound, CheckedInvariantCause, \
+         CollectionKind, DecimalType, DivisionMember, IeeeFlags, IeeeWidth, IllTypedCause, \
+         InexactTarget, IntegerInterval, RationalDomain, TextType, UniverseId}};\n\
+         #[derive(Clone, Debug, Eq, PartialEq)]\n{refusal}\n{mappings}\n\
+         fn main() {{\n\
+             let refusal = Refusal::CheckedInvariant {{\n\
+                 cause: CheckedInvariantCause::EqualityQuantityConversionRejected {{\n\
+                     cause: IllTypedCause::DistinctUnits\n\
+                 }}\n\
+             }};\n\
+             assert_eq!(refusal.code(), None, \"typed carrier has no catalog code\");\n\
+             assert_eq!(refusal.cause(), None, \"typed carrier has no catalog cause\");\n\
+         }}"
+    );
+    for (name, source, should_pass) in [
+        ("carrier_mapping", source.clone(), true),
+        (
+            "carrier_mapping_mutated",
+            source.replacen(
+                "Self::CheckedInvariant { .. } => None",
+                "Self::CheckedInvariant { .. } => Some(\"mutation-catalog-code\")",
+                1,
+            ),
+            false,
+        ),
+    ] {
+        let built = compile(name, &source, true);
+        assert!(
+            built.status.success(),
+            "{name} must compile: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let ran = Command::new(directory.join(name)).output().unwrap();
+        assert_eq!(ran.status.success(), should_pass);
+        if !should_pass {
+            let error = String::from_utf8_lossy(&ran.stderr);
+            assert!(
+                error.contains("typed carrier has no catalog code")
+                    && error.contains("mutation-catalog-code"),
+                "mutation must fail the intended mapping assertion: {error}"
+            );
+        }
+    }
     fs::remove_dir_all(directory).unwrap();
 }
