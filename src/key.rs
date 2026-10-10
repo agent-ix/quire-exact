@@ -133,6 +133,22 @@ fn leaf<'a>(
             tasks.extend(slots.map(|(left, right)| Task::Slots(left, right)));
             return Some(None);
         }
+        (Value::Union(left), Value::Union(right)) if left.declaration() == right.declaration() => {
+            let ordering = left.member().identifier().as_str().as_bytes()
+                .cmp(right.member().identifier().as_str().as_bytes());
+            if ordering.is_eq() {
+                if left.variant() != right.variant() || left.payload().len() != right.payload().len() {
+                    return None;
+                }
+                tasks.extend(left.payload().iter().zip(right.payload()).rev()
+                    .map(|(left, right)| Task::Values(left, right)));
+                return Some(None);
+            }
+            if left.variant() == right.variant() {
+                return None;
+            }
+            ordering
+        }
         (Value::Collection(left), Value::Collection(right)) => {
             let (left, right) = (left.elements(), right.elements());
             tasks.push(Task::Lengths(left.len(), right.len()));
@@ -153,6 +169,7 @@ fn leaf<'a>(
             | Value::Reference(_)
             | Value::Option(_)
             | Value::Composite(_)
+            | Value::Union(_)
             | Value::Collection(_),
             _,
         ) => return None,

@@ -175,6 +175,19 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 pending.extend(slots.map(|(l, r)| Pair::Slots(l, r)));
                 continue;
             }
+            (Value::Union(l), Value::Union(r)) if l.declaration() == r.declaration() => {
+                if l.variant() != r.variant() {
+                    false
+                } else if l.payload().len() != r.payload().len() {
+                    return Err(Refusal::CheckedInvariant {
+                        cause: CheckedInvariantCause::ValueKindMismatch,
+                    });
+                } else {
+                    pending.extend(l.payload().iter().zip(r.payload()).rev()
+                        .map(|(l, r)| Pair::Values(l, r)));
+                    continue;
+                }
+            }
             (Value::Collection(l), Value::Collection(r)) => {
                 let kind = l.collection_type().kind();
                 if kind != r.collection_type().kind() {
@@ -209,6 +222,7 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 | Value::Reference(_)
                 | Value::Option(_)
                 | Value::Composite(_)
+                | Value::Union(_)
                 | Value::Collection(_),
                 _,
             ) => {
