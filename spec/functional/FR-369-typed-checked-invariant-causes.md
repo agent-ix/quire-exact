@@ -14,7 +14,7 @@ relationships:
 
 ## Description
 
-When the exact kernel, the checked-expression residue in `quire-contract-runtime`, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish a depleted call-depth budget from a re-entrant meter borrow, and each other condition in the tables below, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results.
+When the exact kernel, the checked-expression residue in `quire-contract-runtime`, the shared `quire-semantic-value` leaf, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish a depleted call-depth budget from a re-entrant meter borrow, and each other condition in the tables below, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results.
 
 ## Inputs
 
@@ -28,12 +28,12 @@ When the exact kernel, the checked-expression residue in `quire-contract-runtime
 
 ## Behavior
 
-The public `CheckedInvariantCause` SHALL be a closed enum of the twenty-three variants in the two tables. `ScheduledComparisonRefused`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty variants are unit variants. The existing typed refusal returned by a scheduled comparator or CG's RT type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
+The public `CheckedInvariantCause` SHALL be a closed enum of the thirty-one variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-seven variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's RT type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
 
 | Cause | Trigger and owning source on the measured main revisions |
 |---|---|
 | `CollectionElementNotAdmitted` | An evaluated element is outside its declared collection element type: kernel `src/collection.rs:285-286`; RT `src/exact/collection.rs:136-137`. |
-| `DeferredResultNotAdmitted` | A deferred composite field/result is outside its declared value type: kernel `src/value.rs:1059-1064`; RT `src/exact/composite.rs:1507-1512`. |
+| `DeferredResultNotAdmitted` | A deferred composite field/result is outside its declared value type: kernel `src/value.rs:1059-1064`; RT `src/exact/composite.rs:1507-1512`; QSV `src/declaration.rs:2141-2146`. |
 | `CanonicalKeyUnavailable` | Collection ordering cannot obtain the canonical key of a member: kernel `src/collection.rs:487-496`; RT `src/exact/collection.rs:301-310`. |
 | `BoundedDivisionExpected` | The bounded division member path receives `IntegerDomain::Mathematical`: kernel `src/division.rs:121-128`. |
 | `CollectionKindMismatch` | Equality reaches two collection values with different collection kinds: kernel `src/equality.rs:178-181`; RT `src/exact/equality.rs:308-311`. |
@@ -43,9 +43,17 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the twenty-three va
 | `UnknownCheckedFunction` | RT `run_call` or `Frame::call` finds no named function after checking: `src/exact/expression.rs:802,922`. |
 | `ForeignCheckedExpression` | RT `plan_evaluation` finds an expression checked against another package: `src/exact/expression.rs:829-834`. |
 | `MeterBorrowConflict` | RT `Frame::call` or `Frame::meter` cannot acquire its shared mutable meter borrow: `src/exact/expression.rs:925-934,956-960`. |
-| `EqualityScheduleMismatch` | RT's checked text/enum/quantity schedule receives values of another shape: `src/exact/equality.rs:167-185`. |
-| `ScheduledComparisonRefused { cause }` | RT's selected text/enum/quantity comparator returns `IllTyped { cause }` after a successful checked schedule: `src/exact/equality.rs:167-192`; the kernel-owned `IllTypedCause` is retained. |
-| `ExpectedIntegerPlacement` | RT quantity conversion's scale-zero integer placement yields a retained value that is not an integer: `src/exact/quantity.rs:541-546`. |
+| `EqualityScheduleMismatch` | RT or QSV's checked text/enum/quantity schedule receives values of another shape: RT `src/exact/equality.rs:167-185`; QSV `src/declaration.rs:2412-2416`. |
+| `ScheduledComparisonRefused { cause }` | RT or QSV's selected text/enum/quantity comparator returns `IllTyped { cause }` after a successful checked schedule: RT `src/exact/equality.rs:167-192`; QSV `src/declaration.rs:2418`; the kernel-owned `IllTypedCause` is retained. |
+| `EqualityOperandSourceNotAdmitted` | A completed equality operand fails its checked source type's admission: RT `src/exact/equality.rs:432-433`; QSV `src/declaration.rs:2532-2537`. |
+| `EqualityOperandNonIntegralDecimal` | The checked equality conversion to an integer receives a decimal whose normalized rational is not integral: RT `src/exact/equality.rs:464-467`; QSV `src/declaration.rs:2571-2574`. |
+| `EqualityQuantityConversionRejected { cause }` | A checked equality quantity conversion returns `IllTyped { cause }`: RT `src/exact/equality.rs:471-473`; QSV `src/declaration.rs:2582-2584`. Retain the original kernel-owned `IllTypedCause`. |
+| `EqualityQuantityNonExactPlacement` | Equality requested an exact quantity conversion but the conversion returned decimal or integer placement: RT `src/exact/equality.rs:475-480`; QSV `src/declaration.rs:2586-2591`. |
+| `EqualityConversionShapeMismatch` | A checked equality conversion reaches no matching source/target/value arm: RT `src/exact/equality.rs:484`; QSV `src/declaration.rs:2595`. |
+| `EqualityOperandTargetNotAdmitted` | The converted comparison value fails its checked target type's admission: RT `src/exact/equality.rs:486-489`; QSV `src/declaration.rs:2597-2600`. |
+| `EqualityUnitUnresolved` | QSV cannot resolve a checked quantity's unit either for the selected quantity comparison or for a checked equality conversion: `src/declaration.rs:2402-2404,2578-2580`. |
+| `EqualityEnumVariantUnresolved` | QSV cannot resolve a checked enum operand's variant in the comparison's captured declaration: `src/declaration.rs:2393-2398`. |
+| `ExpectedIntegerPlacement` | A scale-zero integer quantity placement yields a retained value that is not an integer: RT `src/exact/quantity.rs:541-546`; QSV `src/quantity.rs:795-800`. |
 
 The following distinct causes cover CG's oracle constructors (generated source
 and the pre-check declaration placeholder) on
@@ -67,7 +75,25 @@ They name shared checked-oracle failures, not CG package or model types.
 The two tables classify all production constructors on quire-exact main
 `497c581c9dd14eb70083488209827dd8a5b3e03a`,
 quire-contract-runtime main `4180f0ea135767637b10a981393c5aef22220ace`,
-and the CG revision above. They do not classify the QSL constructors: QSL
+quire-semantic-value `e0ada80708fe73469923a9d6c2263cfebc0087a0`,
+and the CG revision above. QSV's `src/declaration.rs:2146` uses
+`DeferredResultNotAdmitted`. At each call site of its shared `invariant()`
+helper at line 2422, QSV SHALL select the corresponding typed cause: enum
+lookup, unit lookup, schedule shape and comparator refusal have the rows above;
+the seven equality-operand call sites
+use the six RT/QSV rows plus `EqualityUnitUnresolved`. Its
+`src/quantity.rs:800` uses `ExpectedIntegerPlacement`. The QSV operational
+contracts are QSpec FR-143 for deferred record/tuple admission, FR-149 for
+checked equality and conversion, and FR-142 for quantity conversion; its
+local FR-060/FR-106/FR-107 do not replace those contracts. An admitted
+equality conversion is checked from declared bounds before execution, so
+a later conversion-shape, admission, unresolved-unit, nonintegral or
+unexpected-placement failure is a checked-program internal fault. A reached
+`IllTyped` from the selected comparison or quantity conversion remains an
+internal fault with its precise `IllTypedCause`, rather than becoming a
+catalog `ill_typed` refusal after checking.
+
+These tables do not classify the remaining QSL constructors: QSL
 `qsl-eval/src/value/expression/evaluate.rs:238` uses one helper for missing
 stack/frame/slot values and distinct checked-node, operator, profile,
 composite, query and navigation assumptions.
@@ -108,9 +134,10 @@ compatibility path for the former unit variant. A generated pre-charge failure
 remains pre-charge; the payload does not authorize extra work.
 
 This shared carrier is limited to the kernel's checked failures, RT's
-currently extracted exact residue and CG's generated checked-oracle failures
-listed above. It does not import a QSL model, checker, catalog, or evaluator
-type, and does not admit an arbitrary caller-supplied reason.
+currently extracted exact residue, QSV's shared semantic-value failures and
+CG's generated checked-oracle failures listed above. It does not import a QSL
+model, checker, catalog, or evaluator type, and does not admit an arbitrary
+caller-supplied reason.
 [FR-090](./FR-090-kernel-outcome-carries-no-caller-cause.md)
 states this narrow boundary.
 
@@ -118,21 +145,22 @@ states this narrow boundary.
 
 | ID | Criteria | Verification |
 |---|---|---|
-| FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and three typed `IllTypedCause` payloads equal the twenty-three table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
+| FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty-one table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
 | FR-369-AC-2 | Every kernel producer in collection, value, division and equality returns exactly its table cause; two population values return `PopulationPair`, a population paired with another kind returns `ValueKindMismatch`, and unlike collection kinds return `CollectionKindMismatch`. | Test |
 | FR-369-AC-3 | Every RT checked-package/function producer returns its table cause: depth exhaustion on all three entry paths is `CallDepthExceeded`, unknown name is `UnknownCheckedFunction`, a foreign expression is `ForeignCheckedExpression`, and each meter reborrow is `MeterBorrowConflict`. | Test |
-| FR-369-AC-4 | Every RT collection, composite, equality and quantity producer returns its table cause, including the original kernel-owned `IllTypedCause` when a scheduled comparison refuses after checking; no site flattens a comparison error to a message. | Test |
+| FR-369-AC-4 | Every RT collection, composite, equality and quantity producer returns its table cause, including all six `operand_value` failures and the original kernel-owned `IllTypedCause` when a scheduled comparison or checked equality quantity conversion refuses; no site flattens a comparison or conversion error to a message. | Test |
 | FR-369-AC-5 | For every typed checked-invariant cause, `Refusal::code()` and `Refusal::cause()` return `None`, and `Eq` distinguishes otherwise equal refusals whose causes differ. Ordinary kernel refusal codes and causes are unchanged. | Test |
 | FR-369-AC-6 | Every received typed cause follows QSL's existing internal-fault path: no refusal record or `Evaluation`, `runtime_invariant`/`S6a`/`checked-program-invariant` at S6a, `CallFailure::Fault` at the public call, and `Failed` with unavailable basis for an internal replay fault. It never becomes an ordinary replay refusal, `Inconclusive`, `Incomplete(Cancelled)`, a proved result or a certification rejection; an unknown received cause retains fault provenance. | Inspection |
 | FR-369-AC-7 | CG's native Boolean, equality, function and pre-check placeholder constructors use the exact nine CG-owned causes in the table, retaining `IllTypedCause` from `check_type` and `check_equality`; downstream replay consumers preserve the typed payload or match it explicitly, retain charge/failure behavior, and accept neither the former unit constructor nor an invented default. | Test |
-| FR-369-AC-8 | The public carrier contains no QSL model/checker/catalog type or dependency on RT, RT owns no second refusal enum or compatibility shim, and an exhaustive source inventory finds every kernel, RT and CG production checked-invariant constructor assigned exactly one cause from the two tables. | Inspection |
+| FR-369-AC-8 | The public carrier contains no QSL model/checker/catalog type or dependency on RT or QSV, RT and QSV own no second refusal enum or compatibility shim, and an exhaustive source inventory finds every kernel, RT, QSV and CG production checked-invariant constructor assigned exactly one cause from the two tables. | Inspection |
+| FR-369-AC-9 | QSV's deferred field or tuple result uses `DeferredResultNotAdmitted`; missing enum variant and unresolved unit use their distinct rows; schedule mismatch and comparator refusal retain their existing rows; each equality operand failure uses its exact table row; and scale-zero integer placement uses `ExpectedIntegerPlacement`. The comparator and quantity conversion retain their original `IllTypedCause` payload, while prior non-result and charge behavior is unchanged. | Test |
 
 ## Status
 
 Planned. IR-707 owns the kernel carrier and kernel producer migration; IR-708
-owns RT producers, IR-709 owns CG producers and consumers, and QSL's direct
-constructor migration is required before it pins the new kernel API. No
-runtime behavior is claimed by this spec-only change.
+owns RT producers, IR-712 owns QSV producers, IR-709 owns CG producers and
+consumers, and QSL's direct constructor migration is required before it pins
+the new kernel API. No runtime behavior is claimed by this spec-only change.
 
 ## Dependencies
 
@@ -144,6 +172,8 @@ runtime behavior is claimed by this spec-only change.
   kernel mapping and public shape. RT FR-273/TC-194 must test depth, unknown
   name, foreign expression and meter borrow through the shared type; RT's
   collection/equality/composite/quantity cases need matching tagged tests.
+  QSV's QSpec FR-142/FR-143/FR-149 contracts must test their corresponding
+  internal-fault routes without adding a QSV-local duplicate requirement.
   CG FR-018/FR-021 must migrate generated constructors and replay consumers;
   QSpec/QSL FR-096/FR-100 must migrate unit matches. QSL's two production
   constructor sites additionally need a QSL-owned typed-cause/family-fault

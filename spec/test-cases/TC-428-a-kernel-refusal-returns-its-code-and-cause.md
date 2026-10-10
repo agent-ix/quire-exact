@@ -20,7 +20,7 @@ Scope: FR-096-AC-8.
 ## Test Procedure
 
 1. For each kernel refusal in FR-096-AC-8's list, build it and read `Refusal::code()` and `Refusal::cause()`.
-2. Build a `CheckedInvariant` with each of FR-369's twenty-three typed causes and
+2. Build a `CheckedInvariant` with each of FR-369's thirty-one typed causes and
    read `Refusal::code()` and `Refusal::cause()`.
 
 ## Expected Results
@@ -32,4 +32,4 @@ Scope: FR-096-AC-8.
 
 The existing `src/outcome.rs` test, tagged `#[trace("TC-428",
 "FR-096-AC-8")]`, covers the ordinary table and the former unit variant.
-The twenty-three typed step-2 cases are planned for IR-707.
+The thirty-one typed step-2 cases remain planned for the typed-carrier implementation.
