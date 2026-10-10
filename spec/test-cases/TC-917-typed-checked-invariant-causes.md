@@ -12,15 +12,16 @@ relationships:
 
 Verify the public shared carrier and every kernel-produced cause of
 [FR-369](../functional/FR-369-typed-checked-invariant-causes.md) without
-substituting hand-built refusals for the production paths. The RT producer and
+substituting hand-built refusals for the production paths. The RT and QSV producers and
 CG/QSL mapping controls are exercised in their owning repositories after the
 kernel API lands. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
 
 ## Test Procedure
 
-1. Exhaustively match `CheckedInvariantCause` against twenty-three independently
+1. Exhaustively match `CheckedInvariantCause` against thirty-one independently
    named expectations, including `ScheduledComparisonRefused`,
-   `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` with
+   `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and
+   `GeneratedEqualityCheckRejected` with
    concrete kernel-owned `IllTypedCause` payloads.
    Compile a use of the enum as `Copy`, `Clone`,
    `Debug`, `Eq`, `Hash` and `PartialEq`, and a `Refusal` as `Clone`, `Debug`,
@@ -42,7 +43,7 @@ kernel API lands. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
    incompatible value-kind pair. Assert `CollectionKindMismatch`,
    `PopulationPair`, `ValueKindMismatch`, and `ValueKindMismatch` respectively.
    Check the pair is refused without a completed Boolean.
-5. For each of the twenty-three public cause variants, construct the typed
+5. For each of the thirty-one public cause variants, construct the typed
    `CheckedInvariant` and assert both catalog methods return `None` and that
    refusals with different causes compare unequal. Re-run FR-096's ordinary
    refusal table unchanged so the new path cannot erase a catalog code.

@@ -8,7 +8,7 @@ relationships: []
 
 ## Description
 
-The `quire-exact` kernel `Refusal` and `Undefined` enums SHALL name only causes the kernel itself raises, except for the closed `CheckedInvariantCause` transport shared with `quire-contract-runtime`'s extracted exact checking residue and CG's generated checked oracles under [FR-369](./FR-369-typed-checked-invariant-causes.md). A cause whose meaning depends on a QSL checker, model or evaluator remains that caller's and stays out of the kernel's closed sets. QSL's existing direct construction of the unit `CheckedInvariant` SHALL migrate under QSL-owned requirements before it pins the new kernel API. The caller's handling of those causes keeps the id `FR-090` in `agent-ix/quire-spec-language`.
+The `quire-exact` kernel `Refusal` and `Undefined` enums SHALL name only causes the kernel itself raises, except for the closed `CheckedInvariantCause` transport shared with `quire-contract-runtime`'s extracted exact checking residue, `quire-semantic-value`'s shared value operations and CG's generated checked oracles under [FR-369](./FR-369-typed-checked-invariant-causes.md). A cause whose meaning depends on a QSL checker, model or evaluator remains that caller's and stays out of the kernel's closed sets. QSL's existing direct construction of the unit `CheckedInvariant` SHALL migrate under QSL-owned requirements before it pins the new kernel API. The caller's handling of those causes keeps the id `FR-090` in `agent-ix/quire-spec-language`.
 
 ## Use case
 
@@ -16,7 +16,7 @@ A caller refuses an evaluation for a wrong snapshot anchor, an absent lookup key
 
 ## Behavior
 
-1. **Closed kernel sets.** `Refusal` has no variant that carries a wrong-snapshot cause, and `Undefined` has no precondition-false variant and no absent-key variant. The shared checked-invariant carrier accepts only FR-369's exact/kernel, RT residue and generated-oracle causes, not a general caller code or message.
+1. **Closed kernel sets.** `Refusal` has no variant that carries a wrong-snapshot cause, and `Undefined` has no precondition-false variant and no absent-key variant. The shared checked-invariant carrier accepts only FR-369's exact/kernel, RT residue, QSV shared-value and generated-oracle causes, not a general caller code or message.
 
 ## Acceptance Criteria
 
