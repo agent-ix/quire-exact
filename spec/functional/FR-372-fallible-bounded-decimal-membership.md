@@ -42,12 +42,10 @@ nonmembership.
    borrowing the Decimal and original cancellation handle, with a completed
    Boolean result or typed `DecimalMembershipFailure`. This operation SHALL
    leave both the type and Decimal representations unchanged.
-2. For a type with inclusive coefficient bounds `lo` and `hi` and scale bounds
-   `smin` and `smax`, completed membership SHALL be exactly
-   `s* = max(s, smin) <= smax` and `lo <= c × 10^(s* - s) <= hi`.
-   Membership SHALL remain independent of the type's rounding spelling and
-   the Decimal's pre-normalized representation provenance.
-3. If `s* > smax`, the operation SHALL complete with nonmembership after
+2. Completed membership SHALL conform to the authoritative Decimal value
+   membership rule in [QSpec FR-140](ix://agent-ix/quire-specification/FR-140).
+3. When that owning rule rejects the normalized scale, the operation SHALL
+   complete with nonmembership after
    polling cancellation and without requesting scratch storage. Sign and zero
    comparisons SHALL use borrowed retained data without materializing absolute
    values. Existing bool-only membership, Decimal construction/normalization,
@@ -55,8 +53,10 @@ nonmembership.
 
 ### Finite work and storage
 
-Let `b = max(bits(c), bits(lo), bits(hi))`, with zero's magnitude bit length
-one, and let `k = s* - s` on the scale-admissible path. The consumer establishes
+Let `lo` and `hi` denote the type's borrowed endpoint coefficients, and let
+`b = max(bits(c), bits(lo), bits(hi))`, with zero's magnitude bit length one.
+Let `k` denote the nonnegative coefficient-alignment shift requested by the
+authoritative membership rule on its scale-admissible path. The consumer establishes
 finite admitted maxima `B >= b` and `S >= k` for every operand and the actual
 shift, including both type endpoints. Define:
 
@@ -156,7 +156,7 @@ semantic meter, replacement cancellation handle or partial admission output.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-372-AC-1 | Completed results match the membership formula for inclusive lower/upper equality, adjacent outsiders, negative and zero values, scale refusal, all rounding spellings and equivalent retained representations; neither representation is changed. The `[0,100]`, scale bounds `2,2`, `(1,0)` fixture completes true at the exact upper bound. | Test |
+| FR-372-AC-1 | Completed results match the authoritative membership rule for inclusive lower/upper equality, adjacent outsiders, negative and zero values, scale refusal, all rounding spellings and equivalent retained representations; neither representation is changed. The `[0,100]`, scale bounds `2,2`, `(1,0)` fixture completes true at the exact upper bound. | Test |
 | FR-372-AC-2 | Production helper observations on admitted `B,S` fixtures stay within the one-request `4 × L_B`-byte scratch envelope and `2 × (min(S,B)+2) × L_B` limb-step bound, including a longest-pass endpoint fixture and a large shift that terminates when quotient becomes zero. Borrowed dependency iterators and all scalar steps contain no input-sized hidden allocation or work. | Test |
 | FR-372-AC-3 | Denying the actual scratch reservation reports its actual native request as typed allocation failure. A separate checked-capacity failure retains its own classification. Removing the allocation denial yields the same membership as a fresh call, with no partial accepted result after either refusal. | Test |
 | FR-372-AC-4 | A pre-cancelled original handle causes no scratch request. Cancellation observed during the longest admitted division/comparison path returns the original cause before another limb step or result; cancellation observed immediately after successful reservation prevents scratch work. Neither failure is classified as nonmembership or work exhaustion. | Test |
@@ -168,8 +168,7 @@ semantic meter, replacement cancellation handle or partial admission output.
 - [TC-920](../test-cases/TC-920-fallible-decimal-membership-boundaries.md)
   defines the falsifying controls.
 - [QSpec FR-140](ix://agent-ix/quire-specification/FR-140) owns Decimal value
-  semantics. This requirement paraphrases only the existing membership formula;
-  it creates no Decimal form or rounding behavior.
+  semantics and the membership rule invoked by this kernel helper.
 - [QSV FR-109](ix://agent-ix/quire-semantic-value/FR-109) owns cumulative
   supplied logical work, construction custody and typed phase/locus preservation.
   [QSL FR-321](ix://agent-ix/quire-spec-language/FR-321) owns supplied consumer
@@ -178,11 +177,8 @@ semantic meter, replacement cancellation handle or partial admission output.
 - IR-718 specifies this prerequisite; IR-719 owns subsequent production kernel
   and QSV integration. QSL-503's generic Decimal/full-size supplied path awaits
   the reviewed contract, implemented qualification and coherent released heads.
-- Source inspected: exact `762b5fcce139980db259dde908d2b66214c852e3`,
-  `DecimalType::contains`, `compare_shifted`, `Integer::decimal_digits`,
-  `Cancel::poll`, and locked num-bigint 0.4.8 `BigInt::iter_u32_digits`.
-  The released membership helper is bool-only and its digit/equal-digit
-  branches allocate. The new helper preserves `no_std` and
+- The helper's maintained dependency provides the borrowed magnitude iterator
+  `BigInt::iter_u32_digits`. The new helper preserves `no_std` and
   `#![forbid(unsafe_code)]`; it adds no dependency on another ecosystem crate.
 
 ## Status
