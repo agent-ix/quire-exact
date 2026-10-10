@@ -31,3 +31,9 @@ The computed Quire matrix binds both new acceptance criteria to the new tests. D
 ## Coverage
 
 `quire matrix --scope . --format json` reports FR-358-AC-12 and FR-358-AC-13 both tagged to the intended new tests. Across the repository the current matrix has 80 tagged, 5 untagged, and 9 method-without-symbol criteria; the latter 14 are pre-existing and not attributed to this diff. No plan was supplied. Plan completion: not assessed.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5daaf4b192dbdcede80e9ba601731334d0facaf8: a live-handle retry now discriminates cancellation-first from spending the selected injection; the focused AC-13 test passes. |

@@ -32,3 +32,9 @@ Independent diff-scoped code and Rust review of the public meter denial record, 
 ## Coverage
 
 The two new `Trace:` tags bind FR-358-AC-12 and AC-13 in the computed Quire matrix. The ordinary record, plan reservation, two-limit independence, ordinary size shortage, ordinary plan shortage, and counter/admission atomicity paths are exercised. Plan completion: not assessed.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5daaf4b192dbdcede80e9ba601731334d0facaf8: the cancelled meter is resumed with a fresh live handle; the same oversized named charge is refused by the still-pending injection, then a valid named charge succeeds. The focused AC-13 test passes. |
