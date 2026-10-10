@@ -359,7 +359,9 @@ fn member_declaration_order_and_digest_order_do_not_reach_union_key_order() {
     }
 }
 
-#[trace("FR-323-AC-3")]
+/// Trusted kernel keylessness and sequence storage only; S3 type-reference
+/// eligibility in FR-323-AC-3 requires a checker witness outside this test.
+#[trace("FR-323")]
 #[test]
 fn ieee_union_payload_has_no_key_and_sequence_keeps_occurrences() {
     let value = UnionValue::from_admitted(
@@ -403,7 +405,8 @@ fn ieee_union_payload_has_no_key_and_sequence_keeps_occurrences() {
     }
 }
 
-#[trace("FR-321-AC-1")]
+/// Kernel construction-stop subset; caller `case` evaluation remains external.
+#[trace("FR-322-AC-2")]
 #[test]
 fn evaluated_union_preserves_deferred_fault_and_first_stop() {
     let calls = std::cell::Cell::new(0);
@@ -439,7 +442,8 @@ fn evaluated_union_preserves_deferred_fault_and_first_stop() {
     ));
 }
 
-#[trace("FR-321-AC-1")]
+/// Kernel construction accounting subset; caller `case` charges remain external.
+#[trace("FR-322-AC-3")]
 #[test]
 fn evaluated_union_orders_arguments_and_charges_one_complete_result() {
     let calls = std::cell::RefCell::new(Vec::new());
