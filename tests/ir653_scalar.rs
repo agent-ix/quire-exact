@@ -81,7 +81,14 @@ fn public_integer_arithmetic_admits_exact_bits_and_denies_one_under() {
         assert_eq!(exact.consumed(LimitKind::ResultUnits), 1);
         assert_eq!(exact.admission_count(), 3);
         #[cfg(feature = "test-support")]
-        assert_eq!(exact.admitted_charges(), [Operands, Arithmetic, Retain]);
+        assert_eq!(
+            exact
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            [Operands, Arithmetic, Retain]
+        );
 
         let mut low_limits = limits();
         low_limits.integer_bits = arithmetic_bits - 1;
@@ -103,7 +110,13 @@ fn public_integer_arithmetic_admits_exact_bits_and_denies_one_under() {
         assert_eq!(low.consumed(LimitKind::ResultUnits), 0);
         assert_eq!(low.admission_count(), 1);
         #[cfg(feature = "test-support")]
-        assert_eq!(low.admitted_charges(), [Operands]);
+        assert_eq!(
+            low.admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            [Operands]
+        );
     }
 }
 
@@ -333,7 +346,14 @@ fn integer_and_rational_ordering_match_checked_oracle() {
 
 #[cfg(feature = "test-support")]
 fn assert_charges(meter: &Meter, points: &[ChargePoint], bits: u64, occurrences: u64) {
-    assert_eq!(meter.admitted_charges(), points);
+    assert_eq!(
+        meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
+        points
+    );
     assert_eq!(meter.consumed(LimitKind::IntegerBits), bits);
     for kind in [
         LimitKind::DecimalDigits,
@@ -536,7 +556,14 @@ fn assert_denials<T>(points: &[ChargePoint], mut call: impl FnMut(&mut Meter) ->
         assert_eq!(meter.admission_count(), admitted);
         assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
         #[cfg(feature = "test-support")]
-        assert_eq!(meter.admitted_charges(), &points[..index]);
+        assert_eq!(
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            &points[..index]
+        );
     }
 }
 
@@ -576,7 +603,14 @@ fn already_decided_boolean_connectives_follow_truth_tables_and_one_charge() {
                     (1, 1)
                 );
                 #[cfg(feature = "test-support")]
-                assert_eq!(meter.admitted_charges(), [ChargePoint::BooleanResultRetain]);
+                assert_eq!(
+                    meter
+                        .admitted_charges()
+                        .iter()
+                        .map(|charge| charge.point)
+                        .collect::<Vec<_>>(),
+                    [ChargePoint::BooleanResultRetain]
+                );
             }
         }
         let mut meter = meter();
@@ -592,6 +626,13 @@ fn already_decided_boolean_connectives_follow_truth_tables_and_one_charge() {
             (1, 1)
         );
         #[cfg(feature = "test-support")]
-        assert_eq!(meter.admitted_charges(), [ChargePoint::BooleanResultRetain]);
+        assert_eq!(
+            meter
+                .admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            [ChargePoint::BooleanResultRetain]
+        );
     }
 }

@@ -96,6 +96,8 @@ mod value;
 // arithmetic or comparison, the same discipline `Integer`'s own arithmetic
 // carries, so a caller charges or bounds its inputs before calling any of
 // them.
+#[cfg(feature = "test-support")]
+pub use accounting::AdmittedCharge;
 pub use accounting::{
     length_amount, Charge, ChargePoint, Incomplete, InjectedDenial, LimitKind, Meter, ScalarLimits,
 };

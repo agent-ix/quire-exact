@@ -387,7 +387,11 @@ mod tests {
             );
             assert!(out.completed().is_some());
             assert_eq!(
-                meter.admitted_charges(),
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<Vec<_>>(),
                 [Operands, Arithmetic, Domain, Retain]
             );
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
@@ -402,7 +406,14 @@ mod tests {
                 &mut meter,
             );
             assert!(matches!(out, Outcome::Refused(_)));
-            assert_eq!(meter.admitted_charges(), [Operands, Arithmetic, Domain]);
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<Vec<_>>(),
+                [Operands, Arithmetic, Domain]
+            );
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
 
             let mut meter = limited(1);
@@ -415,7 +426,14 @@ mod tests {
                 &mut meter,
             );
             assert!(matches!(out, Outcome::Undefined(_)));
-            assert_eq!(meter.admitted_charges(), [Operands]);
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<Vec<_>>(),
+                [Operands]
+            );
 
             let mut meter = limited(0);
             let out = divide(

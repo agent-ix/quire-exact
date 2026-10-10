@@ -74,7 +74,14 @@ fn denied<T>(
         )
     );
     #[cfg(feature = "test-support")]
-    assert_eq!(meter.admitted_charges(), prior);
+    assert_eq!(
+        meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
+        prior
+    );
     #[cfg(not(feature = "test-support"))]
     let _ = prior;
     assert_eq!(meter.consumed(LimitKind::IntegerBits), consumed);
@@ -235,7 +242,10 @@ fn scalar_outcomes_keep_only_admitted_prefixes() {
     assert_exact_counters(&m, [2, 0, 0, 0, 0, 0, 0, 2, 1, 0]);
     #[cfg(feature = "test-support")]
     assert_eq!(
-        m.admitted_charges(),
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [ChargePoint::RationalArithmeticOperands]
     );
     assert_eq!(
@@ -261,7 +271,10 @@ fn scalar_outcomes_keep_only_admitted_prefixes() {
     assert_exact_counters(&m, [3, 0, 0, 0, 0, 0, 0, 2, 2, 0]);
     #[cfg(feature = "test-support")]
     assert_eq!(
-        m.admitted_charges(),
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [
             ChargePoint::IntegerArithmeticOperands,
             ChargePoint::IntegerArithmeticArithmetic
@@ -291,7 +304,10 @@ fn scalar_outcomes_keep_only_admitted_prefixes() {
     assert_exact_counters(&m, [3, 0, 0, 0, 0, 0, 0, 2, 3, 0]);
     #[cfg(feature = "test-support")]
     assert_eq!(
-        m.admitted_charges(),
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [
             ChargePoint::RationalArithmeticOperands,
             ChargePoint::RationalArithmeticArithmetic,
@@ -318,7 +334,13 @@ fn scalar_outcomes_keep_only_admitted_prefixes() {
         assert_eq!(m.consumed(kind), 0);
     }
     #[cfg(feature = "test-support")]
-    assert_eq!(m.admitted_charges(), []);
+    assert_eq!(
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
+        []
+    );
 }
 
 /// Trace: TC-910, FR-362-AC-12
@@ -354,7 +376,10 @@ fn rational_domain_refuses_denominator_outside_interval() {
     );
     #[cfg(feature = "test-support")]
     assert_eq!(
-        m.admitted_charges(),
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [
             ChargePoint::RationalArithmeticOperands,
             ChargePoint::RationalArithmeticArithmetic,
@@ -475,7 +500,13 @@ fn direct_countdown_atoms_stop_at_fifth_result() {
         let expected = [ordering, arithmetic, ordering, arithmetic];
         let mut prefix: Vec<_> = expected.into_iter().flatten().collect();
         prefix.extend_from_slice(&ordering[..2]);
-        assert_eq!(m.admitted_charges(), prefix);
+        assert_eq!(
+            m.admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            prefix
+        );
     }
 }
 
@@ -499,7 +530,10 @@ fn direct_rational_division_charges_four_points() {
     );
     #[cfg(feature = "test-support")]
     assert_eq!(
-        m.admitted_charges(),
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [
             ChargePoint::RationalArithmeticOperands,
             ChargePoint::RationalArithmeticArithmetic,
@@ -549,7 +583,10 @@ fn direct_integer_additions_share_meter_without_fold() {
     );
     #[cfg(feature = "test-support")]
     assert_eq!(
-        m.admitted_charges(),
+        m.admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect::<Vec<_>>(),
         [
             ChargePoint::IntegerArithmeticOperands,
             ChargePoint::IntegerArithmeticArithmetic,
@@ -607,7 +644,13 @@ fn atom_work_boundaries_stop_on_named_points() {
             ChargePoint::IntegerArithmeticResultRetain,
         ];
         #[cfg(feature = "test-support")]
-        assert_eq!(m.admitted_charges(), &expected[..work as usize]);
+        assert_eq!(
+            m.admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            &expected[..work as usize]
+        );
     }
     let (a, b) = (r(2, 3), r(3, 2));
     for (work, point) in [
@@ -646,7 +689,13 @@ fn atom_work_boundaries_stop_on_named_points() {
             ChargePoint::RationalArithmeticResultRetain,
         ];
         #[cfg(feature = "test-support")]
-        assert_eq!(m.admitted_charges(), &expected[..work as usize]);
+        assert_eq!(
+            m.admitted_charges()
+                .iter()
+                .map(|charge| charge.point)
+                .collect::<Vec<_>>(),
+            &expected[..work as usize]
+        );
     }
 }
 
