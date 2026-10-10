@@ -3,10 +3,10 @@
 
 use quire_exact::{
     admit_text, compare_ieee, compare_text, convert_ieee_width, evaluate_ieee, ieee_to_exact,
-    ComparisonOperator, IeeeComparison, IeeeExactLoss, IeeeExactTarget, IeeeFlag, IeeeFlags,
-    IeeeOperation, IeeeValue, IeeeWidth, IllTyped, IllTypedCause, Integer, IntegerInterval,
-    LimitKind, Meter, Outcome, Rational, RationalDomain, Refusal, RoundingMode, ScalarLimits,
-    TextPayload, TextProfile, TextType,
+    ComparisonOperator, IeeeComparison, IeeeExactLoss, IeeeFlag, IeeeFlags, IeeeOperation,
+    IeeeValue, IeeeWidth, IllTyped, IllTypedCause, Integer, IntegerInterval, LimitKind, Meter,
+    Outcome, Rational, RationalDomain, Refusal, RoundingMode, ScalarLimits, TextPayload,
+    TextProfile, TextType,
 };
 
 fn limits() -> ScalarLimits {
@@ -175,14 +175,9 @@ fn ieee_signed_zero_converts_to_canonical_rational_with_loss() {
         (0_u32, None),
         (0x8000_0000, Some(IeeeExactLoss::NegativeZeroSign)),
     ] {
-        let result = ieee_to_exact(
-            IeeeValue::binary32(bits),
-            IeeeExactTarget::Rational(&domain),
-            &mut meter(),
-        )
-        .unwrap()
-        .completed()
-        .unwrap();
+        let result = ieee_to_exact(IeeeValue::binary32(bits), &domain, &mut meter())
+            .completed()
+            .unwrap();
         assert_eq!(
             result.value(),
             &Rational::new(Integer::zero(), Integer::one()).unwrap()
