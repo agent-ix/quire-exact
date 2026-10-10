@@ -144,3 +144,33 @@ bindings:
   trace: correct
   extent: kernel subset only; caller admission, S3 and transport remain unverified
 ```
+
+## Dispositions
+
+Round 1 reviewed `ba729031dc1ac445ec6e0b28d0628e110a0f4cf0`. **PASS for all original finding dispositions**; no merge or whole-feature acceptance verdict is granted.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | ba729031dc1ac445ec6e0b28d0628e110a0f4cf0 |
+
+All listed findings are fixed at the published commit, verified from the exact detached source and git delta. Only the three trace annotations and their scope comments changed in tests/union.rs; removing trace/doc lines leaves the entire test file byte-equivalent to the initial reviewed source. The assertions and production code are unchanged. The two committed original review files were measured byte-identical to their original scratch artifacts before this append. No fix regression or new finding was identified in this disposition scope.
+
+The construction-stop test now binds FR-322-AC-2 and explicitly limits its claim to kernel construction stops. The argument-order/retention test now binds FR-322-AC-3 and explicitly limits its claim to kernel construction accounting. The IEEE test now binds the owning FR-323 statement rather than the unexercised S3 criterion FR-323-AC-3, and says the checker witness is external. These corrections do not discharge whole caller criteria.
+
+No cargo/build/test/lint/Kani/replay/mutation execution occurred in this disposition pass because the shared host locks remain reserved. The remote owner's reported focused tests and CI are external claims; this reviewer did not execute or independently establish those gate results. No private QSpec text or source excerpt is added. Native session identity/configured model remain unavailable; harness identity /root/qsl500_exact_pr17_reviewer. The five baseline untagged criteria and whole QSL-500/SV-502/SV-503/SV-504 incompleteness remain unchanged. ROOT owns gates, artifact custody and merge authority.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  fix_sha: ba729031dc1ac445ec6e0b28d0628e110a0f4cf0
+  after_excerpt: '/// Trusted kernel keylessness and sequence storage only; S3 type-reference
+
+    /// eligibility in FR-323-AC-3 requires a checker witness outside this test.
+
+    #[trace("FR-323")]
+
+    #[test]
+
+    fn ieee_union_payload_has_no_key_and_sequence_keeps_occurrences() {'
+```
