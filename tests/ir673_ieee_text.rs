@@ -3,7 +3,7 @@
 
 use quire_exact::{
     admit_text, compare_ieee, compare_text, convert_ieee_width, evaluate_ieee, ieee_to_exact,
-    ComparisonOperator, IeeeComparison, IeeeExactLoss, IeeeExactTarget, IeeeFlag, IeeeFlags,
+    ComparisonOperator, IeeeComparison, IeeeExactLoss, IeeeFlag, IeeeFlags,
     IeeeOperation, IeeeValue, IeeeWidth, IllTyped, IllTypedCause, Integer, IntegerInterval,
     LimitKind, Meter, Outcome, Rational, RationalDomain, Refusal, RoundingMode, ScalarLimits,
     TextPayload, TextProfile, TextType,
@@ -177,10 +177,9 @@ fn ieee_signed_zero_converts_to_canonical_rational_with_loss() {
     ] {
         let result = ieee_to_exact(
             IeeeValue::binary32(bits),
-            IeeeExactTarget::Rational(&domain),
+            &domain,
             &mut meter(),
         )
-        .unwrap()
         .completed()
         .unwrap();
         assert_eq!(

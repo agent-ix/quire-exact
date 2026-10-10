@@ -119,7 +119,7 @@ pub use identity::{
 pub use ieee::{
     compare_ieee, convert_ieee_width, evaluate_ieee, exact_to_ieee, ieee_intrinsic_identities,
     ieee_to_exact, ExactScalar, FloatType, IeeeComparison, IeeeExact, IeeeExactLoss,
-    IeeeExactTarget, IeeeFlag, IeeeFlags, IeeeOperand, IeeeOperation, IeeeOperationKind,
+    IeeeFlag, IeeeFlags, IeeeOperand, IeeeOperation, IeeeOperationKind,
     IeeeProvenance, IeeeResult, IeeeValue, IeeeWidth, IEEE_DEFINITION,
 };
 pub use integer::{
