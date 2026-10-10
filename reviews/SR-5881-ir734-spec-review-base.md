@@ -620,3 +620,11 @@ scope:
     1. **Typed outcomes.** A zero divisor is `Undefined(DivisionByZero)`. An exposed
     member outside a bounded domain is `Refused(DivisionOutOfDomain { m'
 ```
+
+## Dispositions
+
+Round 1 independently examined agent-ix/quire-exact@b572f1dfae7b2dddb47b6bf5730cbeedea236201. Original findings remain unchanged. Published fix changes only FR-374 relationship and baseline prose; all nine original SR exports were independently compared byte-for-byte with the committed copies. No scoped regression found in arithmetic, signatures, ownership or metered preservation. No executable evidence claimed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | b572f1dfae7b2dddb47b6bf5730cbeedea236201 |
