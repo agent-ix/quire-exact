@@ -6,6 +6,8 @@ org: agent-ix
 relationships:
   - target: ix://agent-ix/quire-exact/FR-357
     type: depends_on
+  - target: ix://agent-ix/quire-exact/FR-371
+    type: references
 ---
 # FR-374: Borrowed nonzero Integer divisor admission
 
@@ -173,10 +175,9 @@ charge for zero, and no new admission charge for any divisor.
 ## Dependencies
 
 [TC-922](../test-cases/TC-922-nonzero-integer-divisor-admission.md) specifies the
-bounded direct-helper and metered regression controls. The current baseline is
-the three helpers and their callers at exact main
-`56175fc1925549e49ea843798c5c3f3d69b99ece`; the measured QSL constant-two caller is
-at QSL main `3e71f94f6e665eca450386e254512cb7770e8b74`.
+bounded direct-helper and metered regression controls. The helper admission
+boundary and its Rational, Decimal and metered division callers are exact-owned;
+QSL owns adoption by its literal-two caller and downstream qualification.
 
 [FR-371 AC-5](./FR-371-bounded-integer-representation-refinement.md#acceptance-criteria)
 preserves these admitted-divisor signatures during prospective representation
