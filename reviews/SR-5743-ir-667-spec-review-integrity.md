@@ -422,3 +422,115 @@ Ticket: IR-667. Frozen spec-only PR29; A single prefix/cap/truncation owner, dir
 ## Tool and Evidence Limits
 
 No applicable AssuranceProfile found in spec/. Reviewer read only the diff and relevant unchanged source/tests; no runtime build/test/Cargo/Kani claims. quire changed-doc validation exit 0; grammar 4/4 clean. quire matrix --scope . --format json exit 0; quoin advise --json exit 0. Initial quoin write --types SpecReview exit 1: Error: write requires <repo_dir>; corrected current-CLI command quoin write . --types SpecReview exit 0. Initial matrix --json exit 2 (unexpected argument); current --format json exit 0. Known ambient inline-data-schema, five DuplicateArchetype and part_of DuplicateInverseEdge diagnostics retained in tool logs; no configuration edits/fallback. Exact deployment model ID is unavailable; configured Codex GPT-6, not Opus.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 28bf802baaefe3c996f73fce61179454419fa1ba; round 1 |
+
+### Disposition round 1
+
+**PASS** at 28bf802baaefe3c996f73fce61179454419fa1ba. Fixed eight-slot absent-or-present u64 semantic-size projection gives a bounded payload independent of repeated request count. Explicit within-admission maxima coalesce repeats without allocating a retained request list; absent differs from present zero. Source-backed non-cumulative kinds match LimitKind::is_cumulative; cumulative size-builder acceptance/accounting stays unchanged and is excluded only from the observation projection. Admissions still validate requests against configured u64 limits before recording. No new input denial, request cap, log channel, compatibility reader, production API or storage is introduced.
+
+The four-document fix diff and unchanged source admission/charge_plan/normalize premises were checked for narrow regressions. Normalize charges actually contain one IntegerBits request, so AC20 remains an exact actual amount observation with all six independent formulas and arithmetic/reduced-result/constant-one controls. AC6 maxima, AC10 full planned boundary scope and separate AC19 existing binding are preserved. Corrected AC19 status matches the existing source trace and assertions. No new findings. No runtime conformance, fulfillment or execution evidence claimed.
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  fix_sha: 28bf802baaefe3c996f73fce61179454419fa1ba
+  after_excerpt: 'Each record SHALL contain one absent-or-present `u64` amount for each of the eight non-cumulative semantic-size kinds: `IntegerBits`, `DecimalDigits`, `ScaleExpansion`, `TextInputBytes`, `TextScalars`, `NormalizedScalars`, `UnitEdges` and `ValueOccurrences`.
+
+
+    The record SHALL coalesce repeated same-kind requests into that per-admission maximum, retaining neither their list, order nor multiplicity.
+
+
+    The record payload SHALL remain fixed-size with no heap-owned request collection, regardless of the number of requests in a charge.'
+new_findings: []
+scope:
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The `quire-exact` meter SHALL deny an injected, named charge exactly once at its selected 1-based occurrence. Where `test-support` is enabled, the meter SHALL bound the admitted-charge log to 4096 entries without changing exact accounting. The public `InjectedDenial::occurrence` SHALL be `NonZeroU64`, making zero unrepresentable.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: 2. Where `test-support` is enabled, the meter SHALL retain the first 4096 admissions in one ordered diagnostic log of fixed-size typed records, each carrying its `ChargePoint` and a semantic-size projection of that admission.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The test-support admitted-charge accessor SHALL expose that record prefix, replacing its point-only slice contract.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: 'Each record SHALL contain one absent-or-present `u64` amount for each of the eight non-cumulative semantic-size kinds: `IntegerBits`, `DecimalDigits`, `ScaleExpansion`, `TextInputBytes`, `TextScalars`, `NormalizedScalars`, `UnitEdges` and `ValueOccurrences`.'
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: For each semantic-size kind present in the admitted charge, the recorded amount SHALL equal the maximum of the actual validated requests for that kind within that admission.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The record SHALL coalesce repeated same-kind requests into that per-admission maximum, retaining neither their list, order nor multiplicity.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The record payload SHALL remain fixed-size with no heap-owned request collection, regardless of the number of requests in a charge.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: An absent kind SHALL remain distinguishable from a present maximum of zero.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The meter SHALL record fixed-width amounts only after the actual admission validates that every request fits its configured `u64` limit.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The meter SHALL derive this projection from the actual validated requests in that admission rather than reconstruct them from counter maxima or operation results.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: A successful `charge_plan` record SHALL carry its actual `value_occurrences` request, not its work availability reservation as a size.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: Ordinary refusals, injected denials and cancellation SHALL append no record.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The existing `charge_log_truncated() -> bool` SHALL be false through the 4096th admission.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: When the 4097th charge is admitted, the flag SHALL become true without extending the record prefix or changing exact accounting.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The enriched records SHALL share the existing admission-entry cap and truncation flag.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: The meter SHALL add neither a second diagnostic log nor an execution limit.
+- id: FR-358
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: Arbitrarily many repeated or zero requests SHALL remain subject only to existing admission rules, without a new request-count denial or limit.
+- id: FR-358-AC-14
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: Under `test-support` and sufficient limits, admit an IntegerBits request of 9 followed by 3 and then a charge with no size request. The records expose respectively 9, 3 and no IntegerBits request while the consumed IntegerBits maximum remains 9. A separate charge with IntegerBits requests 9, 3 and zero exposes present 9; a charge with any positive number of IntegerBits zero requests exposes present zero. Both have the same fixed payload size as a single-request record, with no heap-owned request collection and no retained request list, order or multiplicity. A successful `charge_plan` with pai
+- id: FR-358-AC-15
+  path: spec/functional/FR-358-meter-denial-and-bounded-diagnostic-log.md
+  role: examined
+  excerpt: Under `test-support`, admit 4097 one-work-unit charges with independently chosen semantic-size requests, including repeated same-kind requests and distinct amounts at admissions 4096 and 4097. The single record log contains exactly the first 4096 fixed-size records with their points and per-admission semantic-size maxima in admission order; truncation is false at admission 4096 and true at 4097. Work consumption and admission count reach 4097, including the omitted record; existing size maxima still include the 4097th charge.
+- id: FR-362-AC-20
+  path: spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md
+  role: examined
+  excerpt: On fresh sufficient public meters under `test-support`, evaluate the six rational calls listed below with no result domain. Each completes to the listed canonical value and admits operands, arithmetic, normalize and result-retain in order, consuming four work units and one result unit. The actual normalize record has only IntegerBits present, with the listed amount independently derived from the unreduced parts and `B(0) = 1`. The recorded arithmetic amount equals its separate listed bound. The normalize observation is not replaced by that bound, the final bit maximum or the reduced value's pa
+round: 1
+verdict: PASS
+model_identity: Configured Codex (GPT-6); exact deployment model ID is not exposed by this harness
+run: d02499c4-2480-4647-9b43-acd551c970c6
+```
