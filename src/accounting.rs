@@ -1183,7 +1183,7 @@ mod tests {
                 .admitted_charges()
                 .iter()
                 .map(|charge| charge.point)
-                .collect::<Vec<_>>(),
+                .collect::<alloc::vec::Vec<_>>(),
             [
                 ChargePoint::FunctionCall,
                 ChargePoint::CollectionVisit,
@@ -1224,7 +1224,7 @@ mod tests {
                 .admitted_charges()
                 .iter()
                 .map(|charge| charge.point)
-                .collect::<Vec<_>>(),
+                .collect::<alloc::vec::Vec<_>>(),
             [ChargePoint::EqualityPlan]
         );
     }
@@ -1457,7 +1457,7 @@ mod tests {
                 .admitted_charges()
                 .iter()
                 .map(|charge| charge.point)
-                .collect::<Vec<_>>(),
+                .collect::<alloc::vec::Vec<_>>(),
             expected
         );
         assert!(!meter.charge_log_truncated());
@@ -1471,7 +1471,7 @@ mod tests {
                 .admitted_charges()
                 .iter()
                 .map(|charge| charge.point)
-                .collect::<Vec<_>>(),
+                .collect::<alloc::vec::Vec<_>>(),
             expected
         );
         assert!(meter.charge_log_truncated());

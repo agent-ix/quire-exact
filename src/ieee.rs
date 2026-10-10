@@ -1913,7 +1913,7 @@ mod rational_target_ieee {
                     .admitted_charges()
                     .iter()
                     .map(|charge| charge.point)
-                    .collect::<Vec<_>>(),
+                    .collect::<alloc::vec::Vec<_>>(),
                 expected
             );
             assert!(!meter.charge_log_truncated());
@@ -2149,7 +2149,7 @@ mod rational_target_ieee {
                     .admitted_charges()
                     .iter()
                     .map(|charge| charge.point)
-                    .collect::<Vec<_>>(),
+                    .collect::<alloc::vec::Vec<_>>(),
                 POINTS
             );
         }

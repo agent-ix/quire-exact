@@ -391,7 +391,7 @@ mod tests {
                     .admitted_charges()
                     .iter()
                     .map(|charge| charge.point)
-                    .collect::<Vec<_>>(),
+                    .collect::<alloc::vec::Vec<_>>(),
                 [Operands, Arithmetic, Domain, Retain]
             );
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
@@ -411,7 +411,7 @@ mod tests {
                     .admitted_charges()
                     .iter()
                     .map(|charge| charge.point)
-                    .collect::<Vec<_>>(),
+                    .collect::<alloc::vec::Vec<_>>(),
                 [Operands, Arithmetic, Domain]
             );
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
@@ -431,7 +431,7 @@ mod tests {
                     .admitted_charges()
                     .iter()
                     .map(|charge| charge.point)
-                    .collect::<Vec<_>>(),
+                    .collect::<alloc::vec::Vec<_>>(),
                 [Operands]
             );
 
