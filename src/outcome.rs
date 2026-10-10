@@ -43,6 +43,7 @@ use alloc::boxed::Box;
 /// quire:canonical
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[must_use]
+#[repr(u64)]
 pub enum Outcome<T> {
     /// A completed value. `T` itself carries any typed loss where the
     /// operation has one (e.g. `DecimalResult::loss`); `Outcome` does not
