@@ -332,6 +332,7 @@ fn assert_bit_stop<T>(
         let expected = match kind {
             LimitKind::IntegerBits => prior,
             LimitKind::ValueOccurrences if operands_admitted => occurrences,
+            LimitKind::WorkUnits => u64::from(operands_admitted),
             _ => 0,
         };
         assert_eq!(meter.consumed(kind), expected, "{kind:?}");
