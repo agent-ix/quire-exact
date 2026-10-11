@@ -749,13 +749,14 @@ impl Meter {
         // Every semantic-size counter precedes `work_units` and `result_units`
         // in field order.
         charge.sizes.sort_by_key(|(kind, _)| kind.index());
-        let mut sizes = Vec::with_capacity(charge.sizes.len());
-        for (kind, amount) in charge.sizes {
+        // Validate in place before changing any counter. Keeping the original
+        // requests avoids a second heap allocation, while sorting preserves
+        // first-failure order and the commit pass below preserves the maximum
+        // semantics for repeated requests of one kind.
+        for (kind, amount) in &charge.sizes {
             match amount.to_u64() {
-                Some(amount) if amount <= kind.limit(&self.counters.limits) => {
-                    sizes.push((kind, amount))
-                }
-                _ => return Err(self.incomplete(kind, amount, point)),
+                Some(amount) if amount <= kind.limit(&self.counters.limits) => {}
+                _ => return Err(self.incomplete(*kind, amount.clone(), point)),
             }
         }
         let cumulative = |kind: LimitKind, amount: Integer| {
@@ -769,7 +770,10 @@ impl Meter {
         let results = cumulative(LimitKind::ResultUnits, charge.result_units)?;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
-        for (kind, amount) in sizes {
+        for (kind, amount) in charge.sizes {
+            let amount = amount
+                .to_u64()
+                .expect("size requests were validated before counter updates");
             #[cfg(feature = "test-support")]
             record.observe(kind, amount);
             let slot = &mut self.counters.consumed[kind.index()];
