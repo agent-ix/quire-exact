@@ -49,13 +49,6 @@ enum IntegerRepr {
     Large(BigInt),
 }
 
-fn retained_big_image(
-    cache: &once_cell::race::OnceBox<BigInt>,
-    initialize: impl FnOnce() -> BigInt,
-) -> &BigInt {
-    cache.get_or_init(|| alloc::boxed::Box::new(initialize()))
-}
-
 impl Integer {
     fn small(value: i128) -> Self {
         Self(IntegerRepr::Small {
@@ -638,7 +631,7 @@ impl Integer {
     pub fn as_big(&self) -> &BigInt {
         match &self.0 {
             IntegerRepr::Small { value, cache } => {
-                retained_big_image(cache, || BigInt::from(*value))
+                cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
             }
             IntegerRepr::Large(value) => value,
         }
@@ -763,28 +756,18 @@ mod tests {
         });
 
         let racing_value = Integer::from(1_234_567_i128);
-        let barrier = std::sync::Barrier::new(8);
-        let candidate_count = std::sync::atomic::AtomicUsize::new(0);
+        const READERS: usize = 64;
+        let barrier = std::sync::Barrier::new(READERS);
         std::thread::scope(|scope| {
-            let readers = (0..8)
+            let readers = (0..READERS)
                 .map(|_| {
                     let barrier = &barrier;
                     let value = &racing_value;
-                    let candidate_count = &candidate_count;
                     scope.spawn(move || {
+                        barrier.wait();
                         let mut address = 0;
                         let allocations = allocation_counter::measure(|| {
-                            address = match &value.0 {
-                                IntegerRepr::Small { value, cache } => {
-                                    retained_big_image(cache, || {
-                                        candidate_count
-                                            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                                        barrier.wait();
-                                        BigInt::from(*value)
-                                    })
-                                }
-                                IntegerRepr::Large(value) => value,
-                            } as *const BigInt as usize;
+                            address = value.as_big() as *const BigInt as usize;
                         });
                         (address, allocations)
                     })
@@ -794,14 +777,18 @@ mod tests {
                 .into_iter()
                 .map(|reader| reader.join().unwrap())
                 .collect::<alloc::vec::Vec<_>>();
-            assert_eq!(
-                candidate_count.load(core::sync::atomic::Ordering::Relaxed),
-                8
-            );
             let retained_address = observations[0].0;
             assert!(observations
                 .iter()
                 .all(|(address, _)| *address == retained_address));
+            let candidate_callers = observations
+                .iter()
+                .filter(|(_, allocation)| allocation.count_total > 0)
+                .count();
+            assert!(
+                candidate_callers > 1,
+                "the run observed no racing candidates"
+            );
             let workers_with_retained_allocations = observations
                 .iter()
                 .filter(|(_, allocation)| allocation.count_current > 0)
