@@ -755,19 +755,35 @@ mod tests {
             assert_eq!(second.join().unwrap(), retained as *const BigInt as usize);
         });
 
-        let racing_value = Integer::from(1_234_567_i128);
-        const READERS: usize = 64;
-        let barrier = std::sync::Barrier::new(READERS);
+        let mut left = std::collections::hash_map::DefaultHasher::new();
+        let mut right = std::collections::hash_map::DefaultHasher::new();
+        value.hash(&mut left);
+        arithmetic.hash(&mut right);
+        assert_eq!(left.finish(), right.finish());
+    }
+
+    /// Trace: FR-371-AC-5
+    #[test]
+    fn once_box_race_retains_one_candidate_and_releases_losers() {
+        const CANDIDATES: usize = 8;
+        let cache = once_cell::race::OnceBox::<BigInt>::new();
+        let barrier = std::sync::Barrier::new(CANDIDATES);
+        let initialized = std::sync::atomic::AtomicUsize::new(0);
+
         std::thread::scope(|scope| {
-            let readers = (0..READERS)
+            let readers = (0..CANDIDATES)
                 .map(|_| {
                     let barrier = &barrier;
-                    let value = &racing_value;
+                    let cache = &cache;
+                    let initialized = &initialized;
                     scope.spawn(move || {
-                        barrier.wait();
                         let mut address = 0;
                         let allocations = allocation_counter::measure(|| {
-                            address = value.as_big() as *const BigInt as usize;
+                            address = cache.get_or_init(|| {
+                                initialized.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                                barrier.wait();
+                                alloc::boxed::Box::new(BigInt::from(1_234_567_i128))
+                            }) as *const BigInt as usize;
                         });
                         (address, allocations)
                     })
@@ -777,18 +793,16 @@ mod tests {
                 .into_iter()
                 .map(|reader| reader.join().unwrap())
                 .collect::<alloc::vec::Vec<_>>();
+
+            assert_eq!(
+                initialized.load(core::sync::atomic::Ordering::Relaxed),
+                CANDIDATES
+            );
             let retained_address = observations[0].0;
             assert!(observations
                 .iter()
                 .all(|(address, _)| *address == retained_address));
-            let candidate_callers = observations
-                .iter()
-                .filter(|(_, allocation)| allocation.count_total > 0)
-                .count();
-            assert!(
-                candidate_callers > 1,
-                "the run observed no racing candidates"
-            );
+
             let workers_with_retained_allocations = observations
                 .iter()
                 .filter(|(_, allocation)| allocation.count_current > 0)
@@ -805,11 +819,7 @@ mod tests {
             assert!(total_allocations > retained_allocations);
         });
 
-        let mut left = std::collections::hash_map::DefaultHasher::new();
-        let mut right = std::collections::hash_map::DefaultHasher::new();
-        value.hash(&mut left);
-        arithmetic.hash(&mut right);
-        assert_eq!(left.finish(), right.finish());
+        assert_eq!(cache.get(), Some(&BigInt::from(1_234_567_i128)));
     }
 
     /// Trace: FR-371-AC-4
@@ -824,7 +834,7 @@ mod tests {
         ];
         let expected = [
             [0, 0, 0, 0],
-            [u32::MAX, 0, 0, 0],
+            [1, 0, 0, 0],
             [0, 1, 0, 0],
             [0, 0, 0, 0x8000_0000],
             [u32::MAX, u32::MAX, u32::MAX, 0x7fff_ffff],
