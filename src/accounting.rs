@@ -472,10 +472,53 @@ pub struct InjectedDenial {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Charge {
     point: ChargePoint,
-    sizes: Vec<(LimitKind, Integer)>,
+    sizes: InlineSizes,
     work_units: Integer,
     result_units: Integer,
 }
+
+/// Keeps the common single-size charge inline and stores further requests in
+/// insertion order. Meter validation visits each counter kind in normative
+/// order, then scans these requests to preserve stable duplicate ordering.
+#[derive(Clone)]
+struct InlineSizes {
+    first: Option<(LimitKind, Integer)>,
+    overflow: Vec<(LimitKind, Integer)>,
+}
+
+impl InlineSizes {
+    fn new() -> Self {
+        Self {
+            first: None,
+            overflow: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, kind: LimitKind, amount: Integer) {
+        if self.first.is_some() {
+            self.overflow.push((kind, amount));
+        } else {
+            self.first = Some((kind, amount));
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &(LimitKind, Integer)> {
+        self.first.iter().chain(self.overflow.iter())
+    }
+}
+
+impl fmt::Debug for InlineSizes {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl PartialEq for InlineSizes {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+impl Eq for InlineSizes {}
 
 impl Charge {
     /// A charge at `point` with no size yet, a default one work unit, and
@@ -483,7 +526,7 @@ impl Charge {
     pub fn new(point: ChargePoint) -> Self {
         Self {
             point,
-            sizes: Vec::new(),
+            sizes: InlineSizes::new(),
             work_units: Integer::one(),
             result_units: Integer::zero(),
         }
@@ -496,7 +539,7 @@ impl Charge {
 
     /// A semantic-size amount that may exceed `u64::MAX`.
     pub fn exact_size(mut self, kind: LimitKind, amount: Integer) -> Self {
-        self.sizes.push((kind, amount));
+        self.sizes.push(kind, amount);
         self
     }
 
@@ -743,20 +786,24 @@ impl Meter {
     /// **`pub`**, so a caller outside this crate can charge its own `meter`
     /// parameter through this method, its one real
     /// cross-crate caller for that purpose.
-    pub fn charge(&mut self, mut charge: Charge) -> Result<(), Incomplete> {
+    pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
         let point = charge.point;
         self.check_injected(point, charge.work_units.clone())?;
         // Every semantic-size counter precedes `work_units` and `result_units`
         // in field order.
-        charge.sizes.sort_by_key(|(kind, _)| kind.index());
         // Validate in place before changing any counter. Keeping the original
-        // requests avoids a second heap allocation, while sorting preserves
-        // first-failure order and the commit pass below preserves the maximum
-        // semantics for repeated requests of one kind.
-        for (kind, amount) in &charge.sizes {
-            match amount.to_u64() {
-                Some(amount) if amount <= kind.limit(&self.counters.limits) => {}
-                _ => return Err(self.incomplete(*kind, amount.clone(), point)),
+        // requests avoids a second heap allocation. Scanning kinds first
+        // preserves normative first-failure order; scanning requests in
+        // insertion order preserves stable ordering for duplicate kinds.
+        for kind in LimitKind::ALL {
+            for (requested_kind, amount) in charge.sizes.iter() {
+                if *requested_kind != kind {
+                    continue;
+                }
+                match amount.to_u64() {
+                    Some(amount) if amount <= kind.limit(&self.counters.limits) => {}
+                    _ => return Err(self.incomplete(kind, amount.clone(), point)),
+                }
             }
         }
         let cumulative = |kind: LimitKind, amount: Integer| {
@@ -770,14 +817,19 @@ impl Meter {
         let results = cumulative(LimitKind::ResultUnits, charge.result_units)?;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
-        for (kind, amount) in charge.sizes {
-            let amount = amount
-                .to_u64()
-                .expect("size requests were validated before counter updates");
-            #[cfg(feature = "test-support")]
-            record.observe(kind, amount);
-            let slot = &mut self.counters.consumed[kind.index()];
-            *slot = (*slot).max(amount);
+        for kind in LimitKind::ALL {
+            for (requested_kind, amount) in charge.sizes.iter() {
+                if *requested_kind != kind {
+                    continue;
+                }
+                let amount = amount
+                    .to_u64()
+                    .expect("size requests were validated before counter updates");
+                #[cfg(feature = "test-support")]
+                record.observe(kind, amount);
+                let slot = &mut self.counters.consumed[kind.index()];
+                *slot = (*slot).max(amount);
+            }
         }
         self.counters.consumed[LimitKind::WorkUnits.index()] = work;
         self.counters.consumed[LimitKind::ResultUnits.index()] = results;
@@ -1027,6 +1079,79 @@ mod tests {
             .charge(Charge::new(ChargePoint::IntegerArithmeticOperands))
             .expect("work_units has room");
         assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
+    }
+
+    #[test]
+    fn charge_size_requests_keep_the_first_inline_and_overflow_in_order() {
+        let first = Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 1);
+        assert_eq!(
+            first.sizes.first.as_ref().map(|(kind, _)| *kind),
+            Some(LimitKind::IntegerBits)
+        );
+        assert!(first.sizes.overflow.is_empty());
+
+        let two = first.clone().size(LimitKind::DecimalDigits, 2);
+        assert_eq!(two.sizes.overflow.len(), 1);
+        assert_eq!(
+            two.sizes.overflow[0].0,
+            LimitKind::DecimalDigits,
+            "the second request is the first overflow entry"
+        );
+
+        let four = two
+            .size(LimitKind::ScaleExpansion, 3)
+            .size(LimitKind::TextInputBytes, 4);
+        assert_eq!(four.sizes.overflow.len(), 3);
+        assert_eq!(
+            four.sizes.iter().map(|(kind, _)| *kind).collect::<Vec<_>>(),
+            [
+                LimitKind::IntegerBits,
+                LimitKind::DecimalDigits,
+                LimitKind::ScaleExpansion,
+                LimitKind::TextInputBytes,
+            ]
+        );
+    }
+
+    #[test]
+    fn duplicate_size_requests_preserve_first_refusal_and_are_atomic() {
+        let mut meter = Meter::new(tight_limits());
+        let before = meter.clone();
+        let refusal = meter
+            .charge(
+                Charge::new(ChargePoint::IntegerArithmeticOperands)
+                    .size(LimitKind::IntegerBits, 9)
+                    .size(LimitKind::IntegerBits, 7)
+                    .size(LimitKind::DecimalDigits, 2),
+            )
+            .expect_err("the first duplicate request exceeds the integer limit");
+
+        assert_eq!(refusal.limit_kind, LimitKind::IntegerBits);
+        assert_eq!(refusal.next_charge, Integer::from(9_u64));
+        assert_unchanged(&before, &meter);
+    }
+
+    #[test]
+    fn duplicate_sizes_coalesce_by_max_and_retain_explicit_zero() {
+        let mut meter = Meter::new(unlimited());
+        meter
+            .charge(
+                Charge::new(ChargePoint::IntegerArithmeticOperands)
+                    .size(LimitKind::IntegerBits, 0)
+                    .size(LimitKind::IntegerBits, 5)
+                    .size(LimitKind::IntegerBits, 3)
+                    .size(LimitKind::DecimalDigits, 0),
+            )
+            .expect("all size requests fit");
+
+        assert_eq!(meter.consumed(LimitKind::IntegerBits), 5);
+        assert_eq!(meter.consumed(LimitKind::DecimalDigits), 0);
+        #[cfg(feature = "test-support")]
+        {
+            let admitted = meter.admitted_charges();
+            assert_eq!(admitted[0].integer_bits, Some(5));
+            assert_eq!(admitted[0].decimal_digits, Some(0));
+        }
     }
 
     /// a charge past a counter's limit is denied atomically: the
