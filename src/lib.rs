@@ -114,7 +114,9 @@ pub use decimal::{
 };
 pub use decimal_membership::DecimalMembershipFailure;
 pub use division::{divide, modulo, DivisionMember, DivisionProfile};
-pub use equality::{plan_equality, planned_equality, EqualityPlan};
+pub use equality::{
+    plan_equality, planned_equality, planned_equality_with_plan, EqualityEvaluation, EqualityPlan,
+};
 pub use identity::{
     EffectiveId, EmptyObjectIdentity, MemberId, ObjectId, PopulationId, UnitDomain, UnitId,
     UniverseId, VariantId, COMPOUND_UNIT_DOMAIN, EFFECTIVE_ID_DOMAIN, MEMBER_ID_DOMAIN,
