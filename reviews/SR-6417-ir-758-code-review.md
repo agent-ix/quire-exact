@@ -79,3 +79,23 @@ bindings:
   - {test_id: result_bearing_evaluation_returns_relation_and_same_plan_count, ac_id: FR-375-AC-1, trace: wrong}
   - {test_id: result_bearing_evaluation_returns_relation_and_same_plan_count, ac_id: FR-375-AC-2, trace: wrong}
 ```
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed 7509d09a48598affb7ce48928df99520e892c191 | Replaced checked-caller AC claim with an untagged kernel-scoped nested schedule test; exact charge order is asserted. IR-241 retains the real CheckedEquality integration obligation. |
+| FND-002 | fixed 7509d09a48598affb7ce48928df99520e892c191 | Replaced checked-caller AC claim with an untagged kernel-scoped first-head-unequal nested schedule test; full pair/result-retain schedule is asserted. IR-241 retains the real CheckedEquality integration obligation. |
+
+After excerpt (src/equality.rs, lines 361-392):
+
+```rust
+#[test]
+fn kernel_result_bearing_evaluation_returns_relation_plan_and_charge_order() {
+    for (first_head_unequal, expected) in [(false, true), (true, false)] {
+        let (left, right) = e21_list_shape_operands(first_head_unequal);
+        assert_eq!(left.occ(), Integer::from(16_u64));
+        assert_eq!(right.occ(), Integer::from(16_u64));
+        let plan = plan_equality(&left, &right).unwrap();
+        assert_eq!(plan.pair_events(), &Integer::from(17_u64));
+```

@@ -1320,3 +1320,43 @@ bindings:
   ac_id: FR-375-AC-8
   trace: correct
 ```
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-002 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-003 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-004 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-005 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-006 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-007 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-008 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-009 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-010 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-011 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-012 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-013 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-014 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-015 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-016 | deferred | Pre-existing gap in an unrelated FR-369/371/372/374 requirement, outside PR #34 / IR-758 scope; retained as repository-wide context. |
+| FND-017 | deferred | IR-241 owns the downstream checked construction/type-mismatch path; kernel PR #34 does not claim this AC. |
+| FND-018 | deferred | IR-241 owns the real CheckedEquality::evaluate/Kani qualification; kernel PR #34 does not claim this AC. |
+| FND-019 | fixed 7509d09a48598affb7ce48928df99520e892c191 | Removed the FR-375-AC-1 binding from this kernel-only test and replaced the flat fixture with an E21-shaped nested kernel schedule fixture. |
+| FND-020 | fixed 7509d09a48598affb7ce48928df99520e892c191 | Removed the FR-375-AC-2 binding from this kernel-only test and added first-head-unequal coverage with exact full schedule assertions. |
+
+After excerpt (src/equality.rs, lines 361-392):
+
+```rust
+#[test]
+fn kernel_result_bearing_evaluation_returns_relation_plan_and_charge_order() {
+    for (first_head_unequal, expected) in [(false, true), (true, false)] {
+        let (left, right) = e21_list_shape_operands(first_head_unequal);
+        assert_eq!(left.occ(), Integer::from(16_u64));
+        assert_eq!(right.occ(), Integer::from(16_u64));
+        let plan = plan_equality(&left, &right).unwrap();
+        assert_eq!(plan.pair_events(), &Integer::from(17_u64));
+```
+
+The historical strict matrix summary remains unchanged. Removing the two false AC-1/2 bindings leaves those downstream criteria without a kernel-repo binder; they are assigned to IR-241. The repository-wide matrix remains failing for its pre-existing unrelated gaps.
