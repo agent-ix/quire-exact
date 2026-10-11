@@ -2,7 +2,8 @@
 //! Occurrence-pair equality planning.
 //!
 //! The module holds the operand-agnostic occurrence-pair plan: [`plan_pairs`],
-//! [`plan_equality`], `planned_equality` and [`EqualityPlan`]. Anything that
+//! [`plan_equality`], `planned_equality`, [`EqualityPlan`] and
+//! [`EqualityEvaluation`]. Anything that
 //! needs a declaration registry or a unit graph is the caller's, not the
 //! kernel's: selecting and running the top-level text/enum/quantity schedules
 //! ahead of the generic occurrence-pair plan is done above the kernel with the
@@ -48,6 +49,25 @@ impl EqualityPlan {
     }
 }
 
+/// The result and pair-event count produced by one completed metered equality.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EqualityEvaluation {
+    equal: bool,
+    plan: EqualityPlan,
+}
+
+impl EqualityEvaluation {
+    /// The exact equality relation from the formed plan.
+    pub fn equal(&self) -> bool {
+        self.equal
+    }
+
+    /// The exact pair-event plan used by this evaluation.
+    pub fn plan(&self) -> &EqualityPlan {
+        &self.plan
+    }
+}
+
 /// Form the plan of two completed operands of one type, without charge. A
 /// reference pair of different universes refuses with `foreign_reference`.
 ///
@@ -80,10 +100,29 @@ pub fn plan_equality(left: &Value, right: &Value) -> Result<EqualityPlan, Refusa
 /// `equality.plan-form`, `equality.plan`, one `equality.pair` per planned
 /// occurrence-path pair and `equality.result-retain`.
 pub fn planned_equality(left: &Value, right: &Value, meter: &mut Meter) -> Outcome<bool> {
+    match planned_equality_with_plan(left, right, meter) {
+        Outcome::Completed(result) => Outcome::Completed(result.equal()),
+        Outcome::Undefined(reason) => Outcome::Undefined(reason),
+        Outcome::Refused(reason) => Outcome::Refused(reason),
+        Outcome::Incomplete(record) => Outcome::Incomplete(record),
+    }
+}
+
+/// Evaluate equality and return the relation and pair count from the same plan.
+/// The returned record exists only after every scheduled meter charge succeeds.
+pub fn planned_equality_with_plan(
+    left: &Value,
+    right: &Value,
+    meter: &mut Meter,
+) -> Outcome<EqualityEvaluation> {
     Outcome::from_stop(planned_equality_stop(left, right, meter))
 }
 
-fn planned_equality_stop(left: &Value, right: &Value, meter: &mut Meter) -> Result<bool, Stop> {
+fn planned_equality_stop(
+    left: &Value,
+    right: &Value,
+    meter: &mut Meter,
+) -> Result<EqualityEvaluation, Stop> {
     let (left_occ, right_occ) = (left.occ(), right.occ());
     meter.charge(
         Charge::new(ChargePoint::EqualityPlanForm)
@@ -95,13 +134,18 @@ fn planned_equality_stop(left: &Value, right: &Value, meter: &mut Meter) -> Resu
     )?;
     let plan = plan_pairs(left, right).map_err(Stop::Refused)?;
     meter.charge_plan(&plan.pairs)?;
-    let mut remaining = plan.pairs;
+    let mut remaining = plan.pairs.clone();
     while !remaining.is_zero() {
         meter.charge(Charge::new(ChargePoint::EqualityPair))?;
         remaining = remaining.sub(&Integer::one());
     }
     meter.charge(Charge::new(ChargePoint::EqualityResultRetain).results(1))?;
-    Ok(plan.equal)
+    Ok(EqualityEvaluation {
+        equal: plan.equal,
+        plan: EqualityPlan {
+            pair_events: plan.pairs,
+        },
+    })
 }
 
 /// A formed plan: its pair count and the relation's Boolean.
@@ -228,6 +272,10 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "test-support")]
+    use alloc::vec::Vec;
+    #[cfg(feature = "test-support")]
+    use core::num::NonZeroU64;
     use ix_trace_rs::trace;
 
     use super::*;
@@ -250,6 +298,20 @@ mod tests {
 
     fn generous_meter() -> Meter {
         Meter::new(generous_limits())
+    }
+
+    fn qualification_operands(first_left: bool) -> (Value, Value) {
+        let declaration = crate::node::NodeKey::from_digest([42; 32]);
+        let mut left_slots = vec![FieldValue::Absent];
+        let mut right_slots = vec![FieldValue::Absent];
+        left_slots.extend((0..15).map(|index| {
+            FieldValue::Present(Value::Boolean(if index == 0 { first_left } else { true }))
+        }));
+        right_slots.extend((0..15).map(|_| FieldValue::Present(Value::Boolean(true))));
+        (
+            crate::value::from_admitted_slots(declaration, left_slots.into_boxed_slice()),
+            crate::value::from_admitted_slots(declaration, right_slots.into_boxed_slice()),
+        )
     }
 
     /// `plan_equality` reports the exact pair count of two equal
@@ -281,6 +343,121 @@ mod tests {
         });
         let outcome = planned_equality(&left, &right, &mut tight);
         assert!(matches!(outcome, Outcome::Incomplete(_)));
+    }
+
+    /// Trace: FR-375-AC-1, FR-375-AC-2
+    #[test]
+    fn result_bearing_evaluation_returns_relation_and_same_plan_count() {
+        for (first_left, expected) in [(true, true), (false, false)] {
+            let (left, right) = qualification_operands(first_left);
+            assert_eq!(left.occ(), Integer::from(16_u64));
+            assert_eq!(right.occ(), Integer::from(16_u64));
+            let plan = plan_equality(&left, &right).unwrap();
+            assert_eq!(plan.pair_events(), &Integer::from(17_u64));
+
+            let mut meter = generous_meter();
+            let Outcome::Completed(result) = planned_equality_with_plan(&left, &right, &mut meter)
+            else {
+                panic!("equality schedule should complete with generous limits");
+            };
+            assert_eq!(result.equal(), expected);
+            assert_eq!(result.plan().pair_events(), &Integer::from(17_u64));
+            assert_eq!(meter.admission_count(), 20);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 51);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+            assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 17);
+        }
+    }
+
+    /// Trace: FR-375-AC-5, FR-375-AC-8
+    #[test]
+    fn plan_reservation_refusals_are_atomic_before_pair_charges() {
+        let (left, right) = qualification_operands(true);
+        for (limits, expected_kind, expected_limit, expected_next) in [
+            (
+                ScalarLimits {
+                    work_units: 50,
+                    ..generous_limits()
+                },
+                LimitKind::WorkUnits,
+                50,
+                19_u64,
+            ),
+            (
+                ScalarLimits {
+                    result_units: 0,
+                    ..generous_limits()
+                },
+                LimitKind::ResultUnits,
+                0,
+                1_u64,
+            ),
+        ] {
+            let mut meter = Meter::new(limits);
+            let outcome = planned_equality_with_plan(&left, &right, &mut meter);
+            assert!(matches!(outcome, Outcome::Incomplete(ref incomplete)
+                if incomplete.limit_kind == expected_kind
+                    && incomplete.limit == expected_limit
+                    && incomplete.consumed == if expected_kind == LimitKind::WorkUnits { 32 } else { 0 }
+                    && incomplete.next_charge == Integer::from(expected_next)
+                    && incomplete.charge_point == ChargePoint::EqualityPlan));
+            assert_eq!(meter.admission_count(), 1);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 32);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+            assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 16);
+        }
+    }
+
+    /// Trace: FR-375-AC-3
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn pair_and_result_refusals_stop_at_the_first_denied_charge() {
+        use crate::accounting::InjectedDenial;
+
+        let (left, right) = qualification_operands(true);
+        let pair_denial = InjectedDenial {
+            point: ChargePoint::EqualityPair,
+            occurrence: NonZeroU64::new(17).unwrap(),
+        };
+        let mut pair_meter = Meter::new(generous_limits()).with_injected_denial(pair_denial);
+        let pair_outcome = planned_equality_with_plan(&left, &right, &mut pair_meter);
+        assert!(matches!(pair_outcome, Outcome::Incomplete(ref incomplete)
+            if incomplete.charge_point == ChargePoint::EqualityPair));
+        assert_eq!(pair_meter.admission_count(), 18);
+        assert_eq!(pair_meter.consumed(LimitKind::WorkUnits), 49);
+        assert_eq!(pair_meter.consumed(LimitKind::ResultUnits), 0);
+        let pair_points: Vec<_> = pair_meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect();
+        assert_eq!(pair_points[0], ChargePoint::EqualityPlanForm);
+        assert_eq!(pair_points[1], ChargePoint::EqualityPlan);
+        assert!(pair_points[2..]
+            .iter()
+            .all(|point| *point == ChargePoint::EqualityPair));
+
+        let retain_denial = InjectedDenial {
+            point: ChargePoint::EqualityResultRetain,
+            occurrence: NonZeroU64::new(1).unwrap(),
+        };
+        let mut retain_meter = Meter::new(generous_limits()).with_injected_denial(retain_denial);
+        let retain_outcome = planned_equality_with_plan(&left, &right, &mut retain_meter);
+        assert!(matches!(retain_outcome, Outcome::Incomplete(ref incomplete)
+            if incomplete.charge_point == ChargePoint::EqualityResultRetain));
+        assert_eq!(retain_meter.admission_count(), 19);
+        assert_eq!(retain_meter.consumed(LimitKind::WorkUnits), 50);
+        assert_eq!(retain_meter.consumed(LimitKind::ResultUnits), 0);
+        let retain_points: Vec<_> = retain_meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect();
+        assert_eq!(retain_points[0], ChargePoint::EqualityPlanForm);
+        assert_eq!(retain_points[1], ChargePoint::EqualityPlan);
+        assert!(retain_points[2..]
+            .iter()
+            .all(|point| *point == ChargePoint::EqualityPair));
     }
 
     /// two equal integers plan one pair and compare equal.
