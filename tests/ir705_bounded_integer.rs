@@ -387,7 +387,10 @@ fn metered_operation_matrix_preserves_fr362_amounts_work_and_denial_prefixes() {
         let mut meter = Meter::new(exact_bits);
         let outcome = evaluate_integer_arithmetic(case.operation, None, &mut meter);
         assert_eq!(
-            outcome.completed().map(ToString::to_string).as_deref(),
+            outcome
+                .completed()
+                .map(|value| value.to_string())
+                .as_deref(),
             Some(case.expected)
         );
         assert_eq!(meter.consumed(LimitKind::IntegerBits), case.arithmetic_bits);
@@ -561,7 +564,7 @@ fn native_public_metered_call_matches_accounting_only_allocation_observation() {
         ));
     });
     assert_eq!(
-        public_outcome.unwrap().completed().cloned(),
+        public_outcome.unwrap().completed(),
         Some(Integer::from(11_i128))
     );
 
