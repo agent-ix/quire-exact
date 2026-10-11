@@ -8,13 +8,14 @@ review_set: all
 ---
 ## Summary
 
-The base checklist reviewed all changed FR, TC and architecture units. The criteria are testable and linked to a planned test case; one exact dependency-version pin in normative prose violates the checklist.
+The base checklist reviewed all changed FR, TC and architecture units. The criteria are testable and linked to a planned test case. The high-severity dependency-version pin finding is on FR-371's body-level normative text, corroborated by TC-919 step 5 and AD-003.
 
 ## Scope
 
 | Unit | Role | Excerpt |
 | --- | --- | --- |
 | FR-371 (spec/functional/FR-371-bounded-integer-representation-refinement.md) | examined | Where the kernel uses a bounded native representation for mathematical integers, the kernel SHALL preserve the exact value and public behavior of `Integer` across native and arbitrary-precision execution. |
+| FR-371 body (lines 53, 67) | examined | For `Small`, `as_big` SHALL initialize and return a borrow of the retained immutable BigInt image in its `OnceBox`; for `Large`, it SHALL borrow the stored BigInt. The `Small` borrow SHALL remain valid for the borrow lifetime tied to `&self`. The implementation SHALL use `once_cell` 1.21.4 with `default-features = false` and the `alloc` feature, through its safe `once_cell::race::OnceBox<BigInt>` API. |
 | FR-371-AC-1 (spec/functional/FR-371-bounded-integer-representation-refinement.md) | examined | Primitive construction, canonical parsing, from_big and Add/Subtract/Multiply/Negate preserve the exact value for fixed boundaries and reproducibly sampled inputs. Fixed cases include i128 MIN/MAX, -1, 0, 1, i64 MIN squared, MAX+1, MIN-1, negated MIN and large cancellation into the native range. MIN has magnitude bit length 128; its negation is positive 2^127 through genuine arbitrary-precision continuation. Compare fitting operations with independent checked i128 arithmetic; compare non-fitting results with independently authored decimal literals. Rejec |
 | FR-371-AC-2 (spec/functional/FR-371-bounded-integer-representation-refinement.md) | examined | Equal mathematical values constructed by primitive, parse, from_big and arithmetic routes remain equal, identically ordered, identically hashed with the same hasher and identically formatted before and after BigInt access and cloning. A borrowed as_big reports the exact value throughout concurrent read-only accesses; all accesses to one retained materialization observe the same object. Clone/drop do not invalidate surviving permitted borrows or introduce a cache-state value. |
 | FR-371-AC-3 (spec/functional/FR-371-bounded-integer-representation-refinement.md) | examined | Every public metered integer arithmetic operation preserves the FR-362 schedule and counters on native, native-overflow and arbitrary-size cases. Test sufficient limits, independently calculated exact/one-less bit and work boundaries, denial injected at every named point, and outside-domain results. Compare all completed/refused/incomplete fields and admitted prefixes with the independent normative formulas. No representation transition manufactures a FunctionCall or other charge. |
@@ -34,10 +35,24 @@ The base checklist reviewed all changed FR, TC and architecture units. The crite
 
 ## Verdict
 
-The base checklist reviewed all changed FR, TC and architecture units. The criteria are testable and linked to a planned test case; one exact dependency-version pin in normative prose violates the checklist.
+The base checklist reviewed all changed FR, TC and architecture units. The criteria are testable and linked to a planned test case. The high-severity dependency-version pin finding is on FR-371's body-level normative text, corroborated by TC-919 step 5 and AD-003.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | high | Exact once_cell release is pinned in normative prose; move release selection to Cargo manifest/lock | FR-371-AC-5 |
+| FND-001 | high | FR-371 pins an exact dependency release in normative prose; keep package/version selection in implementation dependency management | FR-371; TC-919; AD-003 |
+
+## Correction note
+
+The initial FND-001 locator incorrectly named FR-371-AC-5. That criterion did not contain the version pin and was unchanged by the fix. The pin was in FR-371 body lines 53 and 67 of the originally reviewed head, corroborated by TC-919 step 5 and AD-003; the primary artifact is corrected here to FR-371.
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 73766299cb90409a649f3dd1f7b03160c2d9a92e |
+
+After excerpt:
+
+> The selected cache behavior is safe race initialization of a retained immutable BigInt image, compatible with `no_std` plus `alloc`. The crate SHALL retain its local `forbid(unsafe_code)` policy; this requirement authorizes no copied dependency implementation or local unsafe code. Package and version selection belong to implementation dependency management, not this requirement.
