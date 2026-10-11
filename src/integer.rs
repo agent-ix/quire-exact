@@ -19,6 +19,7 @@
 //! and [`as_big`](Integer::as_big).
 
 use core::fmt;
+use core::hash::{Hash, Hasher};
 use core::num::NonZeroU32;
 use core::str::FromStr;
 
@@ -30,122 +31,306 @@ use crate::accounting::length_amount;
 
 /// An exact, arbitrary-precision mathematical integer.
 ///
+/// Values that fit `i128` are stored inline. The first [`as_big`](Self::as_big)
+/// call lazily initializes one retained immutable `BigInt` image; clones of an
+/// inline value begin with an empty image cache. The safe
+/// `once_cell::race::OnceBox` may construct multiple candidates concurrently,
+/// retains one, and drops every losing candidate. Values outside `i128` retain
+/// their `BigInt` directly.
+///
 /// quire:canonical
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Integer(BigInt);
+pub struct Integer(IntegerRepr);
+
+enum IntegerRepr {
+    Small {
+        value: i128,
+        cache: once_cell::race::OnceBox<BigInt>,
+    },
+    Large(BigInt),
+}
+
+impl Integer {
+    fn small(value: i128) -> Self {
+        Self(IntegerRepr::Small {
+            value,
+            cache: once_cell::race::OnceBox::new(),
+        })
+    }
+
+    fn from_big_normalized(value: BigInt) -> Self {
+        match i128::try_from(&value) {
+            Ok(value) => Self::small(value),
+            Err(_) => Self(IntegerRepr::Large(value)),
+        }
+    }
+
+    fn native(&self) -> Option<i128> {
+        match &self.0 {
+            IntegerRepr::Small { value, .. } => Some(*value),
+            IntegerRepr::Large(_) => None,
+        }
+    }
+}
+
+impl Default for Integer {
+    fn default() -> Self {
+        Self::small(0)
+    }
+}
+
+impl Clone for Integer {
+    fn clone(&self) -> Self {
+        match &self.0 {
+            IntegerRepr::Small { value, .. } => Self::small(*value),
+            IntegerRepr::Large(value) => Self(IntegerRepr::Large(value.clone())),
+        }
+    }
+}
+
+impl PartialEq for Integer {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.native(), other.native()) {
+            (Some(left), Some(right)) => left == right,
+            _ => self.as_big() == other.as_big(),
+        }
+    }
+}
+impl Eq for Integer {}
+impl PartialOrd for Integer {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Integer {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        match (self.native(), other.native()) {
+            (Some(left), Some(right)) => left.cmp(&right),
+            _ => self.as_big().cmp(other.as_big()),
+        }
+    }
+}
+impl Hash for Integer {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_big().hash(state);
+    }
+}
+
+pub(crate) struct MagnitudeLimbs<'a>(MagnitudeLimbsSource<'a>);
+
+enum MagnitudeLimbsSource<'a> {
+    Small { magnitude: u128, remaining: u8 },
+    Large(num_bigint::U32Digits<'a>),
+}
+
+impl Iterator for MagnitudeLimbs<'_> {
+    type Item = u32;
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            MagnitudeLimbsSource::Small {
+                magnitude,
+                remaining,
+            } if *remaining > 0 => {
+                let limb = *magnitude as u32;
+                *magnitude >>= 32;
+                *remaining -= 1;
+                Some(limb)
+            }
+            MagnitudeLimbsSource::Small { .. } => None,
+            MagnitudeLimbsSource::Large(digits) => digits.next(),
+        }
+    }
+}
+impl fmt::Debug for Integer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("Integer")
+            .field(self.as_big())
+            .finish()
+    }
+}
 
 impl Integer {
     /// The integer zero.
     pub fn zero() -> Self {
-        Self(BigInt::zero())
+        Self::small(0)
     }
 
     /// The integer one.
     pub fn one() -> Self {
-        Self(BigInt::one())
+        Self::small(1)
     }
 
     /// Whether this integer is zero.
     pub fn is_zero(&self) -> bool {
-        self.0.is_zero()
+        match self.native() {
+            Some(value) => value == 0,
+            None => self.as_big().is_zero(),
+        }
     }
 
     /// Whether this integer is strictly negative.
     pub fn is_negative(&self) -> bool {
-        self.0.is_negative()
+        match self.native() {
+            Some(value) => value < 0,
+            None => self.as_big().is_negative(),
+        }
     }
 
     /// `bits(x)` from `quire.value.accounting/v1`: the magnitude bit length,
     /// where zero has length one.
     pub fn magnitude_bits(&self) -> u64 {
-        self.0.bits().max(1)
+        match self.native() {
+            Some(value) => u64::from((128 - value.unsigned_abs().leading_zeros()).max(1)),
+            None => self.as_big().bits().max(1),
+        }
     }
 
     /// `digits(x)` from `quire.value.accounting/v1`: the base-ten magnitude
     /// digit count, where zero has one digit.
     pub fn decimal_digits(&self) -> u64 {
-        length_amount(self.0.magnitude().to_str_radix(10).len())
+        length_amount(self.as_big().magnitude().to_str_radix(10).len())
     }
 
     /// The value as a `u64`, if it is one.
     pub fn to_u64(&self) -> Option<u64> {
-        u64::try_from(&self.0).ok()
+        match self.native() {
+            Some(value) => u64::try_from(value).ok(),
+            None => u64::try_from(self.as_big()).ok(),
+        }
+    }
+
+    pub(crate) fn magnitude_limbs(&self) -> MagnitudeLimbs<'_> {
+        match &self.0 {
+            IntegerRepr::Small { value, .. } => {
+                let magnitude = value.unsigned_abs();
+                let bits = 128 - magnitude.leading_zeros();
+                let remaining = u8::try_from(bits.div_ceil(32)).unwrap_or(0);
+                MagnitudeLimbs(MagnitudeLimbsSource::Small {
+                    magnitude,
+                    remaining,
+                })
+            }
+            IntegerRepr::Large(value) => {
+                MagnitudeLimbs(MagnitudeLimbsSource::Large(value.iter_u32_digits()))
+            }
+        }
     }
 
     /// The magnitude `|self|`.
     pub fn abs(&self) -> Self {
-        Self(self.0.abs())
+        match self.native() {
+            Some(value) => value
+                .checked_abs()
+                .map(Self::small)
+                .unwrap_or_else(|| Self::from_big_normalized(self.as_big().abs())),
+            None => Self::from_big_normalized(self.as_big().abs()),
+        }
     }
 
     /// `self^|exponent|`. Callers bound the result size before calling.
     pub fn pow(&self, exponent: &Self) -> Self {
-        Self(num_traits::Pow::pow(&self.0, exponent.0.magnitude()))
+        Self::from_big_normalized(num_traits::Pow::pow(
+            self.as_big(),
+            exponent.as_big().magnitude(),
+        ))
     }
 
     /// `(self / 2^k, k)` for the greatest `k <= limit` with `2^k | self`.
     /// Zero has no greatest such `k` and is returned with `k = 0`.
     pub fn split_factor_two(&self, limit: u64) -> (Self, u64) {
-        match self.0.trailing_zeros() {
+        match self.as_big().trailing_zeros() {
             None => (self.clone(), 0),
             Some(zeros) => {
                 let shift = zeros.min(limit);
-                (Self(&self.0 >> shift), shift)
+                (Self::from_big_normalized(self.as_big() >> shift), shift)
             }
         }
     }
 
     /// `self × 2^shift`. Callers bound the result size before calling.
     pub fn shifted_left(&self, shift: u64) -> Self {
-        Self(&self.0 << shift)
+        Self::from_big_normalized(self.as_big() << shift)
     }
 
     /// Whether this integer is even.
     pub fn is_even(&self) -> bool {
-        self.0.is_even()
+        self.native()
+            .map(|value| value & 1 == 0)
+            .unwrap_or_else(|| self.as_big().is_even())
     }
 
     /// `self + other`. Exact; unbounded `Integer` addition never overflows.
     pub fn add(&self, other: &Self) -> Self {
-        Self(&self.0 + &other.0)
+        match (self.native(), other.native()) {
+            (Some(left), Some(right)) => left
+                .checked_add(right)
+                .map(Self::small)
+                .unwrap_or_else(|| Self::from_big_normalized(self.as_big() + other.as_big())),
+            _ => Self::from_big_normalized(self.as_big() + other.as_big()),
+        }
     }
 
     /// `self - other`. Exact; unbounded `Integer` subtraction never
     /// overflows.
     pub fn sub(&self, other: &Self) -> Self {
-        Self(&self.0 - &other.0)
+        match (self.native(), other.native()) {
+            (Some(left), Some(right)) => left
+                .checked_sub(right)
+                .map(Self::small)
+                .unwrap_or_else(|| Self::from_big_normalized(self.as_big() - other.as_big())),
+            _ => Self::from_big_normalized(self.as_big() - other.as_big()),
+        }
     }
 
     /// `self × other`. Exact; unbounded `Integer` multiplication never
     /// overflows.
     pub fn mul(&self, other: &Self) -> Self {
-        Self(&self.0 * &other.0)
+        match (self.native(), other.native()) {
+            (Some(left), Some(right)) => left
+                .checked_mul(right)
+                .map(Self::small)
+                .unwrap_or_else(|| Self::from_big_normalized(self.as_big() * other.as_big())),
+            _ => Self::from_big_normalized(self.as_big() * other.as_big()),
+        }
     }
 
     /// `-self`.
     pub fn neg(&self) -> Self {
-        Self(-&self.0)
+        match self.native() {
+            Some(value) => value
+                .checked_neg()
+                .map(Self::small)
+                .unwrap_or_else(|| Self::from_big_normalized(-self.as_big())),
+            None => Self::from_big_normalized(-self.as_big()),
+        }
     }
 
     /// The greatest common divisor of `self` and `other`, non-negative.
     pub fn gcd(&self, other: &Self) -> Self {
-        Self(self.0.gcd(&other.0))
+        Self::from_big_normalized(self.as_big().gcd(other.as_big()))
     }
 
     /// Exact quotient of a division known to be exact; `divisor` is nonzero.
     pub fn exact_div(&self, divisor: &Self) -> Self {
-        Self(&self.0 / &divisor.0)
+        Self::from_big_normalized(self.as_big() / divisor.as_big())
     }
 
     /// Truncating quotient/remainder; `divisor` is nonzero.
     pub fn div_rem_truncating(&self, divisor: &Self) -> (Self, Self) {
-        let (quotient, remainder) = self.0.div_rem(&divisor.0);
-        (Self(quotient), Self(remainder))
+        let (quotient, remainder) = self.as_big().div_rem(divisor.as_big());
+        (
+            Self::from_big_normalized(quotient),
+            Self::from_big_normalized(remainder),
+        )
     }
 
     /// Floor quotient/remainder; `divisor` is nonzero.
     pub fn div_mod_floor(&self, divisor: &Self) -> (Self, Self) {
-        let (quotient, remainder) = self.0.div_mod_floor(&divisor.0);
-        (Self(quotient), Self(remainder))
+        let (quotient, remainder) = self.as_big().div_mod_floor(divisor.as_big());
+        (
+            Self::from_big_normalized(quotient),
+            Self::from_big_normalized(remainder),
+        )
     }
 
     /// Exact `10^exponent`.
@@ -162,7 +347,7 @@ impl Integer {
                 base = &base * &base;
             }
         }
-        Self(result)
+        Self::from_big_normalized(result)
     }
 
     /// `bits(|factor| × |base|^exponent)` for a nonnegative `exponent`, derived
@@ -174,25 +359,25 @@ impl Integer {
     /// product is then not a power of two, so a finite precision separates it
     /// from the nearest power of two and the loop terminates.
     pub fn power_product_bits(factor: &Self, base: &Self, exponent: &Self) -> Self {
-        let factor = factor.0.magnitude();
-        let base = base.0.magnitude();
-        let exponent = exponent.0.magnitude();
+        let factor = factor.as_big().magnitude();
+        let base = base.as_big().magnitude();
+        let exponent = exponent.as_big().magnitude();
         let factor_bits = BigUint::from(factor.bits().max(1));
         if factor.is_zero() || base.is_zero() && !exponent.is_zero() {
             return Self::one();
         }
         if exponent.is_zero() || base.is_one() {
-            return Self(BigInt::from(factor_bits));
+            return Self::from_big_normalized(BigInt::from(factor_bits));
         }
         if base.count_ones() == 1 {
             let shift = BigUint::from(base.bits() - 1);
-            return Self(BigInt::from(factor_bits + shift * exponent));
+            return Self::from_big_normalized(BigInt::from(factor_bits + shift * exponent));
         }
         let mut precision = 64_u64;
         loop {
             let (low, high) = bracket_bits(factor, base, exponent, precision);
             if low == high {
-                return Self(BigInt::from(low));
+                return Self::from_big_normalized(BigInt::from(low));
             }
             precision = precision.saturating_mul(2);
         }
@@ -200,7 +385,7 @@ impl Integer {
 
     /// `2^exponent`.
     fn power_of_two(exponent: u32) -> Self {
-        Self(BigInt::one() << exponent)
+        Self::from_big_normalized(BigInt::one() << exponent)
     }
 }
 
@@ -257,31 +442,37 @@ fn bracket(
 
 impl From<i64> for Integer {
     fn from(value: i64) -> Self {
-        Self(BigInt::from(value))
+        Self::small(i128::from(value))
     }
 }
 
 impl From<i128> for Integer {
     fn from(value: i128) -> Self {
-        Self(BigInt::from(value))
+        Self::small(value)
     }
 }
 
 impl From<usize> for Integer {
     fn from(value: usize) -> Self {
-        Self(BigInt::from(value))
+        match i128::try_from(value) {
+            Ok(value) => Self::small(value),
+            Err(_) => Self::from_big_normalized(BigInt::from(value)),
+        }
     }
 }
 
 impl From<u64> for Integer {
     fn from(value: u64) -> Self {
-        Self(BigInt::from(value))
+        Self::small(i128::from(value))
     }
 }
 
 impl fmt::Display for Integer {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, formatter)
+        match self.native() {
+            Some(value) => fmt::Display::fmt(&value, formatter),
+            None => fmt::Display::fmt(self.as_big(), formatter),
+        }
     }
 }
 
@@ -307,7 +498,7 @@ impl FromStr for Integer {
             return Err(NonCanonicalInteger);
         }
         BigInt::from_str(spelling)
-            .map(Self)
+            .map(Self::from_big_normalized)
             .map_err(|_| NonCanonicalInteger)
     }
 }
@@ -429,12 +620,21 @@ impl IntegerDomain {
 impl Integer {
     /// Wrap an arbitrary-precision integer (IEEE exact conversions).
     pub fn from_big(value: BigInt) -> Self {
-        Self(value)
+        Self::from_big_normalized(value)
     }
 
     /// The arbitrary-precision integer (IEEE exact conversions).
+    ///
+    /// For an inline value, this initializes and retains its immutable `BigInt`
+    /// image on first access. That may allocate; later borrows return the same
+    /// object for the lifetime of `self`.
     pub fn as_big(&self) -> &BigInt {
-        &self.0
+        match &self.0 {
+            IntegerRepr::Small { value, cache } => {
+                cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
+            }
+            IntegerRepr::Large(value) => value,
+        }
     }
 }
 
@@ -481,5 +681,182 @@ mod tests {
     fn integer_parse_display_round_trips() {
         let parsed = Integer::from_str("-42").unwrap();
         assert_eq!(parsed.to_string(), "-42");
+    }
+
+    /// Trace: FR-371-AC-1, FR-371-AC-4
+    #[test]
+    fn native_arithmetic_stays_inline_and_overflow_refines_exactly() {
+        let zero = Integer::zero();
+        let min = Integer::from(i128::MIN);
+        let max = Integer::from(i128::MAX);
+        assert_eq!(zero.add(&Integer::one()), Integer::one());
+        assert_eq!(
+            max.add(&Integer::one()).to_string(),
+            "170141183460469231731687303715884105728"
+        );
+        assert_eq!(
+            min.sub(&Integer::one()).to_string(),
+            "-170141183460469231731687303715884105729"
+        );
+        assert_eq!(
+            min.neg().to_string(),
+            "170141183460469231731687303715884105728"
+        );
+        assert_eq!(
+            Integer::from(i64::MIN)
+                .mul(&Integer::from(i64::MIN))
+                .to_string(),
+            "85070591730234615865843651857942052864"
+        );
+        assert_eq!(min.magnitude_bits(), 128);
+        assert_eq!(
+            min.magnitude_limbs().collect::<alloc::vec::Vec<_>>(),
+            [0, 0, 0, 0x8000_0000]
+        );
+        assert!(matches!(&zero.0, IntegerRepr::Small { value: 0, .. }));
+        assert!(matches!(
+            &zero.add(&Integer::one()).0,
+            IntegerRepr::Small { value: 1, .. }
+        ));
+    }
+
+    /// Trace: FR-371-AC-2, FR-371-AC-5
+    #[test]
+    fn cache_is_invisible_to_traits_clones_and_concurrent_borrows() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        fn assert_unwind_safe<T: core::panic::UnwindSafe + core::panic::RefUnwindSafe>() {}
+        assert_send_sync::<Integer>();
+        assert_unwind_safe::<Integer>();
+
+        let value = Integer::from(42_i128);
+        let parsed = Integer::from_str("42").unwrap();
+        let from_big = Integer::from_big(BigInt::from(42));
+        let arithmetic = Integer::from(40_i128).add(&Integer::from(2_i128));
+        assert_eq!(value, parsed);
+        assert_eq!(value, from_big);
+        assert_eq!(value, arithmetic);
+        assert_eq!(
+            value.cmp(&Integer::from(43_i128)),
+            core::cmp::Ordering::Less
+        );
+        assert_eq!(value.to_string(), "42");
+        assert_eq!(alloc::format!("{value:?}"), "Integer(42)");
+
+        let retained = value.as_big();
+        assert_eq!(retained, &BigInt::from(42));
+        assert!(core::ptr::eq(retained, value.as_big()));
+        let clone = value.clone();
+        assert!(matches!(&clone.0, IntegerRepr::Small { cache, .. } if cache.get().is_none()));
+
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| value.as_big() as *const BigInt as usize);
+            let second = scope.spawn(|| value.as_big() as *const BigInt as usize);
+            assert_eq!(first.join().unwrap(), retained as *const BigInt as usize);
+            assert_eq!(second.join().unwrap(), retained as *const BigInt as usize);
+        });
+
+        let mut left = std::collections::hash_map::DefaultHasher::new();
+        let mut right = std::collections::hash_map::DefaultHasher::new();
+        value.hash(&mut left);
+        arithmetic.hash(&mut right);
+        assert_eq!(left.finish(), right.finish());
+    }
+
+    /// Trace: FR-371-AC-5
+    #[test]
+    fn once_box_race_retains_one_candidate_and_releases_losers() {
+        const CANDIDATES: usize = 8;
+        let cache = once_cell::race::OnceBox::<BigInt>::new();
+        let barrier = std::sync::Barrier::new(CANDIDATES);
+        let initialized = std::sync::atomic::AtomicUsize::new(0);
+
+        std::thread::scope(|scope| {
+            let readers = (0..CANDIDATES)
+                .map(|_| {
+                    let barrier = &barrier;
+                    let cache = &cache;
+                    let initialized = &initialized;
+                    scope.spawn(move || {
+                        let mut address = 0;
+                        let allocations = allocation_counter::measure(|| {
+                            address = cache.get_or_init(|| {
+                                initialized.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                                barrier.wait();
+                                alloc::boxed::Box::new(BigInt::from(1_234_567_i128))
+                            }) as *const BigInt as usize;
+                        });
+                        (address, allocations)
+                    })
+                })
+                .collect::<alloc::vec::Vec<_>>();
+            let observations = readers
+                .into_iter()
+                .map(|reader| reader.join().unwrap())
+                .collect::<alloc::vec::Vec<_>>();
+
+            assert_eq!(
+                initialized.load(core::sync::atomic::Ordering::Relaxed),
+                CANDIDATES
+            );
+            let retained_address = observations[0].0;
+            assert!(observations
+                .iter()
+                .all(|(address, _)| *address == retained_address));
+
+            let workers_with_retained_allocations = observations
+                .iter()
+                .filter(|(_, allocation)| allocation.count_current > 0)
+                .count();
+            assert_eq!(workers_with_retained_allocations, 1);
+            let total_allocations = observations
+                .iter()
+                .map(|(_, allocation)| allocation.count_total)
+                .sum::<u64>();
+            let retained_allocations = observations
+                .iter()
+                .map(|(_, allocation)| allocation.count_current.max(0) as u64)
+                .sum::<u64>();
+            assert!(total_allocations > retained_allocations);
+        });
+
+        assert_eq!(cache.get(), Some(&BigInt::from(1_234_567_i128)));
+    }
+
+    /// Trace: FR-371-AC-4
+    #[test]
+    fn magnitude_limb_stream_does_not_materialize_small_cache() {
+        let values = [
+            Integer::zero(),
+            Integer::from(-1_i128),
+            Integer::from(1_i128 << 32),
+            Integer::from(i128::MIN),
+            Integer::from(i128::MAX),
+        ];
+        let expected = [
+            [0, 0, 0, 0],
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0x8000_0000],
+            [u32::MAX, u32::MAX, u32::MAX, 0x7fff_ffff],
+        ];
+        let expected_lengths = [0, 1, 2, 4, 4];
+        let mut observed = [[0_u32; 4]; 5];
+        let mut lengths = [0_usize; 5];
+        let allocations = allocation_counter::measure(|| {
+            for (index, value) in values.iter().enumerate() {
+                for limb in value.magnitude_limbs() {
+                    observed[index][lengths[index]] = limb;
+                    lengths[index] += 1;
+                }
+            }
+        });
+        assert_eq!(allocations.bytes_total, 0);
+        assert_eq!(allocations.count_total, 0);
+        assert_eq!(lengths, expected_lengths);
+        assert_eq!(observed, expected);
+        assert!(values.iter().all(|value| matches!(
+            &value.0,
+            IntegerRepr::Small { cache, .. } if cache.get().is_none()
+        )));
     }
 }
