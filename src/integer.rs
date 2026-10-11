@@ -49,6 +49,13 @@ enum IntegerRepr {
     Large(BigInt),
 }
 
+fn retained_big_image(
+    cache: &once_cell::race::OnceBox<BigInt>,
+    initialize: impl FnOnce() -> BigInt,
+) -> &BigInt {
+    cache.get_or_init(|| alloc::boxed::Box::new(initialize()))
+}
+
 impl Integer {
     fn small(value: i128) -> Self {
         Self(IntegerRepr::Small {
@@ -631,7 +638,7 @@ impl Integer {
     pub fn as_big(&self) -> &BigInt {
         match &self.0 {
             IntegerRepr::Small { value, cache } => {
-                cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
+                retained_big_image(cache, || BigInt::from(*value))
             }
             IntegerRepr::Large(value) => value,
         }
@@ -757,22 +764,58 @@ mod tests {
 
         let racing_value = Integer::from(1_234_567_i128);
         let barrier = std::sync::Barrier::new(8);
+        let candidate_count = std::sync::atomic::AtomicUsize::new(0);
         std::thread::scope(|scope| {
             let readers = (0..8)
                 .map(|_| {
                     let barrier = &barrier;
                     let value = &racing_value;
+                    let candidate_count = &candidate_count;
                     scope.spawn(move || {
-                        barrier.wait();
-                        value.as_big() as *const BigInt as usize
+                        let mut address = 0;
+                        let allocations = allocation_counter::measure(|| {
+                            address = match &value.0 {
+                                IntegerRepr::Small { value, cache } => {
+                                    retained_big_image(cache, || {
+                                        candidate_count
+                                            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                                        barrier.wait();
+                                        BigInt::from(*value)
+                                    })
+                                }
+                                IntegerRepr::Large(value) => value,
+                            } as *const BigInt as usize;
+                        });
+                        (address, allocations)
                     })
                 })
                 .collect::<alloc::vec::Vec<_>>();
-            let addresses = readers
+            let observations = readers
                 .into_iter()
                 .map(|reader| reader.join().unwrap())
                 .collect::<alloc::vec::Vec<_>>();
-            assert!(addresses.iter().all(|address| *address == addresses[0]));
+            assert_eq!(
+                candidate_count.load(core::sync::atomic::Ordering::Relaxed),
+                8
+            );
+            let retained_address = observations[0].0;
+            assert!(observations
+                .iter()
+                .all(|(address, _)| *address == retained_address));
+            let workers_with_retained_allocations = observations
+                .iter()
+                .filter(|(_, allocation)| allocation.count_current > 0)
+                .count();
+            assert_eq!(workers_with_retained_allocations, 1);
+            let total_allocations = observations
+                .iter()
+                .map(|(_, allocation)| allocation.count_total)
+                .sum::<u64>();
+            let retained_allocations = observations
+                .iter()
+                .map(|(_, allocation)| allocation.count_current.max(0) as u64)
+                .sum::<u64>();
+            assert!(total_allocations > retained_allocations);
         });
 
         let mut left = std::collections::hash_map::DefaultHasher::new();
@@ -785,19 +828,38 @@ mod tests {
     /// Trace: FR-371-AC-4
     #[test]
     fn magnitude_limb_stream_does_not_materialize_small_cache() {
-        let value = Integer::from(i128::MIN);
-        assert!(matches!(&value.0, IntegerRepr::Small { cache, .. } if cache.get().is_none()));
-        assert_eq!(
-            value.magnitude_limbs().collect::<alloc::vec::Vec<_>>(),
-            [0, 0, 0, 0x8000_0000]
-        );
-        assert!(matches!(&value.0, IntegerRepr::Small { cache, .. } if cache.get().is_none()));
-        assert_eq!(Integer::zero().magnitude_limbs().count(), 0);
-        assert_eq!(
-            Integer::from(1_u64 << 32)
-                .magnitude_limbs()
-                .collect::<alloc::vec::Vec<_>>(),
-            [0, 1]
-        );
+        let values = [
+            Integer::zero(),
+            Integer::from(-1_i128),
+            Integer::from(1_i128 << 32),
+            Integer::from(i128::MIN),
+            Integer::from(i128::MAX),
+        ];
+        let expected = [
+            [0, 0, 0, 0],
+            [u32::MAX, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0x8000_0000],
+            [u32::MAX, u32::MAX, u32::MAX, 0x7fff_ffff],
+        ];
+        let expected_lengths = [0, 1, 2, 4, 4];
+        let mut observed = [[0_u32; 4]; 5];
+        let mut lengths = [0_usize; 5];
+        let allocations = allocation_counter::measure(|| {
+            for (index, value) in values.iter().enumerate() {
+                for limb in value.magnitude_limbs() {
+                    observed[index][lengths[index]] = limb;
+                    lengths[index] += 1;
+                }
+            }
+        });
+        assert_eq!(allocations.bytes_total, 0);
+        assert_eq!(allocations.count_total, 0);
+        assert_eq!(lengths, expected_lengths);
+        assert_eq!(observed, expected);
+        assert!(values.iter().all(|value| matches!(
+            &value.0,
+            IntegerRepr::Small { cache, .. } if cache.get().is_none()
+        )));
     }
 }
