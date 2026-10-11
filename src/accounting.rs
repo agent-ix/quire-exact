@@ -15,6 +15,7 @@
 use crate::cancel::Cancel;
 use crate::integer::Integer;
 use alloc::vec::Vec;
+use core::fmt;
 use core::num::NonZeroU64;
 
 #[cfg(feature = "test-support")]
