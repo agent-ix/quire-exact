@@ -300,18 +300,31 @@ mod tests {
         Meter::new(generous_limits())
     }
 
-    fn qualification_operands(first_left: bool) -> (Value, Value) {
+    fn e21_list_shape_operands(first_head_unequal: bool) -> (Value, Value) {
         let declaration = crate::node::NodeKey::from_digest([42; 32]);
-        let mut left_slots = vec![FieldValue::Absent];
-        let mut right_slots = vec![FieldValue::Absent];
-        left_slots.extend((0..15).map(|index| {
-            FieldValue::Present(Value::Boolean(if index == 0 { first_left } else { true }))
-        }));
-        right_slots.extend((0..15).map(|_| FieldValue::Present(Value::Boolean(true))));
-        (
-            crate::value::from_admitted_slots(declaration, left_slots.into_boxed_slice()),
-            crate::value::from_admitted_slots(declaration, right_slots.into_boxed_slice()),
-        )
+        let list = |heads: [i64; 8]| {
+            heads
+                .into_iter()
+                .rev()
+                .fold(None, |tail: Option<Value>, head| {
+                    let tail = tail.map_or(FieldValue::Absent, FieldValue::Present);
+                    Some(crate::value::from_admitted_slots(
+                        declaration,
+                        vec![
+                            FieldValue::Present(Value::Integer(Integer::from(head))),
+                            tail,
+                        ]
+                        .into_boxed_slice(),
+                    ))
+                })
+                .expect("the qualification list has eight nodes")
+        };
+        let left_heads = if first_head_unequal {
+            [0, 2, 3, 4, 5, 6, 7, 8]
+        } else {
+            [1, 2, 3, 4, 5, 6, 7, 8]
+        };
+        (list(left_heads), list([1, 2, 3, 4, 5, 6, 7, 8]))
     }
 
     /// `plan_equality` reports the exact pair count of two equal
@@ -345,11 +358,10 @@ mod tests {
         assert!(matches!(outcome, Outcome::Incomplete(_)));
     }
 
-    /// Trace: FR-375-AC-1, FR-375-AC-2
     #[test]
-    fn result_bearing_evaluation_returns_relation_and_same_plan_count() {
-        for (first_left, expected) in [(true, true), (false, false)] {
-            let (left, right) = qualification_operands(first_left);
+    fn kernel_result_bearing_evaluation_returns_relation_plan_and_charge_order() {
+        for (first_head_unequal, expected) in [(false, true), (true, false)] {
+            let (left, right) = e21_list_shape_operands(first_head_unequal);
             assert_eq!(left.occ(), Integer::from(16_u64));
             assert_eq!(right.occ(), Integer::from(16_u64));
             let plan = plan_equality(&left, &right).unwrap();
@@ -366,13 +378,25 @@ mod tests {
             assert_eq!(meter.consumed(LimitKind::WorkUnits), 51);
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
             assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 17);
+            #[cfg(feature = "test-support")]
+            {
+                let mut expected_points =
+                    vec![ChargePoint::EqualityPlanForm, ChargePoint::EqualityPlan];
+                expected_points.extend([ChargePoint::EqualityPair; 17]);
+                expected_points.push(ChargePoint::EqualityResultRetain);
+                let actual_points: Vec<_> = meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect();
+                assert_eq!(actual_points, expected_points);
+            }
         }
     }
 
-    /// Trace: FR-375-AC-5, FR-375-AC-8
     #[test]
     fn plan_reservation_refusals_are_atomic_before_pair_charges() {
-        let (left, right) = qualification_operands(true);
+        let (left, right) = e21_list_shape_operands(true);
         for (limits, expected_kind, expected_limit, expected_next) in [
             (
                 ScalarLimits {
@@ -408,13 +432,12 @@ mod tests {
         }
     }
 
-    /// Trace: FR-375-AC-3
     #[cfg(feature = "test-support")]
     #[test]
     fn pair_and_result_refusals_stop_at_the_first_denied_charge() {
         use crate::accounting::InjectedDenial;
 
-        let (left, right) = qualification_operands(true);
+        let (left, right) = e21_list_shape_operands(true);
         let pair_denial = InjectedDenial {
             point: ChargePoint::EqualityPair,
             occurrence: NonZeroU64::new(17).unwrap(),
