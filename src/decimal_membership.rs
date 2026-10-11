@@ -159,7 +159,7 @@ fn sign(value: &Integer) -> Ordering {
 
 impl<A: Allocator, O: Observation> Comparison<'_, A, O> {
     fn copy_endpoint(&mut self, endpoint: &Integer) -> Result<(), DecimalMembershipFailure> {
-        let mut digits = endpoint.as_big().iter_u32_digits();
+        let mut digits = endpoint.magnitude_limbs();
         if self.scratch.is_empty() {
             let (limbs, _layout) = scratch_layout(self.magnitude_bits)?;
             poll(self.cancel)?;
@@ -230,7 +230,7 @@ impl<A: Allocator, O: Observation> Comparison<'_, A, O> {
         }
         self.copy_endpoint(endpoint)?;
         let discarded = self.divide_endpoint(shift)?;
-        let mut digits = coefficient.as_big().iter_u32_digits();
+        let mut digits = coefficient.magnitude_limbs();
         let mut magnitude = Ordering::Equal;
         // In least-significant-first order, each later unequal limb supersedes
         // the previous comparison. This pads the borrowed coefficient without
