@@ -761,9 +761,10 @@ mod tests {
             let readers = (0..8)
                 .map(|_| {
                     let barrier = &barrier;
+                    let value = &racing_value;
                     scope.spawn(move || {
                         barrier.wait();
-                        racing_value.as_big() as *const BigInt as usize
+                        value.as_big() as *const BigInt as usize
                     })
                 })
                 .collect::<alloc::vec::Vec<_>>();

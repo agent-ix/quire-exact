@@ -145,13 +145,14 @@ fn metered_native_and_overflow_operations_keep_the_existing_charge_schedule() {
     let mut one_less = limits();
     one_less.integer_bits = 4;
     let mut meter = Meter::new(one_less);
-    let incomplete = evaluate_integer_arithmetic(
+    let incomplete = match evaluate_integer_arithmetic(
         IntegerArithmetic::Add(&native_left, &native_right),
         None,
         &mut meter,
-    )
-    .incomplete()
-    .expect("the arithmetic charge is one bit above the limit");
+    ) {
+        Outcome::Incomplete(record) => record,
+        other => panic!("expected arithmetic denial, got {other:?}"),
+    };
     assert_eq!(
         incomplete.charge_point,
         quire_exact::ChargePoint::IntegerArithmeticArithmetic
