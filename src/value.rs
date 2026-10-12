@@ -1317,6 +1317,30 @@ mod tests {
         assert!(ValueType::Reference(object_type).admits(&reference));
     }
 
+    /// TC-992: String is an unbounded scalar-sequence leaf distinct from
+    /// profile-bounded Text and from the canonical UUID spelling.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_admission_and_display_are_distinct_from_text() {
+        let value = Value::String("e\u{301}".to_owned());
+        let text_type =
+            TextType::new(0, 8, crate::text::TextProfile::Nfc).expect("valid text bounds");
+        let text = crate::text::admit_text(
+            &crate::text::TextPayload::from_utf8("e\u{301}".as_bytes()).expect("UTF-8"),
+            &text_type,
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("NFC text admission normalizes its payload");
+
+        assert!(ValueType::String.admits(&value));
+        assert!(!ValueType::String.admits(&Value::Text(text.clone())));
+        assert!(!ValueType::Text(text_type).admits(&value));
+        assert_eq!(format!("{:?}", ValueType::String), "String");
+        assert_eq!(format!("{:?}", value), format!("String({:?})", "e\u{301}"),);
+        assert_eq!(text.retained(), "é");
+    }
+
     /// Every existing value kind remains distinct from both new native kinds.
     #[trace("TC-918", "FR-370-AC-3", "FR-370-AC-5")]
     #[test]

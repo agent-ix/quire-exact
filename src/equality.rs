@@ -337,6 +337,40 @@ mod tests {
         assert_eq!(plan.pair_events(), &Integer::one());
     }
 
+    /// TC-992: native String equality compares exact scalar sequences; its
+    /// NFC control keeps Text's declared normalization semantics.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_equality_does_not_normalize_like_text() {
+        let composed = Value::String("é".to_owned());
+        let decomposed = Value::String("e\u{301}".to_owned());
+        let equal_copy = Value::String("e\u{301}".to_owned());
+        let compare = |left: &Value, right: &Value| {
+            let mut meter = generous_meter();
+            planned_equality(left, right, &mut meter)
+                .completed()
+                .expect("same native String type compares")
+        };
+
+        assert!(compare(&decomposed, &equal_copy));
+        assert!(!compare(&composed, &decomposed));
+        let text_type = crate::text::TextType::new(0, 8, crate::text::TextProfile::Nfc)
+            .expect("valid text bounds");
+        let text_value = |source: &str| {
+            let mut meter = generous_meter();
+            Value::Text(
+                crate::text::admit_text(
+                    &crate::text::TextPayload::from_utf8(source.as_bytes()).expect("UTF-8"),
+                    &text_type,
+                    &mut meter,
+                )
+                .completed()
+                .expect("NFC text admission"),
+            )
+        };
+        assert!(compare(&text_value("é"), &text_value("e\u{301}")));
+    }
+
     /// `planned_equality` completes true for two equal integers
     /// under a generous meter, and a meter with no `value_occurrences` left
     /// cannot admit `equality.plan-form`, so the identical comparison

@@ -379,6 +379,7 @@ mod tests {
             ValueType::Float(FloatType::exact(IeeeWidth::Binary64)),
             ValueType::Quantity(UnitId::declared(key)),
             ValueType::Text(TextType::new(0, 10, TextProfile::UnicodeScalars).expect("bounds")),
+            ValueType::String,
             ValueType::Enum(EnumShape::new(false, [VariantId::from_digest(digest(3))])),
             ValueType::Composite(key),
             ValueType::Reference(EffectiveId::from_digest(digest(6))),
@@ -394,7 +395,7 @@ mod tests {
     }
 
     /// What `#[derive(Debug)]` printed for each of [`samples`], compact.
-    const DERIVED_COMPACT: [&str; 15] = [
+    const DERIVED_COMPACT: [&str; 16] = [
         "Boolean",
         "Integer",
         "Int(IntegerInterval { lower: Integer(-2), upper: Integer(7) })",
@@ -403,6 +404,7 @@ mod tests {
         "Float(FloatType { width: Binary64, rounding: Exact })",
         "Quantity(UnitId(quire.checked-semantic-node/v1, 0000000000000000000000000000000000000000000000000000000000000009))",
         "Text(TextType { min: 0, max: 10, profile: UnicodeScalars })",
+        "String",
         "Enum(EnumShape { ordered: false, variants: [VariantId(0000000000000000000000000000000000000000000000000000000000000003)] })",
         "Composite(NodeKey(0000000000000000000000000000000000000000000000000000000000000009))",
         "Reference(EffectiveId(0000000000000000000000000000000000000000000000000000000000000006))",

@@ -186,6 +186,30 @@ mod tests {
         assert_eq!(compare_keys(&one, &two), Some(Ordering::Less));
     }
 
+    /// TC-992: native String keys preserve exact UTF-8 scalar order and do
+    /// not alias the key of the same bytes under profile-bounded Text.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_keys_preserve_scalar_sequence_identity() {
+        let composed = Value::String("é".to_owned());
+        let decomposed = Value::String("e\u{301}".to_owned());
+        let decomposed_copy = Value::String("e\u{301}".to_owned());
+
+        assert_eq!(
+            compare_keys(&decomposed, &decomposed_copy),
+            Some(Ordering::Equal)
+        );
+        assert_eq!(
+            compare_keys(&composed, &decomposed),
+            Some(Ordering::Greater)
+        );
+        let uuid = Value::Uuid(
+            crate::identity::Uuid::from_canonical_text("00112233-4455-6677-8899-aabbccddeeff")
+                .expect("canonical UUID"),
+        );
+        assert_eq!(compare_keys(&decomposed, &uuid), None);
+    }
+
     /// comparing values of unrelated types (a checked program never
     /// produces this) returns `None`, not a panic.
     #[test]
