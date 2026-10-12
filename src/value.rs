@@ -1353,6 +1353,30 @@ mod tests {
         assert_eq!(text.retained(), "é");
     }
 
+    /// String also follows the iterative Debug path when nested.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn nested_native_string_debug_matches_the_derived_format() {
+        let value = from_admitted_slots(
+            NodeKey::from_digest(digest(9)),
+            vec![FieldValue::Present(Value::String("e\u{301}".to_owned()))].into_boxed_slice(),
+        );
+
+        assert_eq!(
+            format!("{value:?}"),
+            format!(
+                "Composite(CompositeValue {{ declaration: NodeKey(0000000000000000000000000000000000000000000000000000000000000009), slots: [Present(String({:?}))], occ: Integer(2) }})",
+                "e\u{301}"
+            )
+        );
+        let alternate = format!("{value:#?}");
+        assert!(alternate.contains(&format!(
+            "String(\n                    {:?},\n                )",
+            "e\u{301}"
+        )));
+        assert!(alternate.contains("occ: Integer(\n            2,\n        )"));
+    }
+
     /// Every existing value kind remains distinct from both new native kinds.
     #[trace("TC-918", "FR-370-AC-3", "FR-370-AC-5")]
     #[test]
@@ -1990,7 +2014,7 @@ mod tests {
     }
 
     /// The `Debug` parity fixtures. The first is a composite root holding
-    /// every slot state, every scalar variant, and every nesting variant,
+    /// every slot state, representative scalar variants, and every nesting variant,
     /// including a node inside a collection element inside an option
     /// payload. The second has an option root.
     fn debug_samples() -> [Value; 2] {
