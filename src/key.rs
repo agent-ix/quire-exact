@@ -102,6 +102,7 @@ fn leaf<'a>(
         (Value::Text(left), Value::Text(right)) => {
             left.retained().as_bytes().cmp(right.retained().as_bytes())
         }
+        (Value::String(left), Value::String(right)) => left.as_bytes().cmp(right.as_bytes()),
         (Value::Uuid(left), Value::Uuid(right)) => {
             left.canonical_bytes().cmp(&right.canonical_bytes())
         }
@@ -155,6 +156,7 @@ fn leaf<'a>(
             | Value::Float(_)
             | Value::Quantity(_)
             | Value::Text(_)
+            | Value::String(_)
             | Value::Uuid(_)
             | Value::Timestamp(_)
             | Value::Enum(_)

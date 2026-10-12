@@ -192,6 +192,8 @@ pub enum ValueType {
     Quantity(UnitId),
     /// A `Text[min, max; profile]`.
     Text(TextType),
+    /// An unbounded native Unicode scalar sequence, compared without text normalization.
+    String,
     /// A native opaque UUID.
     Uuid,
     /// A native signed POSIX-epoch nanosecond Timestamp.
@@ -239,6 +241,7 @@ impl ValueType {
             (Self::Float(declared), Value::Float(float)) => float.width() == declared.width(),
             (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == *unit,
             (Self::Text(declared), Value::Text(text)) => text.text_type() == declared,
+            (Self::String, Value::String(_)) => true,
             (Self::Uuid, Value::Uuid(_)) | (Self::Timestamp, Value::Timestamp(_)) => true,
             (Self::Enum(shape), Value::Enum(member)) => {
                 shape.rank(member.variant()) == Some(member.rank())
@@ -268,6 +271,7 @@ impl ValueType {
                 | Self::Float(_)
                 | Self::Quantity(_)
                 | Self::Text(_)
+                | Self::String
                 | Self::Uuid
                 | Self::Timestamp
                 | Self::Enum(_)
@@ -317,6 +321,8 @@ pub enum Value {
     Quantity(Quantity),
     /// A text value of its declared type.
     Text(Text),
+    /// An unbounded native Unicode scalar sequence.
+    String(String),
     /// An opaque native UUID.
     Uuid(Uuid),
     /// A signed POSIX-epoch nanosecond Timestamp.
@@ -352,6 +358,7 @@ impl Value {
             | Self::Float(_)
             | Self::Quantity(_)
             | Self::Text(_)
+            | Self::String(_)
             | Self::Uuid(_)
             | Self::Timestamp(_)
             | Self::Enum(_)
@@ -394,6 +401,7 @@ fn defer_node(pending: &mut Vec<Value>, value: Value) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::String(_)
         | Value::Uuid(_)
         | Value::Timestamp(_)
         | Value::Enum(_)
@@ -436,6 +444,7 @@ fn release_children(node: Value, pending: &mut Vec<Value>) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::String(_)
         | Value::Uuid(_)
         | Value::Timestamp(_)
         | Value::Enum(_)
@@ -671,6 +680,7 @@ fn schedule_value<'a>(stack: &mut Vec<Step<'a>>, value: &'a Value) {
         Value::Float(leaf) => ("Float", leaf),
         Value::Quantity(leaf) => ("Quantity", leaf),
         Value::Text(leaf) => ("Text", leaf),
+        Value::String(leaf) => ("String", leaf),
         Value::Uuid(leaf) => ("Uuid", leaf),
         Value::Timestamp(leaf) => ("Timestamp", leaf),
         Value::Enum(leaf) => ("Enum", leaf),

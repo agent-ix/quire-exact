@@ -30,6 +30,7 @@ impl ValueType {
             Self::Boolean
             | Self::Integer
             | Self::Uuid
+            | Self::String
             | Self::Timestamp
             | Self::Int(_)
             | Self::Rational(_)
@@ -58,6 +59,7 @@ impl ValueType {
             Self::Boolean
             | Self::Integer
             | Self::Uuid
+            | Self::String
             | Self::Timestamp
             | Self::Int(_)
             | Self::Rational(_)
@@ -79,6 +81,7 @@ impl ValueType {
             (Self::Boolean, Self::Boolean)
             | (Self::Integer, Self::Integer)
             | (Self::Uuid, Self::Uuid)
+            | (Self::String, Self::String)
             | (Self::Timestamp, Self::Timestamp)
             | (Self::Option(_), Self::Option(_)) => true,
             (Self::Int(left), Self::Int(right)) => left == right,
@@ -105,6 +108,7 @@ impl ValueType {
                 | Self::Float(_)
                 | Self::Quantity(_)
                 | Self::Text(_)
+                | Self::String
                 | Self::Enum(_)
                 | Self::Option(_)
                 | Self::Composite(_)
@@ -121,7 +125,12 @@ impl ValueType {
     fn shallow_hash<H: Hasher>(&self, state: &mut H) {
         core::mem::discriminant(self).hash(state);
         match self {
-            Self::Boolean | Self::Integer | Self::Uuid | Self::Timestamp | Self::Option(_) => {}
+            Self::Boolean
+            | Self::Integer
+            | Self::Uuid
+            | Self::String
+            | Self::Timestamp
+            | Self::Option(_) => {}
             Self::Int(interval) => interval.hash(state),
             Self::Rational(domain) => domain.hash(state),
             Self::Decimal(declared) => declared.hash(state),
@@ -148,6 +157,7 @@ impl Clone for ValueType {
             Self::Boolean => Self::Boolean,
             Self::Integer => Self::Integer,
             Self::Uuid => Self::Uuid,
+            Self::String => Self::String,
             Self::Timestamp => Self::Timestamp,
             Self::Int(interval) => Self::Int(interval.clone()),
             Self::Rational(domain) => Self::Rational(domain.clone()),
@@ -237,6 +247,7 @@ pub(super) fn schedule_type<'a>(stack: &mut Vec<Step<'a>>, value_type: &'a Value
         ValueType::Boolean => return stack.push(Step::Text("Boolean")),
         ValueType::Integer => return stack.push(Step::Text("Integer")),
         ValueType::Uuid => return stack.push(Step::Text("Uuid")),
+        ValueType::String => return stack.push(Step::Text("String")),
         ValueType::Timestamp => return stack.push(Step::Text("Timestamp")),
         ValueType::Option(payload) => {
             return schedule(stack, tuple_steps("Option", Step::Type(payload)));
