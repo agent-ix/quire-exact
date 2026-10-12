@@ -192,6 +192,8 @@ pub enum ValueType {
     Quantity(UnitId),
     /// A `Text[min, max; profile]`.
     Text(TextType),
+    /// An unbounded native Unicode scalar sequence, compared without text normalization.
+    String,
     /// A native opaque UUID.
     Uuid,
     /// A native signed POSIX-epoch nanosecond Timestamp.
@@ -239,6 +241,7 @@ impl ValueType {
             (Self::Float(declared), Value::Float(float)) => float.width() == declared.width(),
             (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == *unit,
             (Self::Text(declared), Value::Text(text)) => text.text_type() == declared,
+            (Self::String, Value::String(_)) => true,
             (Self::Uuid, Value::Uuid(_)) | (Self::Timestamp, Value::Timestamp(_)) => true,
             (Self::Enum(shape), Value::Enum(member)) => {
                 shape.rank(member.variant()) == Some(member.rank())
@@ -268,6 +271,7 @@ impl ValueType {
                 | Self::Float(_)
                 | Self::Quantity(_)
                 | Self::Text(_)
+                | Self::String
                 | Self::Uuid
                 | Self::Timestamp
                 | Self::Enum(_)
@@ -317,6 +321,8 @@ pub enum Value {
     Quantity(Quantity),
     /// A text value of its declared type.
     Text(Text),
+    /// An unbounded native Unicode scalar sequence.
+    String(String),
     /// An opaque native UUID.
     Uuid(Uuid),
     /// A signed POSIX-epoch nanosecond Timestamp.
@@ -352,6 +358,7 @@ impl Value {
             | Self::Float(_)
             | Self::Quantity(_)
             | Self::Text(_)
+            | Self::String(_)
             | Self::Uuid(_)
             | Self::Timestamp(_)
             | Self::Enum(_)
@@ -394,6 +401,7 @@ fn defer_node(pending: &mut Vec<Value>, value: Value) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::String(_)
         | Value::Uuid(_)
         | Value::Timestamp(_)
         | Value::Enum(_)
@@ -436,6 +444,7 @@ fn release_children(node: Value, pending: &mut Vec<Value>) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::String(_)
         | Value::Uuid(_)
         | Value::Timestamp(_)
         | Value::Enum(_)
@@ -671,6 +680,7 @@ fn schedule_value<'a>(stack: &mut Vec<Step<'a>>, value: &'a Value) {
         Value::Float(leaf) => ("Float", leaf),
         Value::Quantity(leaf) => ("Quantity", leaf),
         Value::Text(leaf) => ("Text", leaf),
+        Value::String(leaf) => ("String", leaf),
         Value::Uuid(leaf) => ("Uuid", leaf),
         Value::Timestamp(leaf) => ("Timestamp", leaf),
         Value::Enum(leaf) => ("Enum", leaf),
@@ -1267,6 +1277,8 @@ impl Drop for CompositeValue {
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
     use ix_trace_rs::trace;
 
     use super::*;
@@ -1315,6 +1327,54 @@ mod tests {
         assert!(!ValueType::Uuid.admits(&reference));
         assert!(!ValueType::Timestamp.admits(&reference));
         assert!(ValueType::Reference(object_type).admits(&reference));
+    }
+
+    /// TC-992: String is an unbounded scalar-sequence leaf distinct from
+    /// profile-bounded Text and from the canonical UUID spelling.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_admission_and_display_are_distinct_from_text() {
+        let value = Value::String("e\u{301}".to_owned());
+        let text_type =
+            TextType::new(0, 8, crate::text::TextProfile::Nfc).expect("valid text bounds");
+        let text = crate::text::admit_text(
+            &crate::text::TextPayload::from_utf8("e\u{301}".as_bytes()).expect("UTF-8"),
+            &text_type,
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("NFC text admission normalizes its payload");
+
+        assert!(ValueType::String.admits(&value));
+        assert!(!ValueType::String.admits(&Value::Text(text.clone())));
+        assert!(!ValueType::Text(text_type).admits(&value));
+        assert_eq!(format!("{:?}", ValueType::String), "String");
+        assert_eq!(format!("{:?}", value), format!("String({:?})", "e\u{301}"),);
+        assert_eq!(text.retained(), "é");
+    }
+
+    /// String also follows the iterative Debug path when nested.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn nested_native_string_debug_matches_the_derived_format() {
+        let value = from_admitted_slots(
+            NodeKey::from_digest(digest(9)),
+            vec![FieldValue::Present(Value::String("e\u{301}".to_owned()))].into_boxed_slice(),
+        );
+
+        assert_eq!(
+            format!("{value:?}"),
+            format!(
+                "Composite(CompositeValue {{ declaration: NodeKey(0000000000000000000000000000000000000000000000000000000000000009), slots: [Present(String({:?}))], occ: Integer(2) }})",
+                "e\u{301}"
+            )
+        );
+        let alternate = format!("{value:#?}");
+        assert!(alternate.contains(&format!(
+            "String(\n                    {:?},\n                )",
+            "e\u{301}"
+        )));
+        assert!(alternate.contains("occ: Integer(\n            2,\n        )"));
     }
 
     /// Every existing value kind remains distinct from both new native kinds.
@@ -1954,7 +2014,7 @@ mod tests {
     }
 
     /// The `Debug` parity fixtures. The first is a composite root holding
-    /// every slot state, every scalar variant, and every nesting variant,
+    /// every slot state, representative scalar variants, and every nesting variant,
     /// including a node inside a collection element inside an option
     /// payload. The second has an option root.
     fn debug_samples() -> [Value; 2] {
