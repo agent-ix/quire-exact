@@ -272,6 +272,8 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
     #[cfg(feature = "test-support")]
     use alloc::vec::Vec;
     #[cfg(feature = "test-support")]

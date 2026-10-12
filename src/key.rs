@@ -171,6 +171,8 @@ fn leaf<'a>(
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
     use ix_trace_rs::trace;
 
     use super::*;
@@ -204,7 +206,7 @@ mod tests {
             Some(Ordering::Greater)
         );
         let uuid = Value::Uuid(
-            crate::identity::Uuid::from_canonical_text("00112233-4455-6677-8899-aabbccddeeff")
+            crate::Uuid::from_canonical_text("00112233-4455-6677-8899-aabbccddeeff")
                 .expect("canonical UUID"),
         );
         assert_eq!(compare_keys(&decomposed, &uuid), None);

@@ -1267,6 +1267,8 @@ impl Drop for CompositeValue {
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
     use ix_trace_rs::trace;
 
     use super::*;
