@@ -58,6 +58,6 @@ Specified. Code lands in a later slice.
 ## Dependencies
 
 - Text that changes with this requirement: the `compare_keys` doc comment and the module doc of `src/key.rs`; the `CanonicalKeyUnavailable` row of [FR-369](./FR-369-typed-checked-invariant-causes.md) and the third step of [TC-917](../test-cases/TC-917-typed-checked-invariant-causes.md), which already uses a `Float` pair and stays valid; the `compare_keys` mentions in FR-370-AC-3 and FR-088-AC-11 keep their text.
-- Equality of the same pairs is [FR-376](./FR-376-composite-equality-across-declarations.md); the constructor that admits such members is [FR-378](./FR-378-caller-admitted-collection-elements-and-option-payloads.md).
+- Equality of the same pairs is [FR-376](./FR-376-composite-equality-across-declarations.md); the caller-admitted paths that store such members are [FR-378](./FR-378-caller-admitted-values-in-collections-options-and-composites.md).
 - The falsifying controls are [TC-925](../test-cases/TC-925-composite-canonical-key-across-declarations.md).
 - The language-level statement is QSL FR-359 (item 5 and cross-repo requirement 3).

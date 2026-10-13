@@ -63,3 +63,22 @@ Ticket: QSL-737. PR: quire-exact#38. Base checklist over the PR #38 spec diff: t
 ## Verdict
 
 FINDINGS (1 medium, 2 low). Requirements 2 and 3 of QSL FR-359 are implemented in substance. FR-376 makes different declarations unequal, gives false, does not descend into slots, and keeps composite-vs-non-composite as ValueKindMismatch (FR-359 item 4). FR-377 orders by ascending declaration-key bytes before slots (FR-359 item 5). FR-378 keeps ValueKindMismatch-free admission in the caller and ValueType::admits exact (FR-359 item 8 and req 3), with OptionValue::from_admitted as the sanctioned Option path. Every claim about current code checks out: the equality.rs catch-all returns ValueKindMismatch for two composites of different declarations (218-219 guard, 246-268 arm); compare_keys returns None (key.rs:136-169); sort_by_key refuses CanonicalKeyUnavailable (collection.rs:488-503); OptionValue::from_admitted is at value.rs:844; collection::from_admitted is at collection.rs:253; and evaluate_record/evaluate_tuple refuse DeferredResultNotAdmitted (value.rs:1090-1099). FR-376..378 and TC-924..926 are unique across all remote branches and the open PRs (#11, #17). Leak check: the new text cites only the public QSL FR-359 and the public ticket id QSL-737 (PR body); no private repos, branch names, paths or ticket ids appear. quire validate is clean.
+
+## New findings (disposition pass 1)
+
+Reviewed at agent-ix/quire-exact@5e67559b77c4d57501ad859d70c26f6c5e9e86ed.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The fix round renamed FR-378 to FR-378-caller-admitted-values-in-collections-options-and-composites.md, but FR-376 Dependencies (line 60) and FR-377 Dependencies (line 61) still link the old file name FR-378-caller-admitted-collection-elements-and-option-payloads.md, which no longer exists. FR-377:61 also still says "the constructor that admits such members is FR-378", but FR-378 now adds no constructor. | FR-376:60; FR-377:61 |
+| FND-005 | low | FR-378 Behavior 1 says form and form_grouped "charge membership comparison, collection.bound and collection.result-retain". form_grouped never coalesces, so it charges no membership comparison (src/collection.rs:364-379). form over a Sequence compares nothing either (collection.rs:344-346). Say that form charges membership comparison for Set, Bag and OrderedSet, and form_grouped charges only collection.bound and collection.result-retain. | FR-378:37; src/collection.rs:344-346,364-379 |
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-exact@5e67559b77c4d57501ad859d70c26f6c5e9e86ed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5e67559 |
+| FND-002 | fixed | 5e67559 |
+| FND-003 | fixed | 5e67559 |

@@ -58,3 +58,14 @@ Ticket: QSL-737. PR: quire-exact#38. Refusal paths, malformed-pair edges and nes
 ## Verdict
 
 FINDINGS (3 medium, 1 low). The fault boundaries are right: same declaration with different slot counts, composite against non-composite, PopulationPair, CollectionKindMismatch, and foreign-reference suppression when slots are skipped. Option-shape and collection-length checks precede the payload. FR-378 refusal parity (deferred CollectionElementNotAdmitted, occurrence Element(i) TypeMismatch before any charge, first-rejection stop) matches the exact constructors.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-exact@5e67559b77c4d57501ad859d70c26f6c5e9e86ed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5e67559 |
+| FND-002 | fixed | 5e67559 |
+| FND-003 | fixed | 5e67559 |
+| FND-004 | fixed | 5e67559 |

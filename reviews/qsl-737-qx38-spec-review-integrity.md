@@ -50,3 +50,15 @@ Ticket: QSL-737. PR: quire-exact#38. Consistency of the new FRs and TCs with eac
 ## Verdict
 
 FINDINGS (2 high, 1 medium, 2 low). Soundness of the key: sorting lexicographically on (declaration key bytes, then slots) is a total preorder whenever the same-declaration slot order is total. Keys tie only for the same declaration with equal slot keys, which is exactly FR-376 equality. Two values of different declarations never tie, so stable-sort, membership and equality agree, and Value has no structural Hash or PartialEq that could disagree. The FR-375 charge schedule is unchanged: a different-declaration pair is one counted pair with no descent. The FR-376-AC-5 counts of 2 are correct for Option, record and collections. The amended text (three-dot diff against main a58033d) changes only the intended rows (FR-369 ValueKindMismatch and CanonicalKeyUnavailable, AC-2; FR-375-AC-4; TC-917 step 4; TC-923 step 5), and the FR-375-AC-4 and TC-923 rewording correctly narrows them to different static types.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-exact@5e67559b77c4d57501ad859d70c26f6c5e9e86ed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5e67559 |
+| FND-002 | fixed | 5e67559 |
+| FND-003 | fixed | 5e67559 |
+| FND-004 | fixed | 5e67559 |
+| FND-005 | fixed | 5e67559 |

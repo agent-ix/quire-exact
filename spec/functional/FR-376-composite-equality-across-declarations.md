@@ -57,6 +57,6 @@ Specified. Code lands in a later slice.
 ## Dependencies
 
 - Text that changes with this requirement: the `ValueKindMismatch` row in [FR-369](./FR-369-typed-checked-invariant-causes.md) and FR-369-AC-2, step 4 of [TC-917](../test-cases/TC-917-typed-checked-invariant-causes.md), the module and `plan_pairs` doc comments of `src/equality.rs` ("operands that are not of one type, which a checked program never produces"), and [FR-375](./FR-375-composable-equality-effect-seam.md) AC-4 with step 5 of [TC-923](../test-cases/TC-923-composable-equality-effect-seam.md), which concern operands of different static types and keep their text with that clarification. The FR-369 sentence that the equality catch-all checks the two-population case before `ValueKindMismatch` stays true.
-- The key order for the same pairs is [FR-377](./FR-377-composite-canonical-key-across-declarations.md); the admission of such values is [FR-378](./FR-378-caller-admitted-collection-elements-and-option-payloads.md).
+- The key order for the same pairs is [FR-377](./FR-377-composite-canonical-key-across-declarations.md); the caller-admitted paths that store such values are [FR-378](./FR-378-caller-admitted-values-in-collections-options-and-composites.md).
 - The falsifying controls are [TC-924](../test-cases/TC-924-composite-equality-across-declarations.md).
 - The language-level statement is QSL FR-359 (item 4 and cross-repo requirement 2).

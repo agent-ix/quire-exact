@@ -37,3 +37,12 @@ Ticket: QSL-737. PR: quire-exact#38. EARS check of the three new requirement sta
 ## Verdict
 
 FINDINGS (2 low). FR-376 conforms. FR-378 Behavior 1 and 8 SHALLs are singular and testable.
+
+## Dispositions
+
+Round 1, reviewed at agent-ix/quire-exact@5e67559b77c4d57501ad859d70c26f6c5e9e86ed.
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | 5e67559 |
+| FND-002 | fixed | 5e67559 |
