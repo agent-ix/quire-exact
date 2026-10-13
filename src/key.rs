@@ -57,10 +57,10 @@ enum Task<'a> {
 /// type can hold a conforming descendant (FR-377). `None` means the pair has
 /// no key: unlike value variants, a composite against a non-composite, two
 /// composites of one declaration with different slot counts, two enum members
-/// of equal rank and different variants, a `Float`, or a population. `pub`: an evaluator groups
-/// adjacent equal elements with this key before [`crate::form_grouped`] and
-/// in `Contains`, so it must order exactly as [`crate::form`]'s canonical
-/// sort does.
+/// of equal rank and different variants, a `Float`, or a population. `pub`:
+/// an evaluator groups adjacent equal elements with this key before
+/// [`crate::form_grouped`] and in `Contains`, so it must order exactly as
+/// [`crate::form`]'s canonical sort does.
 pub fn compare_keys(left: &Value, right: &Value) -> Option<Ordering> {
     let mut tasks = vec![Task::Values(left, right)];
     while let Some(task) = tasks.pop() {
@@ -153,8 +153,7 @@ fn leaf<'a>(
                 .cmp(right.declaration().as_bytes())
         }
         (Value::Composite(left), Value::Composite(right))
-            if left.declaration() == right.declaration()
-                && left.slots().len() == right.slots().len() =>
+            if left.slots().len() == right.slots().len() =>
         {
             let slots = left.slots().iter().zip(right.slots()).rev();
             tasks.extend(slots.map(|(left, right)| Task::Slots(left, right)));

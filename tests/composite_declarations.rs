@@ -169,6 +169,7 @@ fn log(meter: &Meter) -> Vec<quire_exact::ChargePoint> {
 fn different_declarations_are_unequal_with_one_pair_in_either_order() {
     let cases = [
         (p100(), c100()),
+        (p200(), c100()),
         (p100(), c5_100()),
         (p100(), g100()),
         (c100(), g100()),

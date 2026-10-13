@@ -28,7 +28,7 @@ Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [
 
 ## Test Procedure
 
-1. For each ordered pair among `(p100, c100)`, `(p100, c5_100)`, `(p100, g100)`, `(c100, g100)`, `(p_empty, c_empty)`, call `plan_equality` and `planned_equality_with_plan` under a generous meter, in both operand orders. Record the Boolean, the pair count and the refusal, if any.
+1. For each ordered pair among `(p100, c100)`, `(p200, c100)`, `(p100, c5_100)`, `(p100, g100)`, `(c100, g100)`, `(p_empty, c_empty)`, call `plan_equality` and `planned_equality_with_plan` under a generous meter, in both operand orders. Record the Boolean, the pair count and the refusal, if any.
 2. On `(p100, c100)` call `planned_equality` with a test meter that records the admitted charge log. Record the log, `WorkUnits`, `ResultUnits` and the `ValueOccurrences` high-water mark.
 3. Call `planned_equality` on `(p_ref, c_ref)` and, as a control, on `(p_ref, p_ref2)`.
 4. Call `planned_equality` on `(p100, p100')` where `p100'` is a second value built with the same declaration and slots, `(p100, p200)`, and `(c100, c100')` likewise.
