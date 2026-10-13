@@ -42,7 +42,8 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
    producer sites, without claiming a reachable public `divide` refusal.
 4. Give `equality::plan_pairs` two collection values with different kinds, two
    population values, a population and a non-population value, and another
-   incompatible value-kind pair. Assert `CollectionKindMismatch`,
+   incompatible value-kind pair (a composite against a non-composite counts; two
+   composites of different declarations do not, they give `false` under TC-924). Assert `CollectionKindMismatch`,
    `PopulationPair`, `ValueKindMismatch`, and `ValueKindMismatch` respectively.
    Check the pair is refused without a completed Boolean.
 5. For each of the thirty public cause variants, construct the typed

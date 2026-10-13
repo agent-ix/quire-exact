@@ -361,6 +361,8 @@ pub enum ValueType {
     Quantity(UnitId),
     /// A `Text[min, max; profile]`.
     Text(TextType),
+    /// An unbounded native Unicode scalar sequence, compared without text normalization.
+    String,
     /// A native opaque UUID.
     Uuid,
     /// A native signed POSIX-epoch nanosecond Timestamp.
@@ -393,7 +395,14 @@ impl ValueType {
         Self::Option(Arc::new(payload))
     }
 
-    /// Whether `value` is a member of this declared type. Composite, option
+    /// Whether `value` is a member of this declared type. This is the exact
+    /// predicate: a composite is admitted only when its declaration key
+    /// equals the declared one, and a collection only when its declared type
+    /// is this type. It is not the conformance check for a slot that can hold
+    /// a descendant declaration; a caller that admits such a value by its own
+    /// conformance rule stores it through the caller-admitted paths
+    /// ([`OptionValue::from_admitted`], [`from_admitted_slots`],
+    /// `form` and `form_grouped`). Composite, option
     /// and collection values carry their declared type, which must be this
     /// type; their contents were admitted at construction. An `Enum` shape
     /// admits a `Value::Enum` exactly when the shape's own ranked list agrees
@@ -408,6 +417,7 @@ impl ValueType {
             (Self::Float(declared), Value::Float(float)) => float.width() == declared.width(),
             (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == *unit,
             (Self::Text(declared), Value::Text(text)) => text.text_type() == declared,
+            (Self::String, Value::String(_)) => true,
             (Self::Uuid, Value::Uuid(_)) | (Self::Timestamp, Value::Timestamp(_)) => true,
             (Self::Enum(shape), Value::Enum(member)) => {
                 shape.rank(member.variant()) == Some(member.rank())
@@ -440,6 +450,7 @@ impl ValueType {
                 | Self::Float(_)
                 | Self::Quantity(_)
                 | Self::Text(_)
+                | Self::String
                 | Self::Uuid
                 | Self::Timestamp
                 | Self::Enum(_)
@@ -504,6 +515,8 @@ pub enum Value {
     Quantity(Quantity),
     /// A text value of its declared type.
     Text(Text),
+    /// An unbounded native Unicode scalar sequence.
+    String(String),
     /// An opaque native UUID.
     Uuid(Uuid),
     /// A signed POSIX-epoch nanosecond Timestamp.
@@ -542,6 +555,7 @@ impl Value {
             | Self::Float(_)
             | Self::Quantity(_)
             | Self::Text(_)
+            | Self::String(_)
             | Self::Uuid(_)
             | Self::Timestamp(_)
             | Self::Enum(_)
@@ -586,6 +600,7 @@ fn defer_node(pending: &mut Vec<Value>, value: Value) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::String(_)
         | Value::Uuid(_)
         | Value::Timestamp(_)
         | Value::Enum(_)
@@ -636,6 +651,7 @@ fn release_children(node: Value, pending: &mut Vec<Value>) {
         | Value::Float(_)
         | Value::Quantity(_)
         | Value::Text(_)
+        | Value::String(_)
         | Value::Uuid(_)
         | Value::Timestamp(_)
         | Value::Enum(_)
@@ -873,6 +889,7 @@ fn schedule_value<'a>(stack: &mut Vec<Step<'a>>, value: &'a Value) {
         Value::Float(leaf) => ("Float", leaf),
         Value::Quantity(leaf) => ("Quantity", leaf),
         Value::Text(leaf) => ("Text", leaf),
+        Value::String(leaf) => ("String", leaf),
         Value::Uuid(leaf) => ("Uuid", leaf),
         Value::Timestamp(leaf) => ("Timestamp", leaf),
         Value::Enum(leaf) => ("Enum", leaf),
@@ -1057,7 +1074,10 @@ impl OptionValue {
     }
 
     /// Materialize an already-admitted `payload` as `Option<payload_type>`,
-    /// checking no structural `admits()` match. `pub`, not `pub(crate)`,
+    /// checking no structural `admits()` match. This is the path for a
+    /// caller-admitted payload, including a conforming descendant composite
+    /// the exact [`OptionValue::present`] refuses: the payload is stored
+    /// unchanged and nothing is checked. `pub`, not `pub(crate)`,
     /// since the caller checking admission (e.g. an upcast-aware
     /// lookup) is a separate crate from this one.
     pub fn from_admitted(payload_type: ValueType, payload: Option<Value>) -> Value {
@@ -1461,7 +1481,9 @@ fn composite(declaration: NodeKey, slots: Box<[FieldValue]>) -> Value {
 
 /// Materialize already-admitted slots as a composite value, checking
 /// nothing: the caller (whose declaration registry is not kernel) has already checked every slot against its own declared
-/// shape. Mirrors [`OptionValue::from_admitted`]'s identical bypass role.
+/// shape. Mirrors [`OptionValue::from_admitted`]'s identical bypass role. It
+/// is the path for caller-admitted slots, including a conforming descendant
+/// composite in a slot of an ancestor-declared type, and checks nothing.
 pub fn from_admitted_slots(declaration: NodeKey, slots: Box<[FieldValue]>) -> Value {
     composite(declaration, slots)
 }
@@ -1496,6 +1518,8 @@ impl Drop for CompositeValue {
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
     use ix_trace_rs::trace;
 
     use super::*;
@@ -1544,6 +1568,54 @@ mod tests {
         assert!(!ValueType::Uuid.admits(&reference));
         assert!(!ValueType::Timestamp.admits(&reference));
         assert!(ValueType::Reference(object_type).admits(&reference));
+    }
+
+    /// TC-992: String is an unbounded scalar-sequence leaf distinct from
+    /// profile-bounded Text and from the canonical UUID spelling.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_admission_and_display_are_distinct_from_text() {
+        let value = Value::String("e\u{301}".to_owned());
+        let text_type =
+            TextType::new(0, 8, crate::text::TextProfile::Nfc).expect("valid text bounds");
+        let text = crate::text::admit_text(
+            &crate::text::TextPayload::from_utf8("e\u{301}".as_bytes()).expect("UTF-8"),
+            &text_type,
+            &mut generous_meter(),
+        )
+        .completed()
+        .expect("NFC text admission normalizes its payload");
+
+        assert!(ValueType::String.admits(&value));
+        assert!(!ValueType::String.admits(&Value::Text(text.clone())));
+        assert!(!ValueType::Text(text_type).admits(&value));
+        assert_eq!(format!("{:?}", ValueType::String), "String");
+        assert_eq!(format!("{:?}", value), format!("String({:?})", "e\u{301}"),);
+        assert_eq!(text.retained(), "é");
+    }
+
+    /// String also follows the iterative Debug path when nested.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn nested_native_string_debug_matches_the_derived_format() {
+        let value = from_admitted_slots(
+            NodeKey::from_digest(digest(9)),
+            vec![FieldValue::Present(Value::String("e\u{301}".to_owned()))].into_boxed_slice(),
+        );
+
+        assert_eq!(
+            format!("{value:?}"),
+            format!(
+                "Composite(CompositeValue {{ declaration: NodeKey(0000000000000000000000000000000000000000000000000000000000000009), slots: [Present(String({:?}))], occ: Integer(2) }})",
+                "e\u{301}"
+            )
+        );
+        let alternate = format!("{value:#?}");
+        assert!(alternate.contains(&format!(
+            "String(\n                    {:?},\n                )",
+            "e\u{301}"
+        )));
+        assert!(alternate.contains("occ: Integer(\n            2,\n        )"));
     }
 
     /// Every existing value kind remains distinct from both new native kinds.
@@ -2183,7 +2255,7 @@ mod tests {
     }
 
     /// The `Debug` parity fixtures. The first is a composite root holding
-    /// every slot state, every scalar variant, and every nesting variant,
+    /// every slot state, representative scalar variants, and every nesting variant,
     /// including a node inside a collection element inside an option
     /// payload. The second has an option root.
     fn debug_samples() -> [Value; 2] {

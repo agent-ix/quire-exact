@@ -7,6 +7,12 @@
 //! ordering operator. Comparison is iterative, so value depth never reaches
 //! the host stack.
 //!
+//! Two composites of different declarations are unequal under the equality
+//! plan, so their keys differ: they order by the ascending bytes of the two
+//! 32-byte declaration keys, before any slot. The order is total and has no
+//! relation to ancestry, declaration names or slot contents. Two composites of
+//! one declaration continue by slots in declaration order.
+//!
 //! **`Value::Float` has no key, matching its exclusion from `=`.**
 //! [`crate::equality`]'s own leaf match excludes `Value::Float` the same
 //! way this module's `leaf` function does -- both fall through to their
@@ -45,12 +51,16 @@ enum Task<'a> {
     Lengths(usize, usize),
 }
 
-/// Compare the canonical keys of two values of one declared type. `None`
-/// means the operands are not of one keyed type, which a checked program
-/// never produces. `pub`: an evaluator groups
-/// adjacent equal elements with this key before [`crate::form_grouped`] and
-/// in `Contains`, so it must order exactly as [`crate::form`]'s canonical
-/// sort does.
+/// Compare the canonical keys of two values of one declared type. Two
+/// composites of different declarations order by the ascending bytes of their
+/// 32-byte declaration keys before any slot, because a slot of a declared
+/// type can hold a conforming descendant (FR-377). `None` means the pair has
+/// no key: unlike value variants, a composite against a non-composite, two
+/// composites of one declaration with different slot counts, two enum members
+/// of equal rank and different variants, a `Float`, or a population. `pub`:
+/// an evaluator groups adjacent equal elements with this key before
+/// [`crate::form_grouped`] and in `Contains`, so it must order exactly as
+/// [`crate::form`]'s canonical sort does.
 pub fn compare_keys(left: &Value, right: &Value) -> Option<Ordering> {
     let mut tasks = vec![Task::Values(left, right)];
     while let Some(task) = tasks.pop() {
@@ -102,6 +112,7 @@ fn leaf<'a>(
         (Value::Text(left), Value::Text(right)) => {
             left.retained().as_bytes().cmp(right.retained().as_bytes())
         }
+        (Value::String(left), Value::String(right)) => left.as_bytes().cmp(right.as_bytes()),
         (Value::Uuid(left), Value::Uuid(right)) => {
             left.canonical_bytes().cmp(&right.canonical_bytes())
         }
@@ -132,9 +143,17 @@ fn leaf<'a>(
             }
             (left, right) => left.is_some().cmp(&right.is_some()),
         },
+        // Composites of different declarations order by the ascending bytes
+        // of their declaration keys, before any slot (FR-377).
         (Value::Composite(left), Value::Composite(right))
-            if left.declaration() == right.declaration()
-                && left.slots().len() == right.slots().len() =>
+            if left.declaration() != right.declaration() =>
+        {
+            left.declaration()
+                .as_bytes()
+                .cmp(right.declaration().as_bytes())
+        }
+        (Value::Composite(left), Value::Composite(right))
+            if left.slots().len() == right.slots().len() =>
         {
             let slots = left.slots().iter().zip(right.slots()).rev();
             tasks.extend(slots.map(|(left, right)| Task::Slots(left, right)));
@@ -182,6 +201,7 @@ fn leaf<'a>(
             | Value::Float(_)
             | Value::Quantity(_)
             | Value::Text(_)
+            | Value::String(_)
             | Value::Uuid(_)
             | Value::Timestamp(_)
             | Value::Enum(_)
@@ -199,6 +219,8 @@ fn leaf<'a>(
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
     use ix_trace_rs::trace;
 
     use super::*;
@@ -212,6 +234,30 @@ mod tests {
         let two = Value::Integer(Integer::one().add(&Integer::one()));
         assert_eq!(compare_keys(&one, &one), Some(Ordering::Equal));
         assert_eq!(compare_keys(&one, &two), Some(Ordering::Less));
+    }
+
+    /// TC-992: native String keys preserve exact UTF-8 scalar order and do
+    /// not alias the key of the same bytes under profile-bounded Text.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_keys_preserve_scalar_sequence_identity() {
+        let composed = Value::String("é".to_owned());
+        let decomposed = Value::String("e\u{301}".to_owned());
+        let decomposed_copy = Value::String("e\u{301}".to_owned());
+
+        assert_eq!(
+            compare_keys(&decomposed, &decomposed_copy),
+            Some(Ordering::Equal)
+        );
+        assert_eq!(
+            compare_keys(&composed, &decomposed),
+            Some(Ordering::Greater)
+        );
+        let uuid = Value::Uuid(
+            crate::Uuid::from_canonical_text("00112233-4455-6677-8899-aabbccddeeff")
+                .expect("canonical UUID"),
+        );
+        assert_eq!(compare_keys(&decomposed, &uuid), None);
     }
 
     /// comparing values of unrelated types (a checked program never

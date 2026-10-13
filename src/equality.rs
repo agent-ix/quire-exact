@@ -2,7 +2,8 @@
 //! Occurrence-pair equality planning.
 //!
 //! The module holds the operand-agnostic occurrence-pair plan: [`plan_pairs`],
-//! [`plan_equality`], `planned_equality` and [`EqualityPlan`]. Anything that
+//! [`plan_equality`], `planned_equality`, [`EqualityPlan`] and
+//! [`EqualityEvaluation`]. Anything that
 //! needs a declaration registry or a unit graph is the caller's, not the
 //! kernel's: selecting and running the top-level text/enum/quantity schedules
 //! ahead of the generic occurrence-pair plan is done above the kernel with the
@@ -17,6 +18,15 @@
 //! same invariant every other leaf type here relies on (an `Integer` carries no
 //! declared bound either) -- so this needs no same-enum check of its own. A
 //! quantity pair compares equal only in the same unit.
+//!
+//! Two composites are compared by declaration key first. A caller may hold a
+//! value whose most-specific declaration is a descendant of the declaration a
+//! slot names, so two operands of one static type can carry different
+//! declarations. That is ordinary, not a malformed program: the pair is
+//! unequal, with no descent into either value's slots. The kernel carries no
+//! declaration graph and treats no declaration as the ancestor of another. A
+//! composite against a non-composite, and two composites of one declaration
+//! with different slot counts, still refuse with the checked invariant.
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::integer::Integer;
@@ -45,6 +55,25 @@ impl EqualityPlan {
     /// The exact number of planned `equality.pair` events.
     pub fn pair_events(&self) -> &Integer {
         &self.pair_events
+    }
+}
+
+/// The result and pair-event count produced by one completed metered equality.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EqualityEvaluation {
+    equal: bool,
+    plan: EqualityPlan,
+}
+
+impl EqualityEvaluation {
+    /// The exact equality relation from the formed plan.
+    pub fn equal(&self) -> bool {
+        self.equal
+    }
+
+    /// The exact pair-event plan used by this evaluation.
+    pub fn plan(&self) -> &EqualityPlan {
+        &self.plan
     }
 }
 
@@ -80,10 +109,29 @@ pub fn plan_equality(left: &Value, right: &Value) -> Result<EqualityPlan, Refusa
 /// `equality.plan-form`, `equality.plan`, one `equality.pair` per planned
 /// occurrence-path pair and `equality.result-retain`.
 pub fn planned_equality(left: &Value, right: &Value, meter: &mut Meter) -> Outcome<bool> {
+    match planned_equality_with_plan(left, right, meter) {
+        Outcome::Completed(result) => Outcome::Completed(result.equal()),
+        Outcome::Undefined(reason) => Outcome::Undefined(reason),
+        Outcome::Refused(reason) => Outcome::Refused(reason),
+        Outcome::Incomplete(record) => Outcome::Incomplete(record),
+    }
+}
+
+/// Evaluate equality and return the relation and pair count from the same plan.
+/// The returned record exists only after every scheduled meter charge succeeds.
+pub fn planned_equality_with_plan(
+    left: &Value,
+    right: &Value,
+    meter: &mut Meter,
+) -> Outcome<EqualityEvaluation> {
     Outcome::from_stop(planned_equality_stop(left, right, meter))
 }
 
-fn planned_equality_stop(left: &Value, right: &Value, meter: &mut Meter) -> Result<bool, Stop> {
+fn planned_equality_stop(
+    left: &Value,
+    right: &Value,
+    meter: &mut Meter,
+) -> Result<EqualityEvaluation, Stop> {
     let (left_occ, right_occ) = (left.occ(), right.occ());
     meter.charge(
         Charge::new(ChargePoint::EqualityPlanForm)
@@ -95,13 +143,18 @@ fn planned_equality_stop(left: &Value, right: &Value, meter: &mut Meter) -> Resu
     )?;
     let plan = plan_pairs(left, right).map_err(Stop::Refused)?;
     meter.charge_plan(&plan.pairs)?;
-    let mut remaining = plan.pairs;
+    let mut remaining = plan.pairs.clone();
     while !remaining.is_zero() {
         meter.charge(Charge::new(ChargePoint::EqualityPair))?;
         remaining = remaining.sub(&Integer::one());
     }
     meter.charge(Charge::new(ChargePoint::EqualityResultRetain).results(1))?;
-    Ok(plan.equal)
+    Ok(EqualityEvaluation {
+        equal: plan.equal,
+        plan: EqualityPlan {
+            pair_events: plan.pairs,
+        },
+    })
 }
 
 /// A formed plan: its pair count and the relation's Boolean.
@@ -116,9 +169,13 @@ enum Pair<'a> {
     Slots(&'a FieldValue, &'a FieldValue),
 }
 
-/// Walk the occurrence-pair tree of two values of one type. Operands that
-/// are not of one type, which a checked program never produces, refuse with
-/// the checked invariant.
+/// Walk the occurrence-pair tree of two values of one static type. Two
+/// composites of different declarations are one pair and unequal: a caller
+/// may hold a conforming descendant where a slot names its ancestor, and the
+/// kernel decides that pair from the two declaration keys alone (FR-376).
+/// Operands of unlike variants, two composites of one declaration with
+/// different slot counts, two populations and two collections of different
+/// kinds are malformed, and refuse with the checked invariant.
 pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Refusal> {
     let mut pairs = Integer::zero();
     let mut equal = true;
@@ -148,6 +205,7 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
             {
                 l.retained() == r.retained()
             }
+            (Value::String(l), Value::String(r)) => l == r,
             (Value::Uuid(l), Value::Uuid(r)) => l == r,
             (Value::Timestamp(l), Value::Timestamp(r)) => l == r,
             // Identity and equality use the `VariantId` only
@@ -170,9 +228,13 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 }
                 (l, r) => l.is_some() == r.is_some(),
             },
-            (Value::Composite(l), Value::Composite(r))
-                if l.declaration() == r.declaration() && l.slots().len() == r.slots().len() =>
-            {
+            // Composites of different declarations are unequal; the kernel
+            // holds no declaration graph, so the keys alone decide and no
+            // slot of either value is visited (FR-376).
+            (Value::Composite(l), Value::Composite(r)) if l.declaration() != r.declaration() => {
+                false
+            }
+            (Value::Composite(l), Value::Composite(r)) if l.slots().len() == r.slots().len() => {
                 let slots = l.slots().iter().zip(r.slots()).rev();
                 pending.extend(slots.map(|(l, r)| Pair::Slots(l, r)));
                 continue;
@@ -224,6 +286,7 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 | Value::Float(_)
                 | Value::Quantity(_)
                 | Value::Text(_)
+                | Value::String(_)
                 | Value::Uuid(_)
                 | Value::Timestamp(_)
                 | Value::Enum(_)
@@ -247,6 +310,12 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
 
 #[cfg(test)]
 mod tests {
+    use alloc::borrow::ToOwned;
+
+    #[cfg(feature = "test-support")]
+    use alloc::vec::Vec;
+    #[cfg(feature = "test-support")]
+    use core::num::NonZeroU64;
     use ix_trace_rs::trace;
 
     use super::*;
@@ -271,6 +340,33 @@ mod tests {
         Meter::new(generous_limits())
     }
 
+    fn e21_list_shape_operands(first_head_unequal: bool) -> (Value, Value) {
+        let declaration = crate::node::NodeKey::from_digest([42; 32]);
+        let list = |heads: [i64; 8]| {
+            heads
+                .into_iter()
+                .rev()
+                .fold(None, |tail: Option<Value>, head| {
+                    let tail = tail.map_or(FieldValue::Absent, FieldValue::Present);
+                    Some(crate::value::from_admitted_slots(
+                        declaration,
+                        vec![
+                            FieldValue::Present(Value::Integer(Integer::from(head))),
+                            tail,
+                        ]
+                        .into_boxed_slice(),
+                    ))
+                })
+                .expect("the qualification list has eight nodes")
+        };
+        let left_heads = if first_head_unequal {
+            [0, 2, 3, 4, 5, 6, 7, 8]
+        } else {
+            [1, 2, 3, 4, 5, 6, 7, 8]
+        };
+        (list(left_heads), list([1, 2, 3, 4, 5, 6, 7, 8]))
+    }
+
     /// `plan_equality` reports the exact pair count of two equal
     /// integers without charging.
     #[test]
@@ -279,6 +375,40 @@ mod tests {
         let right = Value::Integer(Integer::one());
         let plan = plan_equality(&left, &right).unwrap();
         assert_eq!(plan.pair_events(), &Integer::one());
+    }
+
+    /// TC-992: native String equality compares exact scalar sequences; its
+    /// NFC control keeps Text's declared normalization semantics.
+    #[trace("TC-992", "FR-056-AC-23")]
+    #[test]
+    fn native_string_equality_does_not_normalize_like_text() {
+        let composed = Value::String("é".to_owned());
+        let decomposed = Value::String("e\u{301}".to_owned());
+        let equal_copy = Value::String("e\u{301}".to_owned());
+        let compare = |left: &Value, right: &Value| {
+            let mut meter = generous_meter();
+            planned_equality(left, right, &mut meter)
+                .completed()
+                .expect("same native String type compares")
+        };
+
+        assert!(compare(&decomposed, &equal_copy));
+        assert!(!compare(&composed, &decomposed));
+        let text_type = crate::text::TextType::new(0, 8, crate::text::TextProfile::Nfc)
+            .expect("valid text bounds");
+        let text_value = |source: &str| {
+            let mut meter = generous_meter();
+            Value::Text(
+                crate::text::admit_text(
+                    &crate::text::TextPayload::from_utf8(source.as_bytes()).expect("UTF-8"),
+                    &text_type,
+                    &mut meter,
+                )
+                .completed()
+                .expect("NFC text admission"),
+            )
+        };
+        assert!(compare(&text_value("é"), &text_value("e\u{301}")));
     }
 
     /// `planned_equality` completes true for two equal integers
@@ -300,6 +430,131 @@ mod tests {
         });
         let outcome = planned_equality(&left, &right, &mut tight);
         assert!(matches!(outcome, Outcome::Incomplete(_)));
+    }
+
+    #[test]
+    fn kernel_result_bearing_evaluation_returns_relation_plan_and_charge_order() {
+        for (first_head_unequal, expected) in [(false, true), (true, false)] {
+            let (left, right) = e21_list_shape_operands(first_head_unequal);
+            assert_eq!(left.occ(), Integer::from(16_u64));
+            assert_eq!(right.occ(), Integer::from(16_u64));
+            let plan = plan_equality(&left, &right).unwrap();
+            assert_eq!(plan.pair_events(), &Integer::from(17_u64));
+
+            let mut meter = generous_meter();
+            let Outcome::Completed(result) = planned_equality_with_plan(&left, &right, &mut meter)
+            else {
+                panic!("equality schedule should complete with generous limits");
+            };
+            assert_eq!(result.equal(), expected);
+            assert_eq!(result.plan().pair_events(), &Integer::from(17_u64));
+            assert_eq!(meter.admission_count(), 20);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 51);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+            assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 17);
+            #[cfg(feature = "test-support")]
+            {
+                let mut expected_points =
+                    vec![ChargePoint::EqualityPlanForm, ChargePoint::EqualityPlan];
+                expected_points.extend([ChargePoint::EqualityPair; 17]);
+                expected_points.push(ChargePoint::EqualityResultRetain);
+                let actual_points: Vec<_> = meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect();
+                assert_eq!(actual_points, expected_points);
+            }
+        }
+    }
+
+    #[test]
+    fn plan_reservation_refusals_are_atomic_before_pair_charges() {
+        let (left, right) = e21_list_shape_operands(true);
+        for (limits, expected_kind, expected_limit, expected_next) in [
+            (
+                ScalarLimits {
+                    work_units: 50,
+                    ..generous_limits()
+                },
+                LimitKind::WorkUnits,
+                50,
+                19_u64,
+            ),
+            (
+                ScalarLimits {
+                    result_units: 0,
+                    ..generous_limits()
+                },
+                LimitKind::ResultUnits,
+                0,
+                1_u64,
+            ),
+        ] {
+            let mut meter = Meter::new(limits);
+            let outcome = planned_equality_with_plan(&left, &right, &mut meter);
+            assert!(matches!(outcome, Outcome::Incomplete(ref incomplete)
+                if incomplete.limit_kind == expected_kind
+                    && incomplete.limit == expected_limit
+                    && incomplete.consumed == if expected_kind == LimitKind::WorkUnits { 32 } else { 0 }
+                    && incomplete.next_charge == Integer::from(expected_next)
+                    && incomplete.charge_point == ChargePoint::EqualityPlan));
+            assert_eq!(meter.admission_count(), 1);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 32);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+            assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 16);
+        }
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn pair_and_result_refusals_stop_at_the_first_denied_charge() {
+        use crate::accounting::InjectedDenial;
+
+        let (left, right) = e21_list_shape_operands(true);
+        let pair_denial = InjectedDenial {
+            point: ChargePoint::EqualityPair,
+            occurrence: NonZeroU64::new(17).unwrap(),
+        };
+        let mut pair_meter = Meter::new(generous_limits()).with_injected_denial(pair_denial);
+        let pair_outcome = planned_equality_with_plan(&left, &right, &mut pair_meter);
+        assert!(matches!(pair_outcome, Outcome::Incomplete(ref incomplete)
+            if incomplete.charge_point == ChargePoint::EqualityPair));
+        assert_eq!(pair_meter.admission_count(), 18);
+        assert_eq!(pair_meter.consumed(LimitKind::WorkUnits), 49);
+        assert_eq!(pair_meter.consumed(LimitKind::ResultUnits), 0);
+        let pair_points: Vec<_> = pair_meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect();
+        assert_eq!(pair_points[0], ChargePoint::EqualityPlanForm);
+        assert_eq!(pair_points[1], ChargePoint::EqualityPlan);
+        assert!(pair_points[2..]
+            .iter()
+            .all(|point| *point == ChargePoint::EqualityPair));
+
+        let retain_denial = InjectedDenial {
+            point: ChargePoint::EqualityResultRetain,
+            occurrence: NonZeroU64::new(1).unwrap(),
+        };
+        let mut retain_meter = Meter::new(generous_limits()).with_injected_denial(retain_denial);
+        let retain_outcome = planned_equality_with_plan(&left, &right, &mut retain_meter);
+        assert!(matches!(retain_outcome, Outcome::Incomplete(ref incomplete)
+            if incomplete.charge_point == ChargePoint::EqualityResultRetain));
+        assert_eq!(retain_meter.admission_count(), 19);
+        assert_eq!(retain_meter.consumed(LimitKind::WorkUnits), 50);
+        assert_eq!(retain_meter.consumed(LimitKind::ResultUnits), 0);
+        let retain_points: Vec<_> = retain_meter
+            .admitted_charges()
+            .iter()
+            .map(|charge| charge.point)
+            .collect();
+        assert_eq!(retain_points[0], ChargePoint::EqualityPlanForm);
+        assert_eq!(retain_points[1], ChargePoint::EqualityPlan);
+        assert!(retain_points[2..]
+            .iter()
+            .all(|point| *point == ChargePoint::EqualityPair));
     }
 
     /// two equal integers plan one pair and compare equal.

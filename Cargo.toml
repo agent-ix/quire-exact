@@ -25,6 +25,8 @@ allocator-api2 = { version = "0.2.21", default-features = false, features = ["al
 num-bigint = { version = "0.4.8", default-features = false }
 num-integer = { version = "0.1.47", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
+# `race` supplies a no_std, alloc-compatible Sync cell for retained BigInt views.
+once_cell = { version = "=1.21.4", default-features = false, features = ["alloc"] }
 thiserror = { version = "2.0.20", default-features = false }
 unicode-normalization = { version = "0.1.25", default-features = false }
 
