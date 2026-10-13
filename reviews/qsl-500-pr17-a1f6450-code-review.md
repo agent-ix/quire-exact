@@ -80,3 +80,19 @@ be fixed before merge.
 | FND-001 | high | The two carried review files put local workstation paths (a home-directory tool path, a worktree path and a harness root path) into a public repo, against CONTENT_RIGHTS.md. They are also stale for this head: they review a15c465 and say "No spec diff exists, so spec-review and all spec sub-analyses were skipped", which is false at a1f6450. | reviews/qsl-500-code-review.md:37,43; reviews/qsl-500-gap-analysis.md:36,42 |
 | FND-002 | high | tests/union.rs embeds four 32-byte digests (the `declaration()`, `circle()` and `empty()` keys, and the foreign union keys) copied from a vector file in a private repository. The comment says "Published QSpec node-identity union_member_vectors", but no public main carries them. The kernel mints nothing, so the bytes are opaque and any fixture bytes would serve, as `fixture()` already shows. | tests/union.rs:29-55,183-189 |
 | FND-003 | low | The `drop_nested` rustdoc still lists the node structs as `OptionValue`, `CompositeValue` and `CollectionValue`, without `UnionValue`. The `Value` rustdoc was updated to "four node structs". | src/value.rs:570-571 |
+
+## New findings (disposition pass 1)
+
+Reviewed at agent-ix/quire-exact@da4941069d740eb18a2463b66b5f52d546c69989. The src diff from a1f6450 is rustdoc only: three doc comments in src/value.rs and no logic change.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | The public PR description is stale. It says "All qualification on this changed head is UNRUN", says the review history is retained (the two old review files are deleted), and says "head a1f6450 onward deletes them" (da49410 deletes them). A squash commit message taken from it would carry these false statements. | PR #17 description |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | da49410 |
+| FND-002 | fixed | da49410 |
+| FND-003 | fixed | da49410 |

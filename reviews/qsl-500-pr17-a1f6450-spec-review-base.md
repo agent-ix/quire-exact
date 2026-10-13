@@ -27,3 +27,21 @@ FINDINGS: one medium, two low.
 | FND-001 | medium | FR-376 item 5 and FR-377 item 8 do not state the outcome for two unions of different declarations: the code refuses `ValueKindMismatch` and gives key `None`. FR-377 also omits key `None` for one member with different payload lengths. FR-376 item 4 covers only unlike variants, and FR-369's `ValueKindMismatch` row lists neither union case. Item 1 makes different-declaration composites ordinary, so a reader would expect the same for unions. The refusal is correct, because a union has no descendant declaration and QSL FR-319-AC-3 makes the comparison ill-typed, but the spec must say so. | spec/functional/FR-376-composite-equality-across-declarations.md:35-36; spec/functional/FR-377-composite-canonical-key-across-declarations.md:37-39 |
 | FND-002 | low | FR-377 item 8 says a mismatched position "orders the enclosing unions by the ascending bytes of the declaration keys, before any slot". It does not say that the member identifier and the earlier payload positions decide first. Read literally, it would put an `Alpha` union holding C after a `Zulu` union holding P. | spec/functional/FR-377-composite-canonical-key-across-declarations.md:39 |
 | FND-003 | low | FR-378 item 7 makes `UnionValue::from_admitted` a caller-admitted path for a conforming descendant. Item 8 still requires the "caller-admitted, checks nothing" rustdoc only for the five pre-union items. The `UnionValue::from_admitted` rustdoc does not mention a descendant, and the `union` rustdoc does not call itself the exact path. | spec/functional/FR-378-caller-admitted-values-in-collections-options-and-composites.md:44-45; src/value.rs |
+
+## New findings (disposition pass 1)
+
+Reviewed at agent-ix/quire-exact@da4941069d740eb18a2463b66b5f52d546c69989, including the new FR-379 and TC-927. Both ids are unique across every remote branch, main and open PR #11. FR-379 has one SHALL and validates with no EARS warning. It cites QSL FR-319, FR-321, FR-322 and FR-323 by number only. Each AC states what the code does, except where the findings below say otherwise.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | FR-379-AC-3 says a retain limit of one fewer "is refused with the named limit", and TC-927 Expected 3 says "the named limit refusal". The code and the test return `Outcome::Incomplete` with `limit_kind: ValueOccurrences`, which is not a refusal. | spec/functional/FR-379-carry-a-union-member-and-its-positional-payload-as-a-kernel-value.md:55; spec/test-cases/TC-927-union-carrier.md |
+| FND-005 | low | TC-927 step 7 calls `form` for `Set`, `Bag`, `OrderedSet` and `Sequence`. The bound test calls `form_collection`, which checks each element with `admits`. | spec/test-cases/TC-927-union-carrier.md:24 |
+| FND-006 | low | FR-379 says "the FR-441 member key" with no repo qualifier. FR-441 is a QSpec id, and this repo's FR numbers overlap other repos' (FR-088, FR-262), so the bare id reads as a quire-exact FR that does not exist. FR-378 item 8 also lost a comma ("`OptionValue::from_admitted` `from_admitted_slots`"). | spec/functional/FR-379-carry-a-union-member-and-its-positional-payload-as-a-kernel-value.md:24,28 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | da49410 |
+| FND-002 | fixed | da49410 |
+| FND-003 | fixed | da49410 |

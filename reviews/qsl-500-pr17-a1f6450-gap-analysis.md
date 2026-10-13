@@ -56,3 +56,19 @@ fail. The union carrier itself has no quire-exact requirement.
 | --- | --- | --- | --- |
 | FND-001 | medium | No quire-exact FR specifies the kernel union carrier: `Value::Union`, `union`, `evaluate_union`, identifier-byte key order, the member, length and declaration refusal rules, and the iterative depth paths. The 14 tests in tests/union.rs tag only QSL FR-319, FR-321, FR-322 and FR-323 ids. This repo's computed matrix lists none of them, and the QSL ids share a number space with this repo's own FRs (FR-088 and FR-262 exist in both with different meanings). Several bindings are partial: FR-321-AC-4 also requires admission, conversion and a named limit; FR-319-AC-3 is "refused by type checking", not a kernel refusal; FR-319-AC-2 is about `VariantId` minting. Main has a precedent for borrowed ids (FR-142 to FR-147). | tests/union.rs:103-604 |
 | FND-002 | low | FR-377-AC-8 requires that "`Some(Equal)` agrees with `planned_equality` on every pair", and TC-925 step 8 says "each ordered pair". The test checks three pairs, (P,C), (P,P200) and (P,P), not every ordered pair of the P, C and G unions. | tests/union_declarations.rs:186-188 |
+
+## New findings (disposition pass 1)
+
+Reviewed at agent-ix/quire-exact@da4941069d740eb18a2463b66b5f52d546c69989. `quire matrix` lists FR-379-AC-1 to AC-9 as tagged. The 14 union.rs tests now carry FR-379 tags.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | FR-379-AC-6 says "Equal identifiers with different `VariantId`s give `None`", and TC-927 step 6 calls it, but no test asserts it. Deleting the `left.variant() != right.variant()` check in the equal-identifier branch of `leaf` would leave every test green, and would give `Some(Equal)` for a pair that equality calls `false`. | tests/union.rs:188-212; src/key.rs:169-172 |
+| FND-004 | low | FR-379-AC-5 requires that one member with payload lengths 1 and 2 "refuses `ValueKindMismatch`". The AC-5-tagged tests assert only the key `None` for that pair. The refusal is asserted only in `unlike_union_pairings_stay_checked_invariant_faults`, which is tagged FR-376-AC-9. | tests/union_declarations.rs:213-234 |
+
+## Dispositions
+
+| FND | outcome | sha/reason |
+| --- | --- | --- |
+| FND-001 | fixed | da49410 |
+| FND-002 | fixed | da49410 |

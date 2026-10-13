@@ -183,11 +183,24 @@ fn foreign_union_enum_and_composite_kinds_remain_distinct() {
             })
         );
     }
+    let short = make(fixture("Rect", 1), &[1]);
+    let long = make(fixture("Rect", 1), &[1, 2]);
+    assert_eq!(compare_keys(&short, &long), None);
+    assert_eq!(
+        plan_equality(&short, &long),
+        Err(Refusal::CheckedInvariant {
+            cause: CheckedInvariantCause::ValueKindMismatch,
+        })
+    );
 }
 
 #[trace("FR-379-AC-6")]
 #[test]
 fn union_keys_order_identifier_ascii_then_payload_positions() {
+    let one = make(fixture("Rect", 1), &[1]);
+    let other = make(fixture("Rect", 2), &[1]);
+    assert_eq!(compare_keys(&one, &other), None);
+    assert!(!equal(&one, &other));
     let first = make(fixture("Alpha", 250), &[9]);
     let second = make(fixture("Zulu", 1), &[0]);
     assert_eq!(compare_keys(&first, &second), Some(Ordering::Less));

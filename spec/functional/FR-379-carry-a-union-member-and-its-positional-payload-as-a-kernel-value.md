@@ -21,7 +21,7 @@ relationships:
 
 The `quire-exact` kernel SHALL carry one active member of a union declaration, with its payload values in declared position order, as `Value::Union`, with construction, comparison, key order, clone, `Debug` and drop that do not grow the native stack with the depth.
 
-This requirement states what the kernel does. The language-level source is QSL FR-319, FR-321, FR-322 and FR-323, cited by number only. The kernel carries no member registry and mints no identity. The checking stage supplies the declaration key, the FR-441 member key and the member identifier already verified, and the caller's type environment supplies the declared position types.
+This requirement states what the kernel does. The language-level source is QSL FR-319, FR-321, FR-322 and FR-323, cited by number only. The kernel carries no member registry and mints no identity. The checking stage supplies the declaration key, the QSpec FR-441 member key and the member identifier already verified, and the caller's type environment supplies the declared position types.
 
 ## Inputs
 
@@ -52,7 +52,7 @@ This requirement states what the kernel does. The language-level source is QSL F
 | --- | --- | --- |
 | FR-379-AC-1 | A nullary member has an occurrence count of 1 and a two-position member over two integers has 3. The value reports its declaration, `VariantId`, identifier and payload in position order. `ValueType::Composite` of its declaration admits it, `Composite` of another declaration and `Integer` do not. | Test |
 | FR-379-AC-2 | `union` refuses an arity of 0 against 1 supplied and 2 against 1 supplied with `Value` `WrongArity`, and a `Boolean` at an `Integer` position with `Position(0)` `TypeMismatch`. | Test |
-| FR-379-AC-3 | `evaluate_union` returns `Undefined` for the first argument that is undefined, runs no later argument and admits no charge. A completed `Boolean` at an `Integer` position refuses `DeferredResultNotAdmitted`. A completed evaluation runs the arguments in order and admits one `composite.result-retain` with the occurrence count of the result, and a retain limit of one fewer is refused with the named limit. | Test |
+| FR-379-AC-3 | `evaluate_union` returns `Undefined` for the first argument that is undefined, runs no later argument and admits no charge. A completed `Boolean` at an `Integer` position refuses `DeferredResultNotAdmitted`. A completed evaluation runs the arguments in order and admits one `composite.result-retain` with the occurrence count of the result, and a retain limit of one fewer returns `Incomplete` naming the charge point, the limit kind and the limit. | Test |
 | FR-379-AC-4 | Unions of one declaration and member with equal payloads are equal, with differing payload positions or members are not, and the pair count is one plus the payload pairs. | Test |
 | FR-379-AC-5 | A union against a union of another declaration, an enum member and a composite refuses `ValueKindMismatch` in `plan_equality` and gives `None` from `compare_keys`. One member with payload lengths 1 and 2 refuses `ValueKindMismatch` and gives `None`. | Test |
 | FR-379-AC-6 | Members `Alpha` and `Zulu` order by identifier whatever their digests and payloads. One member orders by the payload positions in order. Declaration order and digest order do not reach the order. Equal identifiers with different `VariantId`s give `None`. | Test |
