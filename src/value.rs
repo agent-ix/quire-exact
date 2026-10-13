@@ -466,6 +466,7 @@ impl ValueType {
                 | Value::Float(_)
                 | Value::Quantity(_)
                 | Value::Text(_)
+                | Value::String(_)
                 | Value::Uuid(_)
                 | Value::Timestamp(_)
                 | Value::Enum(_)

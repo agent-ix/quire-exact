@@ -41,7 +41,7 @@ The kernel has no declaration graph and takes none, so these existing caller-adm
 4. **Exact paths unchanged.** `construct_collection`, `form_collection`, `ValueType::admits`, `OptionValue::present`, `evaluate_record` and `evaluate_tuple` admit a composite only when its declaration key equals the declared one. A descendant-declared value is refused by each of them with its existing refusal: `CollectionElementNotAdmitted`, `ConstructionRefusal { component: Element(index), cause: TypeMismatch }`, `false`, `ConstructionRefusal { component: Payload, cause: TypeMismatch }` and `DeferredResultNotAdmitted`.
 5. **No covariance.** A collection's type identity stays its declared element type. `ValueType::admits` on a collection value of element type `S` at a collection type of element type `P` is `false`. Admitting a descendant-typed collection at an ancestor-typed collection slot is a caller decision the kernel does not provide.
 6. **The kernel does not verify the admission.** A caller that stores a value that does not conform has a defect. The kernel's total key order, equality, charges and absence of panics hold for any stored composite, because they rest on the declaration key alone (FR-376, FR-377).
-7. **Union payloads.** A union member payload follows the same rule once the kernel carries a union value; this requirement adds no union behaviour before then.
+7. **Union payloads.** A union member payload follows the same rule: `UnionValue::from_admitted` stores a caller-admitted payload unchanged, including a conforming descendant, while `union` and `evaluate_union` stay exact.
 8. **Doc comments.** The rustdoc of `form`, `form_grouped`, `OptionValue::from_admitted` and `from_admitted_slots` says they are the paths for a caller-admitted value, including a conforming descendant, and that they check nothing. The rustdoc of `ValueType::admits` says it is the exact predicate and not the conformance check for a slot that can hold a descendant.
 
 ## Acceptance Criteria
@@ -55,6 +55,7 @@ The kernel has no declaration graph and takes none, so these existing caller-adm
 | FR-378-AC-5 | For the same `C` composite at element type `Composite(P)`: `construct_collection` refuses `CollectionElementNotAdmitted`; `form_collection` refuses `Element(index)` `TypeMismatch`; `ValueType::admits` is `false`; `OptionValue::present` refuses `Payload` `TypeMismatch`; `evaluate_record` with that field refuses `DeferredResultNotAdmitted`. A `P` composite is accepted by each. | Test |
 | FR-378-AC-6 | A collection of element type `Composite(C)` is not admitted by `ValueType::admits` at the collection type of element type `Composite(P)`, nor the reverse. A stored collection clones, compares equal to an identical build (`true`), compares unequal to one that differs in a member's declaration (`false`), and drops on the iterative paths of any `Value`. | Test |
 | FR-378-AC-7 | The rustdoc of the five items in Behavior 8 carries the stated text. | Inspection |
+| FR-378-AC-8 | `UnionValue::from_admitted` of a position typed `Composite(P)` and a `C` composite keeps the payload unchanged (declaration `C`, slots unchanged). For that `C` composite `union` refuses `Position(0)` `TypeMismatch` and `evaluate_union` refuses `DeferredResultNotAdmitted`; a `P` composite is accepted by each. | Test |
 
 ## Status
 
