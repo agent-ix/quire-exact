@@ -11,8 +11,8 @@ use quire_exact::{
     compare_keys, evaluate_union, form, from_admitted_slots, plan_equality, planned_equality,
     union, CheckedInvariantCause, CollectionKind, CollectionType, Component, ConstructionCause,
     ConstructionRefusal, Deferred, EffectiveId, FieldValue, Identifier, Integer, Meter, NodeKey,
-    ObjectId, ObjectReference, Outcome, Refusal, ScalarLimits, UnionMember, UnionValue, UniverseId,
-    Value, ValueType,
+    ObjectId, ObjectReference, OptionValue, Outcome, Refusal, ScalarLimits, UnionMember,
+    UnionValue, UniverseId, Value, ValueType,
 };
 
 const P: u8 = 1;
@@ -168,6 +168,18 @@ fn unlike_union_pairings_stay_checked_invariant_faults() {
         kind(planned_equality(&held, &two, &mut meter())),
         CheckedInvariantCause::ValueKindMismatch
     );
+    let other_declaration = UnionValue::from_admitted(
+        UnionMember::from_admitted(
+            key(U + 1),
+            NodeKey::from_digest([4; 32]),
+            Identifier::new("Held").unwrap(),
+        ),
+        vec![p100()],
+    );
+    assert_eq!(
+        kind(planned_equality(&held, &other_declaration, &mut meter())),
+        CheckedInvariantCause::ValueKindMismatch
+    );
 }
 
 #[trace("FR-377-AC-8")]
@@ -182,10 +194,43 @@ fn union_payload_declarations_order_by_declaration_key_bytes() {
     let big_p = holding(rec(P, vec![int(1_000_000)]));
     let small_c = holding(rec(C, vec![int(-1)]));
     assert_eq!(compare_keys(&big_p, &small_c), Some(Ordering::Less));
-    // A pair is equal exactly when the values are equal.
-    for (a, b) in [(&p, &c), (&p, &holding(rec(P, vec![int(200)]))), (&p, &p)] {
-        assert_eq!(compare_keys(a, b) == Some(Ordering::Equal), equal(a, b));
+    // Key equality agrees with equality on all nine ordered pairs, and the
+    // member identifier decides before the payload declaration.
+    let others = [holding(p100()), holding(c100()), holding(g100())];
+    for left in &others {
+        for right in &others {
+            assert_eq!(
+                compare_keys(left, right) == Some(Ordering::Equal),
+                equal(left, right)
+            );
+        }
     }
+    let alpha_c = UnionValue::from_admitted(member("Alpha"), vec![c100()]);
+    let zulu_p = UnionValue::from_admitted(member("Zulu"), vec![p100()]);
+    assert_eq!(compare_keys(&alpha_c, &zulu_p), Some(Ordering::Less));
+}
+
+#[trace("FR-377-AC-8", "FR-379-AC-5")]
+#[test]
+fn unlike_unions_have_no_key_and_refuse_equality() {
+    let other_declaration = UnionValue::from_admitted(
+        UnionMember::from_admitted(
+            key(U + 1),
+            NodeKey::from_digest([4; 32]),
+            Identifier::new("Held").unwrap(),
+        ),
+        vec![p100()],
+    );
+    let held = holding(p100());
+    assert_eq!(compare_keys(&held, &other_declaration), None);
+    assert_eq!(
+        plan_equality(&held, &other_declaration),
+        Err(Refusal::CheckedInvariant {
+            cause: CheckedInvariantCause::ValueKindMismatch
+        })
+    );
+    let longer = UnionValue::from_admitted(member("Held"), vec![p100(), p100()]);
+    assert_eq!(compare_keys(&held, &longer), None);
 }
 
 #[trace("FR-377-AC-8")]
@@ -272,4 +317,20 @@ fn admitted_union_keeps_a_descendant_payload_and_exact_paths_refuse_it() {
         evaluate_union(&shape, member("Held"), deferred(p100()), &mut meter()),
         Ok(Outcome::Completed(_))
     ));
+}
+
+#[trace("FR-379-AC-9")]
+#[test]
+fn option_of_union_admits_compares_and_keys_through_the_payload() {
+    let option_type = ValueType::Composite(key(U));
+    let present = |payload: Value| OptionValue::present(option_type.clone(), payload).unwrap();
+    let a = present(holding(p100()));
+    let b = present(holding(p100()));
+    let c = present(UnionValue::from_admitted(member("Other"), vec![p100()]));
+    assert!(equal(&a, &b));
+    assert!(!equal(&a, &c));
+    assert_eq!(compare_keys(&a, &b), Some(Ordering::Equal));
+    assert_eq!(compare_keys(&a, &c), Some(Ordering::Less));
+    // option, union, payload, payload slot
+    assert_eq!(pair_count(&a, &b), Integer::from(4_i64));
 }

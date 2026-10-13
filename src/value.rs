@@ -120,8 +120,10 @@ pub struct UnionValue {
 
 impl UnionValue {
     /// Materialize payload values already admitted against this member's
-    /// declared positions by the caller's type environment. The caller owns
-    /// membership, arity, reference validation and any construction charge.
+    /// declared positions by the caller's type environment. This is the path
+    /// for a caller-admitted payload, including a conforming descendant: it
+    /// checks nothing. The caller owns membership, arity, reference
+    /// validation and any construction charge (FR-378).
     pub fn from_admitted(member: UnionMember, payload: Vec<Value>) -> Value {
         let occ = payload
             .iter()
@@ -169,8 +171,11 @@ impl fmt::Debug for UnionValue {
 }
 
 /// Construct an admitted member using its declared position types, looked
-/// up by the caller. This checks arity and kernel position admission, not
-/// registry membership or reference conformance.
+/// up by the caller. This is the exact path: it checks arity and kernel
+/// position admission with [`ValueType::admits`], so a descendant-declared
+/// payload is refused. It does not check registry membership or reference
+/// conformance. A caller-admitted payload goes through
+/// [`UnionValue::from_admitted`] (FR-378).
 pub fn union(
     shape: &[ValueType],
     member: UnionMember,
@@ -568,7 +573,7 @@ impl Value {
 
 /// Drop `children`, and everything nested in them, from a worklist instead
 /// of the compiler's recursive drop glue: the `Drop` of each node struct
-/// ([`OptionValue`], [`CompositeValue`], `CollectionValue`) hands its
+/// ([`OptionValue`], [`CompositeValue`], [`UnionValue`], `CollectionValue`) hands its
 /// children here. Before a node popped off the worklist drops, its own
 /// children are moved onto the worklist, so its `Drop` finds nothing left
 /// and the stack stays a fixed few frames deep at any value depth.

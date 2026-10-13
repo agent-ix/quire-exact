@@ -15,25 +15,12 @@ use quire_exact::{
     Refusal, ScalarLimits, Undefined, UnionMember, UnionValue, Value, ValueType, VariantId,
 };
 
-fn bytes(hex: &str) -> [u8; 32] {
-    assert_eq!(hex.len(), 64);
-    let mut bytes = [0; 32];
-    let (pairs, remainder) = hex.as_bytes().as_chunks::<2>();
-    assert!(remainder.is_empty());
-    for (byte, pair) in bytes.iter_mut().zip(pairs) {
-        *byte = u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap();
-    }
-    bytes
-}
-
-// Published QSpec node-identity union_member_vectors: the kernel retains
-// already-computed keys; it does not implement or test their JCS/SHA minting.
+// The kernel retains already-computed keys and mints nothing, so these
+// identities are opaque fixture bytes.
 fn circle() -> UnionMember {
     UnionMember::from_admitted(
         declaration(),
-        NodeKey::from_digest(bytes(
-            "05592dfb3975b157f2db52dafb4473e94087e77151674909aa18d3527b492dc9",
-        )),
+        NodeKey::from_digest([0xC1; 32]),
         Identifier::new("Circle").unwrap(),
     )
 }
@@ -41,17 +28,13 @@ fn circle() -> UnionMember {
 fn empty() -> UnionMember {
     UnionMember::from_admitted(
         declaration(),
-        NodeKey::from_digest(bytes(
-            "da73f21b5ade700e44aa1daf13df5cb138be6a9ecc1f6253e37f99c90dc41f30",
-        )),
+        NodeKey::from_digest([0xE1; 32]),
         Identifier::new("Empty").unwrap(),
     )
 }
 
 fn declaration() -> NodeKey {
-    NodeKey::from_digest(bytes(
-        "684d1e7edc4b570ce3f44ad33aaa4019dd121dc09878aae3acfe0ab8aa92d173",
-    ))
+    NodeKey::from_digest([0xD1; 32])
 }
 
 // Structural fixtures use opaque caller-minted identities, as the existing
@@ -100,7 +83,7 @@ fn equal(left: &Value, right: &Value) -> bool {
         .expect("valid equality operands")
 }
 
-#[trace("FR-319-AC-3", "FR-321-AC-1")]
+#[trace("FR-379-AC-1")]
 #[test]
 fn union_construction_keeps_identity_positions_and_occurrences() {
     let nullary = make(empty(), &[]);
@@ -120,7 +103,7 @@ fn union_construction_keeps_identity_positions_and_occurrences() {
     assert!(!ValueType::Integer.admits(&nullary));
 }
 
-#[trace("FR-321-AC-1")]
+#[trace("FR-379-AC-2")]
 #[test]
 fn union_position_and_arity_refusals_are_typed() {
     let cases = [
@@ -157,7 +140,7 @@ fn union_position_and_arity_refusals_are_typed() {
     }
 }
 
-#[trace("FR-319-AC-3")]
+#[trace("FR-379-AC-4")]
 #[test]
 fn union_equality_compares_members_and_payload_positions() {
     let rect = make(fixture("Rect", 1), &[2, 3]);
@@ -175,17 +158,13 @@ fn union_equality_compares_members_and_payload_positions() {
     assert!(equal(&make(empty(), &[]), &make(empty(), &[])));
 }
 
-#[trace("FR-319-AC-2", "FR-319-AC-3")]
+#[trace("FR-379-AC-5")]
 #[test]
 fn foreign_union_enum_and_composite_kinds_remain_distinct() {
     let left = make(circle(), &[1]);
     let foreign = UnionMember::from_admitted(
-        NodeKey::from_digest(bytes(
-            "e96b8de8d4a48b5f8ec25e1ac855b2241afaf46b3b7634c7bff9834652e3d6ec",
-        )),
-        NodeKey::from_digest(bytes(
-            "13c540c64745302d0774ab6d25097aedf5abacba6ac6cef6a0b67e9042dc7591",
-        )),
+        NodeKey::from_digest([0xD2; 32]),
+        NodeKey::from_digest([0xC2; 32]),
         Identifier::new("Circle").unwrap(),
     );
     for other in [
@@ -206,7 +185,7 @@ fn foreign_union_enum_and_composite_kinds_remain_distinct() {
     }
 }
 
-#[trace("FR-323-AC-1")]
+#[trace("FR-379-AC-6")]
 #[test]
 fn union_keys_order_identifier_ascii_then_payload_positions() {
     let first = make(fixture("Alpha", 250), &[9]);
@@ -254,7 +233,7 @@ fn assert_elements(value: Value, expected: Vec<Value>) {
     }
 }
 
-#[trace("FR-323-AC-1", "FR-323-AC-2")]
+#[trace("FR-379-AC-7")]
 #[test]
 fn union_collections_sort_deduplicate_and_preserve_first_occurrence() {
     for reversed in [false, true] {
@@ -306,7 +285,7 @@ fn union_collections_sort_deduplicate_and_preserve_first_occurrence() {
     }
 }
 
-#[trace("FR-323-AC-1")]
+#[trace("FR-379-AC-6")]
 #[test]
 fn member_declaration_order_and_digest_order_do_not_reach_union_key_order() {
     // Two independent admitted declaration fixtures. Neither position nor
@@ -360,8 +339,8 @@ fn member_declaration_order_and_digest_order_do_not_reach_union_key_order() {
 }
 
 /// Trusted kernel keylessness and sequence storage only; S3 type-reference
-/// eligibility in FR-323-AC-3 requires a checker witness outside this test.
-#[trace("FR-323")]
+/// eligibility in QSL FR-323-AC-3 requires a checker witness outside this test.
+#[trace("FR-379-AC-7")]
 #[test]
 fn ieee_union_payload_has_no_key_and_sequence_keeps_occurrences() {
     let value = UnionValue::from_admitted(
@@ -406,7 +385,7 @@ fn ieee_union_payload_has_no_key_and_sequence_keeps_occurrences() {
 }
 
 /// Kernel construction-stop subset; caller `case` evaluation remains external.
-#[trace("FR-322-AC-2")]
+#[trace("FR-379-AC-3")]
 #[test]
 fn evaluated_union_preserves_deferred_fault_and_first_stop() {
     let calls = std::cell::Cell::new(0);
@@ -443,7 +422,7 @@ fn evaluated_union_preserves_deferred_fault_and_first_stop() {
 }
 
 /// Kernel construction accounting subset; caller `case` charges remain external.
-#[trace("FR-322-AC-3")]
+#[trace("FR-379-AC-3")]
 #[test]
 fn evaluated_union_orders_arguments_and_charges_one_complete_result() {
     let calls = std::cell::RefCell::new(Vec::new());
@@ -530,7 +509,7 @@ impl fmt::Write for Brackets {
     }
 }
 
-#[trace("FR-321-AC-4")]
+#[trace("FR-379-AC-8")]
 #[test]
 fn ten_thousand_union_levels_clone_compare_format_and_drop_on_small_stack() {
     std::thread::Builder::new()
@@ -561,7 +540,7 @@ fn ten_thousand_union_levels_clone_compare_format_and_drop_on_small_stack() {
         .unwrap();
 }
 
-#[trace("FR-321-AC-4")]
+#[trace("FR-379-AC-8")]
 #[test]
 fn shared_union_children_count_each_occurrence_and_clone_shares_root() {
     let child = deep(1_000);
@@ -579,7 +558,7 @@ fn shared_union_children_count_each_occurrence_and_clone_shares_root() {
     assert!(Arc::ptr_eq(first, second));
 }
 
-#[trace("FR-321-AC-4")]
+#[trace("FR-379-AC-8")]
 #[test]
 fn union_storage_grows_linearly_with_depth() {
     let retained = |levels| {
@@ -599,7 +578,7 @@ fn union_storage_grows_linearly_with_depth() {
     );
 }
 
-#[trace("FR-321-AC-4")]
+#[trace("FR-379-AC-8")]
 #[test]
 fn mixed_union_composite_collection_paths_walk_and_drop_on_small_stack() {
     std::thread::Builder::new()
