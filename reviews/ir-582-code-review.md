@@ -17,7 +17,7 @@ Ticket: IR-582. Rust-review lane folded in.
 
 Checked:
 
-- `diff -r ~/dev/quire-spec-language/quire-exact/src src` against QSL main
+- `diff -r <quire-spec-language checkout>/quire-exact/src src` against QSL main
   3dc4f52: every differing line on both sides is a comment line (`//`, `///`,
   `//!`) or blank. No code line, attribute or doc-test differs, and
   `src/value/value_type.rs` is byte-identical. All inline unit tests came
@@ -27,7 +27,7 @@ Checked:
   `quire-exact/Cargo.toml`.
 - `make ci` runs `build-no-std` (`cargo build --locked --target
   thumbv7em-none-eabi`), a thumbv7em clippy pass, and both feature lanes for
-  clippy and test. The log at ~/dev/worktrees/logs/ir582-quire-exact-ci.log
+  clippy and test. The log at <gate log>
   ends `exit=0`.
 - Org files: LICENSE (AGPL-3.0), CLA.md, CONTENT_RIGHTS.md, cla.yml and
   `.agent/rules` are identical to agent-ix/quire-walk. `.gitignore` has
@@ -55,7 +55,7 @@ because they touch the workflow.
 | FND-002 | low | Bare requirement ids in comments resolve to nothing in this repo and share its id space. QSL ids: FR-044, FR-107, FR-151, TC-196, TC-243, NFR-071, FR-272, FR-275-AC-5, FR-276, FR-089-AC-5. QSpec ids missing the `QSpec` prefix: FR-035, FR-140, FR-141, FR-142, FR-144, FR-147, FR-148, FR-149, TC-192. `quire coverage` reads four of them as trace tags on production functions (CR-061). Fix: prefix the QSpec ids, drop or reword the QSL ones. | src/accounting.rs:267-286,453,527,534-836; src/cancel.rs:20,63; src/comparison.rs:113-162; src/numeric.rs:39,247,313; src/value.rs:25,62,80,92,245,1271; src/collection.rs:378; src/identity.rs:255; src/ieee.rs:1585,1647 |
 | FND-003 | low | `.github/workflows/ci.yml` does not run what `make ci` runs. It installs `thumbv7em-none-eabi` but never builds for it, skips the thumbv7em clippy pass and the `test-support` clippy and test lanes, and runs `cargo deny check licenses` where the Makefile runs a full `cargo deny check`. The no_std build is covered only by local `make ci`. Fix: have the workflow run `make ci`. A workflow edit needs the owner's clearance first. | .github/workflows/ci.yml:13-34,52-53; Makefile:36-51,66-67,88 |
 | FND-004 | low | The PR edits `.github/workflows/ci.yml`: it deletes the "Unsafe audit" step and adds the thumbv7em target. The edit is needed, because the script is deleted, but workflow edits need the owner's clearance first. Confirm that clearance before merge, or keep the edit out of this PR. | .github/workflows/ci.yml:17,28-30 |
-| FND-005 | medium | The extraction leaves two copies of the crate. QSL main still carries `quire-exact/` (the same code), and QSL main is still changing it (last change 2026-10-04 01:57 -0700). Until QSL depends on agent-ix/quire-exact by git and deletes `quire-exact/`, the two drift. Any QSL change to the crate after this import must be ported here before the switch. Fix: the QSL half of IR-582. The copy is gone only when QSL's `quire-exact/` path 404s. | src/; ~/dev/quire-spec-language/quire-exact/ |
+| FND-005 | medium | The extraction leaves two copies of the crate. QSL main still carries `quire-exact/` (the same code), and QSL main is still changing it (last change 2026-10-04 01:57 -0700). Until QSL depends on agent-ix/quire-exact by git and deletes `quire-exact/`, the two drift. Any QSL change to the crate after this import must be ported here before the switch. Fix: the QSL half of IR-582. The copy is gone only when QSL's `quire-exact/` path 404s. | src/; <quire-spec-language checkout>/quire-exact/ |
 
 ## New findings (disposition pass 1)
 
