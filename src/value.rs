@@ -226,7 +226,14 @@ impl ValueType {
         Self::Option(Arc::new(payload))
     }
 
-    /// Whether `value` is a member of this declared type. Composite, option
+    /// Whether `value` is a member of this declared type. This is the exact
+    /// predicate: a composite is admitted only when its declaration key
+    /// equals the declared one, and a collection only when its declared type
+    /// is this type. It is not the conformance check for a slot that can hold
+    /// a descendant declaration; a caller that admits such a value by its own
+    /// conformance rule stores it through the caller-admitted paths
+    /// ([`OptionValue::from_admitted`], [`from_admitted_slots`],
+    /// `form` and `form_grouped`). Composite, option
     /// and collection values carry their declared type, which must be this
     /// type; their contents were admitted at construction. An `Enum` shape
     /// admits a `Value::Enum` exactly when the shape's own ranked list agrees
@@ -838,7 +845,10 @@ impl OptionValue {
     }
 
     /// Materialize an already-admitted `payload` as `Option<payload_type>`,
-    /// checking no structural `admits()` match. `pub`, not `pub(crate)`,
+    /// checking no structural `admits()` match. This is the path for a
+    /// caller-admitted payload, including a conforming descendant composite
+    /// the exact [`OptionValue::present`] refuses: the payload is stored
+    /// unchanged and nothing is checked. `pub`, not `pub(crate)`,
     /// since the caller checking admission (e.g. an upcast-aware
     /// lookup) is a separate crate from this one.
     pub fn from_admitted(payload_type: ValueType, payload: Option<Value>) -> Value {
@@ -1242,7 +1252,9 @@ fn composite(declaration: NodeKey, slots: Box<[FieldValue]>) -> Value {
 
 /// Materialize already-admitted slots as a composite value, checking
 /// nothing: the caller (whose declaration registry is not kernel) has already checked every slot against its own declared
-/// shape. Mirrors [`OptionValue::from_admitted`]'s identical bypass role.
+/// shape. Mirrors [`OptionValue::from_admitted`]'s identical bypass role. It
+/// is the path for caller-admitted slots, including a conforming descendant
+/// composite in a slot of an ancestor-declared type, and checks nothing.
 pub fn from_admitted_slots(declaration: NodeKey, slots: Box<[FieldValue]>) -> Value {
     composite(declaration, slots)
 }

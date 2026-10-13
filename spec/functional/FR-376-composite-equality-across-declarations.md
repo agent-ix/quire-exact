@@ -52,7 +52,7 @@ A caller may hold a value whose most-specific declaration is a descendant of the
 
 ## Status
 
-Specified. Code lands in a later slice.
+Implemented.
 
 ## Dependencies
 

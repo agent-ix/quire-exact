@@ -53,7 +53,7 @@ Two values of one type have equal keys exactly when they are equal under the ker
 
 ## Status
 
-Specified. Code lands in a later slice.
+Implemented.
 
 ## Dependencies
 

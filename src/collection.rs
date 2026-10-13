@@ -264,7 +264,10 @@ pub fn from_admitted(collection_type: CollectionType, elements: Vec<Value>) -> V
 /// Evaluate a collection constructor expression `K[e1, ..., en]` checked
 /// against `collection_type`. Each element charges `collection.element` and
 /// then runs; the first element that does not complete becomes the outcome
-/// and no later element runs.
+/// and no later element runs. Each element is tested with the exact
+/// [`ValueType::admits`], so a composite whose declaration differs from the
+/// element type's is refused, a conforming descendant included. A caller that
+/// admits such members itself forms the collection with [`form`].
 pub fn construct_collection(
     collection_type: &CollectionType,
     elements: Vec<Deferred<'_>>,
@@ -295,7 +298,10 @@ fn construct(
 /// Form a collection of `collection_type` from completed occurrences in
 /// source or visiting order: membership comparisons, `collection.bound`,
 /// the bound check and `collection.result-retain`. An occurrence outside
-/// the element type refuses before any charge.
+/// the element type refuses before any charge. The test is the exact
+/// [`ValueType::admits`], which compares composite declaration keys exactly,
+/// so a conforming descendant is refused here; [`form`] is the path for
+/// members the caller has admitted.
 pub fn form_collection(
     collection_type: &CollectionType,
     occurrences: Vec<Value>,
@@ -324,7 +330,12 @@ pub fn form_collection(
 /// `collection_type`'s element type; nothing here re-checks it. An
 /// occurrence outside the element type is kept as it is, and a sequence's
 /// occurrences are not compared at all. [`form_collection`] is the checked
-/// alternative. `pub` so an evaluator can form
+/// alternative. This is the path for caller-admitted occurrences, including
+/// composites of a conforming descendant declaration stored where the element
+/// type names an ancestor; it checks nothing, and members of different
+/// declarations are stored unchanged. A set or bag orders them by the
+/// canonical key (declaration key bytes first) and an ordered set keeps
+/// first-occurrence order. `pub` so an evaluator can form
 /// occurrences of a checked, already-evaluated expression.
 pub fn form(
     collection_type: &CollectionType,
@@ -360,7 +371,9 @@ fn form_stop(
 /// check, canonical order and `collection.result-retain`. `pub`, not
 /// `pub(crate)`: its caller (an evaluator, which decides
 /// *when* occurrences are already grouped -- e.g. a comprehension's own
-/// iteration order) is a separate crate from this one.
+/// iteration order) is a separate crate from this one. Like [`form`], it is a
+/// path for caller-admitted values, including conforming descendant
+/// composites, and checks no occurrence against the element type.
 pub fn form_grouped(
     collection_type: &CollectionType,
     elements: Vec<Value>,
