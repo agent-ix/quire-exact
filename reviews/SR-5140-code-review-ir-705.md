@@ -57,7 +57,7 @@ The tests `cache_is_invisible_to_traits_clones_and_concurrent_borrows` and `once
 
 ## Dispositions
 
-Focused check receipt supplied by the lead for `eb80b7cf9b77f2b662c1833a5e9a1dbbfb1a9899`: default `cargo test --test ir705_bounded_integer --locked` passed 6/6; `cargo test --test ir705_bounded_integer --locked --features test-support` passed 5/5. Log: `/tmp/ir705-focused-eb80b7c.log`. The reviewer did not run Cargo.
+Focused check receipt supplied by the lead for `eb80b7cf9b77f2b662c1833a5e9a1dbbfb1a9899`: default `cargo test --test ir705_bounded_integer --locked` passed 6/6; `cargo test --test ir705_bounded_integer --locked --features test-support` passed 5/5. Log: `<receipt log>`. The reviewer did not run Cargo.
 
 | FND | outcome | sha/reason |
 | --- | --- | --- |

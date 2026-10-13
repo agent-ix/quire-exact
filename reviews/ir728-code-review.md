@@ -29,7 +29,7 @@ PASS. No code/Rust defects in the exact three-path PR diff. The public API borro
 
 ## Coverage
 
-Read receipts at /tmp/ix-handoff/ir728-ieee-focused/full-candidate/attempt-70fe3fedb06b4ab38b2d5f2cab5d0901: focused-receipt.json identifies exact reviewed head and records make --jobs=1 ci CARGO=cargo +1.98.1 exit 0 plus full spec/review validation exit 0. make-ci-stdout/stderr logs show fmt/lint, default/support tests, thumbv7em-none-eabi build, cargo deny and warnings-denied docs. scope receipt records terminal exit 0, removed cgroup, settled witnesses/helpers and 17.50888779759407s. No Kani/replay lane is defined in unchanged Makefile/CI. These are candidate receipts, not a promise that final merge gates ran.
+Read receipts at <receipt directory> focused-receipt.json identifies exact reviewed head and records make --jobs=1 ci CARGO=cargo +1.98.1 exit 0 plus full spec/review validation exit 0. make-ci-stdout/stderr logs show fmt/lint, default/support tests, thumbv7em-none-eabi build, cargo deny and warnings-denied docs. scope receipt records terminal exit 0, removed cgroup, settled witnesses/helpers and 17.50888779759407s. No Kani/replay lane is defined in unchanged Makefile/CI. These are candidate receipts, not a promise that final merge gates ran.
 
 Plan completion: not assessed
 
