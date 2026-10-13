@@ -7,6 +7,12 @@
 //! ordering operator. Comparison is iterative, so value depth never reaches
 //! the host stack.
 //!
+//! Two composites of different declarations are unequal under the equality
+//! plan, so their keys differ: they order by the ascending bytes of the two
+//! 32-byte declaration keys, before any slot. The order is total and has no
+//! relation to ancestry, declaration names or slot contents. Two composites of
+//! one declaration continue by slots in declaration order.
+//!
 //! **`Value::Float` has no key, matching its exclusion from `=`.**
 //! [`crate::equality`]'s own leaf match excludes `Value::Float` the same
 //! way this module's `leaf` function does -- both fall through to their
@@ -45,9 +51,13 @@ enum Task<'a> {
     Lengths(usize, usize),
 }
 
-/// Compare the canonical keys of two values of one declared type. `None`
-/// means the operands are not of one keyed type, which a checked program
-/// never produces. `pub`: an evaluator groups
+/// Compare the canonical keys of two values of one declared type. Two
+/// composites of different declarations order by the ascending bytes of their
+/// 32-byte declaration keys before any slot, because a slot of a declared
+/// type can hold a conforming descendant (FR-377). `None` means the pair has
+/// no key: unlike value variants, a composite against a non-composite, two
+/// composites of one declaration with different slot counts, two enum members
+/// of equal rank and different variants, a `Float`, or a population. `pub`: an evaluator groups
 /// adjacent equal elements with this key before [`crate::form_grouped`] and
 /// in `Contains`, so it must order exactly as [`crate::form`]'s canonical
 /// sort does.
@@ -133,6 +143,15 @@ fn leaf<'a>(
             }
             (left, right) => left.is_some().cmp(&right.is_some()),
         },
+        // Composites of different declarations order by the ascending bytes
+        // of their declaration keys, before any slot (FR-377).
+        (Value::Composite(left), Value::Composite(right))
+            if left.declaration() != right.declaration() =>
+        {
+            left.declaration()
+                .as_bytes()
+                .cmp(right.declaration().as_bytes())
+        }
         (Value::Composite(left), Value::Composite(right))
             if left.declaration() == right.declaration()
                 && left.slots().len() == right.slots().len() =>

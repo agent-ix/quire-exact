@@ -18,6 +18,15 @@
 //! same invariant every other leaf type here relies on (an `Integer` carries no
 //! declared bound either) -- so this needs no same-enum check of its own. A
 //! quantity pair compares equal only in the same unit.
+//!
+//! Two composites are compared by declaration key first. A caller may hold a
+//! value whose most-specific declaration is a descendant of the declaration a
+//! slot names, so two operands of one static type can carry different
+//! declarations. That is ordinary, not a malformed program: the pair is
+//! unequal, with no descent into either value's slots. The kernel carries no
+//! declaration graph and treats no declaration as the ancestor of another. A
+//! composite against a non-composite, and two composites of one declaration
+//! with different slot counts, still refuse with the checked invariant.
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::integer::Integer;
@@ -160,9 +169,13 @@ enum Pair<'a> {
     Slots(&'a FieldValue, &'a FieldValue),
 }
 
-/// Walk the occurrence-pair tree of two values of one type. Operands that
-/// are not of one type, which a checked program never produces, refuse with
-/// the checked invariant.
+/// Walk the occurrence-pair tree of two values of one static type. Two
+/// composites of different declarations are one pair and unequal: a caller
+/// may hold a conforming descendant where a slot names its ancestor, and the
+/// kernel decides that pair from the two declaration keys alone (FR-376).
+/// Operands of unlike variants, two composites of one declaration with
+/// different slot counts, two populations and two collections of different
+/// kinds are malformed, and refuse with the checked invariant.
 pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Refusal> {
     let mut pairs = Integer::zero();
     let mut equal = true;
@@ -215,9 +228,13 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
                 }
                 (l, r) => l.is_some() == r.is_some(),
             },
-            (Value::Composite(l), Value::Composite(r))
-                if l.declaration() == r.declaration() && l.slots().len() == r.slots().len() =>
-            {
+            // Composites of different declarations are unequal; the kernel
+            // holds no declaration graph, so the keys alone decide and no
+            // slot of either value is visited (FR-376).
+            (Value::Composite(l), Value::Composite(r)) if l.declaration() != r.declaration() => {
+                false
+            }
+            (Value::Composite(l), Value::Composite(r)) if l.slots().len() == r.slots().len() => {
                 let slots = l.slots().iter().zip(r.slots()).rev();
                 pending.extend(slots.map(|(l, r)| Pair::Slots(l, r)));
                 continue;

@@ -58,7 +58,7 @@ The kernel has no declaration graph and takes none, so these existing caller-adm
 
 ## Status
 
-Specified. Code lands in a later slice; the slice changes documentation and adds tests, and adds no constructor.
+Implemented. The slice changed documentation and added tests, and added no constructor.
 
 ## Dependencies
 
