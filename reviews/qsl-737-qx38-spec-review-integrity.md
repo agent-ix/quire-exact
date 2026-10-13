@@ -1,0 +1,52 @@
+---
+id: SR-7883
+title: "Integrity review of quire-exact PR #38 (FR-376..378, TC-924..926)"
+type: SpecReview
+analysis: integrity
+scope: "agent-ix/quire-exact@e9c9ed4a05c3c58505200785a77929f737402029; spec/functional/FR-369, FR-375, FR-376, FR-377, FR-378; spec/test-cases/TC-917, TC-923, TC-924, TC-925, TC-926"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-exact/FR-376
+    type: reviews
+  - target: ix://agent-ix/quire-exact/FR-377
+    type: reviews
+  - target: ix://agent-ix/quire-exact/FR-378
+    type: reviews
+---
+
+## Summary
+
+Ticket: QSL-737. PR: quire-exact#38. Consistency of the new FRs and TCs with each other, with the amended FR-369/FR-375/TC-917/TC-923 text, and with the kernel code they describe. The key order is sound (see Verdict), but the spec says OrderedSet is sorted by the key when the kernel keeps first-occurrence order, a TC states a wrong pair count, and FR-377 says the exact constructors complete over members FR-378 says they refuse.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | OrderedSet is not sorted by the canonical key. CollectionKind::OrderedSet is "unique members in first-occurrence order" (src/collection.rs:56-57), is_ordered() is true for it (collection.rs:70-72), and bound_and_retain sorts only when !is_ordered (collection.rs:403-405). So an OrderedSet formed from [c100, p100] visits c100 first, and FR-377-AC-4 ("in each of the two supply orders ... visit the member of the smaller declaration key first"), FR-377 Behavior 5 ("sort them by this key ... whatever the order in which they were supplied") and TC-925 Expected 4 ("Both supply orders yield [p100, c100] for the Set and OrderedSet") cannot pass. TC-926 Expected 1 gets p100, c100 for the OrderedSet only by supply order, not by FR-377. Also the premise is off: through `form`, an OrderedSet of two declarations today refuses ValueKindMismatch in coalesce membership (collection.rs:434 -> equality.rs:265), never CanonicalKeyUnavailable, so OrderedSet needs only FR-376. Drop OrderedSet from the key-order claims and keep it in FR-376 (two distinct members, supply order kept). | FR-377:36,46; TC-925:38; src/collection.rs:56-72,403 |
+| FND-002 | high | The control pair count in TC-924 Expected 5 is wrong. plan_pairs counts one pair per popped node (src/equality.rs:170-171), and a same-declaration composite pushes its slot pairs (218-224). Wrapping (p100, p100') gives: Option pair 1, composite pair 2, slot pair 3. For a one-slot record of declaration W it is W pair 1, slot pair 2 (whose same-declaration composite pushes its slots), inner slot pair 3. For a one-element collection it is collection 1, element 2, slot 3. So each control is 3, not 2. The different-declaration pairs are 2, as FR-376-AC-5 says: the inner composite pair stops at the declaration check. As written, the TC fails against a correct implementation. | TC-924:45; src/equality.rs:170-224 |
+| FND-003 | medium | FR-377 Inputs and Behavior 5 say form_collection and construct_collection over a Set/Bag/OrderedSet of composites of different declarations "sort them by this key ... and complete". These exact constructors check each element with ValueType::admits (src/collection.rs:285, 306), and Composite admission is exact declaration equality (src/value.rs:250-252), so no element type admits two declarations and both refuse. FR-378-AC-2 says that refusal is still required. Name `form`, `form_grouped` and the FR-378 admitting paths here instead. | FR-377:24,36; src/collection.rs:285,306; src/value.rs:250-252 |
+| FND-004 | low | FR-376 Dependencies lists "the sentence on the equality catch-all in FR-369" as text that changes with this requirement, but the PR does not change it (FR-369 line 111, check the population case before ValueKindMismatch) and that sentence stays true. Drop it from the list, or make the change the dependency claims. | FR-376:104; FR-369:111 |
+| FND-005 | low | The two amended FR-369 rows keep line citations that do not match the code. ValueKindMismatch cites src/equality.rs:192-207, which are the Text..Reference leaf arms; the catch-all is at 246-268. CanonicalKeyUnavailable cites collection.rs:487-496; sort_by_key is at 488-503. Cite the symbol (the plan_pairs catch-all arm, sort_by_key) rather than line ranges, which drift with every edit. | FR-369:37,41; src/equality.rs:246-268; src/collection.rs:488-503 |
+
+## Scope
+
+| Unit | Role | Excerpt |
+| --- | --- | --- |
+| FR-377-AC-4 | examined | A `Set`, a `Bag` and an `OrderedSet` formed from one composite of each of two declarations, in each of the two supply orders, complete without `CanonicalKeyUnavailable` and visit the member of the smaller declaration key first. A `Bag` holding two equal members of each declaration visits the two groups in that order. |
+| FR-377 | examined | **Collections.** `form`, `form_collection`, `form_grouped` and `construct_collection` over a `Set`, `Bag` or `OrderedSet` whose members are composites of different declarations sort them by this key, stably, and complete. They report `CanonicalKeyUnavailable` only where `compare_keys` still returns `None` for a pair of members, as a `Float` pair does. The visiting order is a function of the member values alone, whatever the order in which they were supplied. |
+| FR-376-AC-5 | examined | A pair of different declarations that sits as the payload of two present `Option`s, in a one-slot record, as the element of two one-element `Sequence`, `Set` and `Bag`, gives `false`, with pair counts of 2, 2 and 2, and no refusal. |
+| FR-376-AC-4 | examined | Two composites with equal declaration keys and equal slots give `true`. Equal declaration keys with a differing slot give `false`. The pair counts are those of the same plan before this requirement. |
+| FR-378-AC-2 | examined | The exact `construct_collection` and `form_collection` over the same members still refuse: `CollectionElementNotAdmitted` from the deferred path and `Element(index)` `TypeMismatch` from the occurrence path. `ValueType::admits` of `Composite([1; 32])` on a `[2; 32]` composite is still `false`. |
+| FR-375-AC-4 | examined | With equal-shaped operands whose declared (static) composite types differ, checked construction refuses with `IllTypedCause::TypeMismatch` before `CheckedEquality::evaluate`; the evaluator is not called and no equality pair charge is admitted. |
+| FR-369-AC-2 | examined | Every kernel producer in collection, value, division and equality returns exactly its table cause; two population values return `PopulationPair`, a population paired with another kind returns `ValueKindMismatch`, and unlike collection kinds return `CollectionKindMismatch`. Two composites of different declarations return `false` and a composite paired with a non-composite returns `ValueKindMismatch` (FR-376-AC-1, FR-376-AC-6). |
+| FR-369 | examined | \| `ValueKindMismatch` \| Equality reaches incompatible value variants other than the two-collection kind mismatch or two-population case, or two composites of one declaration with different slot counts; two composites of different declarations are unequal, not this fault ([FR-376](./FR-376-composite-equality-across-declarations.md)): kernel `src/equality.rs:192-207`; RT `src/exact/equality.rs:324-338`. \| |
+| TC-917 | examined | Give `equality::plan_pairs` two collection values with different kinds, two population values, a population and a non-population value, and another incompatible value-kind pair (a composite against a non-composite counts; two composites of different declarations do not, they give `false` under TC-924). Assert `CollectionKindMismatch`, `PopulationPair`, `ValueKindMismatch`, and `ValueKindMismatch` respectively. Check the pair is refused without a completed Boolean. |
+| TC-923 | examined | 5. Construct the same composite shape under two distinct declared (static) composite types and attempt checked construction. Confirm whether the checked evaluator is reached and inspect the meter before and after. 6. For each successful evaluation, compare the result-bearing seam's pair count, `plan |
+| TC-924 | examined | Each wrapped pair of different declarations gives `false` with a pair count of 2 (the wrapper pair and the inner pair), in both orders, with no refusal. Each control wrapper gives `true` with the same pair count of 2 for the `Option`, one-slot record and one-element collections. |
+| TC-925 | examined | Every form completes with no `CanonicalKeyUnavailable`. Both supply orders yield `[p100, c100]` for the `Set` and `OrderedSet`; the `Bag` visits `[p100, p100, c100, c100]`. |
+| TC-926 | examined | All eight builds complete. Each keeps `c100` with declaration `C` and its slots, and `p100` with declaration `P`. The `Set`, `Bag` and `OrderedSet` each hold two elements ordered `p100`, `c100` (FR-377); the `Sequence` keeps supply order. The admission was called once per element, in supply order. |
+| FR-376 | examined | - Text that changes with this requirement: the `ValueKindMismatch` row and the sentence on the equality catch-all in [FR-369](./FR-369-typed-checked-invariant-causes.md), FR-369-AC-2, step 4 of [TC-917](../test-cases/TC-917-typed-checked-invariant-causes.md), the module and `plan_pairs` doc comments of `src/equality.rs` ("operands that are not of one type, which a checked program never produces"), and [FR-375](./FR-375-composable-equality-effect-seam.md) AC-4 with step 5 of [TC-923](../test-cases/TC-923-composable-equality-effect-seam.md), which concern operands of different static types and k |
+
+## Verdict
+
+FINDINGS (2 high, 1 medium, 2 low). Soundness of the key: sorting lexicographically on (declaration key bytes, then slots) is a total preorder whenever the same-declaration slot order is total. Keys tie only for the same declaration with equal slot keys, which is exactly FR-376 equality. Two values of different declarations never tie, so stable-sort, membership and equality agree, and Value has no structural Hash or PartialEq that could disagree. The FR-375 charge schedule is unchanged: a different-declaration pair is one counted pair with no descent. The FR-376-AC-5 counts of 2 are correct for Option, record and collections. The amended text (three-dot diff against main a58033d) changes only the intended rows (FR-369 ValueKindMismatch and CanonicalKeyUnavailable, AC-2; FR-375-AC-4; TC-917 step 4; TC-923 step 5), and the FR-375-AC-4 and TC-923 rewording correctly narrows them to different static types.

@@ -35,6 +35,7 @@ Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [
 5. Wrap the pair `(p100, c100)` as the payload of two present `Option<Composite(P)>` values, as the only slot of two one-slot records of a declaration `W = [4; 32]`, and as the only element of two one-element `Sequence`, `Set` and `Bag` values of element type `Composite(P)` (built by `from_admitted`). Call `plan_equality` and `planned_equality` on each pair of wrappers, in both orders. As controls, wrap `(p100, p100')` the same way.
 6. Call `planned_equality` on `(p100, Integer 100)`, `(p100, none Option)`, `(p100, empty Sequence)` and `(p100, Reference)` in both orders. Build a composite `bad` with declaration `P` and slots `[Present(100), Present(100)]` and call it on `(p100, bad)`. Call it on two `Population` values.
 7. Call `member_equal(candidate = c100, member = p100)` under a recording meter.
+8. Call `form` for an `OrderedSet` of element type `Composite(P)` over `[c100, p100]`, `[p100, c100]` and `[c100, p100, c100]`, under a recording meter.
 
 ## Expected Results
 
@@ -42,6 +43,7 @@ Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [
 2. The log is `equality.plan-form`, `equality.plan`, one `equality.pair`, `equality.result-retain`, in that order. `plan-form` charges `ValueOccurrences` as the larger operand occurrence count and `WorkUnits` as their sum, as FR-375 states. `WorkUnits` is the plan-form sum plus the plan, pair and retain work units that FR-375 assigns, with one pair. `ResultUnits` is 1.
 3. `(p_ref, c_ref)` gives `Completed(false)` and no `ForeignReference`. The control `(p_ref, p_ref2)` refuses `ForeignReference { required: U1, supplied: U2 }`.
 4. `(p100, p100')` gives `true`; `(p100, p200)` gives `false`; `(c100, c100')` gives `true`. Pair counts are those of the slot walk: 2 for each one-slot pair (the composite pair and its slot pair).
-5. Each wrapped pair of different declarations gives `false` with a pair count of 2 (the wrapper pair and the inner pair), in both orders, with no refusal. Each control wrapper gives `true` with the same pair count of 2 for the `Option`, one-slot record and one-element collections.
+5. Each wrapped pair of different declarations gives `false` with a pair count of 2 (the wrapper pair and the inner pair), in both orders, with no refusal. Each control wrapper gives `true` with a pair count of 3 for the `Option`, the one-slot record and the one-element collections (the wrapper pair, the composite pair and its slot pair).
 6. Each pair of step 6 refuses `CheckedInvariant { cause: ValueKindMismatch }`. `(p100, bad)` refuses `ValueKindMismatch` (same declaration, different slot counts). Two populations refuse `PopulationPair`. No call returns a completed Boolean.
 7. `member_equal` gives `Completed(false)`. The log is `collection.member-walk` then `collection.member-test`, with `ValueOccurrences` and `WorkUnits` of the test charge equal to the pair count of 1.
+8. The `OrderedSet` completes with members `[c100, p100]`, `[p100, c100]` and `[c100, p100]` respectively, with no refusal. The first two charge one membership comparison; the third charges two in total (the second occurrence against the first, then the third against the first, where it merges).
