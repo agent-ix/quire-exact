@@ -36,6 +36,7 @@ Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [
 6. Call `planned_equality` on `(p100, Integer 100)`, `(p100, none Option)`, `(p100, empty Sequence)` and `(p100, Reference)` in both orders. Build a composite `bad` with declaration `P` and slots `[Present(100), Present(100)]` and call it on `(p100, bad)`. Call it on two `Population` values.
 7. Call `member_equal(candidate = c100, member = p100)` under a recording meter.
 8. Call `form` for an `OrderedSet` of element type `Composite(P)` over `[c100, p100]`, `[p100, c100]` and `[c100, p100, c100]`, under a recording meter.
+9. Hold each of `p100`, `c100`, `g100` at the one position of a union member of a declaration `U = [9; 32]` through `UnionValue::from_admitted`, and call `plan_equality` and `planned_equality` on the pairs of step 1, on `(p_ref, c_ref)` held the same way, and on a two-position member holding `(p100, 1)` against `(c100, 2)`. Wrap one held pair as the payload of two present `Option` values. Call `planned_equality` on a union against `Integer 1`, on two unions of one member with one and two payload values, and on two unions of different declarations.
 
 ## Expected Results
 
@@ -47,3 +48,4 @@ Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [
 6. Each pair of step 6 refuses `CheckedInvariant { cause: ValueKindMismatch }`. `(p100, bad)` refuses `ValueKindMismatch` (same declaration, different slot counts). Two populations refuse `PopulationPair`. No call returns a completed Boolean.
 7. `member_equal` gives `Completed(false)`. The log is `collection.member-walk` then `collection.member-test`, with `ValueOccurrences` and `WorkUnits` of the test charge equal to the pair count of 1.
 8. The `OrderedSet` completes with members `[c100, p100]`, `[p100, c100]` and `[c100, p100]` respectively, with no refusal. The first two charge one membership comparison; the third charges two in total (the second occurrence against the first, then the third against the first, where it merges).
+9. Every held pair of different declarations gives `false` with a pair count of 2 in both orders; the reference pair gives `false` with no `ForeignReference`; the two-position pair gives `false` with 3 pairs; the `Option` wrapper gives `false` with 3 pairs; the equal-declaration control gives `true` with the pair count of the bare composite plus 1. The union against `Integer 1`, the unions of different payload lengths and the unions of different declarations refuse `ValueKindMismatch`.

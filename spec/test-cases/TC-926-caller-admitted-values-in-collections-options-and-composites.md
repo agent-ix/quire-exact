@@ -21,6 +21,7 @@ Verify [FR-378](../functional/FR-378-caller-admitted-values-in-collections-optio
 4. Call `from_admitted_slots(R, [Present(c100)])` and then `retain_composite` on a fresh meter. Record the slot, the charge log, and `planned_equality` against `from_admitted_slots(R, [Present(p100)])`.
 5. With `c100` at element type `Composite(P)`, call `construct_collection` with a deferred element, `form_collection`, `ValueType::Composite(P).admits(c100)`, `OptionValue::present(Composite(P), c100)` and `evaluate_record` for `R` with that field. Repeat each with `p100`.
 6. Call `ValueType::admits` of a `Collection` type of element `Composite(C)` on a built `Set` of element `Composite(P)`, and the reverse. Clone the `Set` of step 1, run `planned_equality` against an identical build and against one built from `[p100, g100]`, and drop it.
+7. Call `UnionValue::from_admitted` of a member of `U` with `c100` at a position typed `Composite(P)`; then call `union` and `evaluate_union` with that shape for `c100` and, as a control, `p100`.
 
 ## Expected Results
 
@@ -30,3 +31,4 @@ Verify [FR-378](../functional/FR-378-caller-admitted-values-in-collections-optio
 4. The slot holds `c100` unchanged; the log holds one `composite.result-retain`; `planned_equality` gives `false`.
 5. With `c100`: `CheckedInvariant { cause: CollectionElementNotAdmitted }`, `ConstructionRefusal { component: Element(0), cause: TypeMismatch }`, `false`, `ConstructionRefusal { component: Payload, cause: TypeMismatch }`, `CheckedInvariant { cause: DeferredResultNotAdmitted }`. With `p100` each accepts.
 6. Neither collection type admits the other's value. The clone equals the original (`true`), the build from `[p100, g100]` gives `false`, and the drop completes.
+7. The union keeps the `C` payload and its slots unchanged. `union` refuses `Position(0)` `TypeMismatch` and `evaluate_union` refuses `DeferredResultNotAdmitted` for `c100`; both accept `p100`.
