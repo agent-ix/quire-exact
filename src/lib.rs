@@ -75,6 +75,7 @@ mod location;
 mod node;
 mod numeric;
 mod numeric_membership;
+mod numeric_type_equality;
 mod outcome;
 mod quantity;
 mod rational;
@@ -142,6 +143,7 @@ pub use numeric::{
     IntegerArithmetic, OrderedOperands, OrderingOperator, RationalArithmetic,
 };
 pub use numeric_membership::{NumericMembershipFailure, NumericMembershipOperand};
+pub use numeric_type_equality::{NumericTypeEndpoint, NumericTypeEqualityFailure};
 pub use outcome::{
     BoundViolation, CheckedInvariantCause, InexactTarget, Outcome, Refusal, Undefined,
 };
