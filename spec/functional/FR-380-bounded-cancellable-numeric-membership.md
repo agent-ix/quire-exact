@@ -8,6 +8,8 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-specification/FR-147
     type: references
+  - target: ix://agent-ix/quire-specification/FR-323
+    type: references
 ---
 # FR-380: Bounded cancellable Integer and Rational supplied membership
 
@@ -27,8 +29,10 @@ cancellation handle.
 - The initiating caller's original borrowed `Cancel` handle.
 - A finite maximum `B` in magnitude **bits**, where zero has magnitude length
   one, authenticated by the supplied-admission owner for this invocation.
-  This requirement assigns no numeric default and does not treat a logical
-  event ceiling, a value-only bound, or a type interval as proof of `B`.
+  The exact helper and a direct QSV supplied caller SHALL NOT invent or
+  default `B`. A QSL caller resolving QSpec FR-323's published 4096-bit
+  default supplies that authenticated finite `B` to QSV. A logical event
+  ceiling, a value-only bound, or a type interval is not proof of `B`.
 
 ## Outputs
 
@@ -85,15 +89,19 @@ cancellation handle.
    admission result is permitted. The arithmetic response gap is at most one
    fixed-width limb-pair step; allocator calls, if any, remain indivisible and
    carry no wall-clock latency claim.
-6. The supplied-admission consumer SHALL establish the authentic `B` premise
-   for the value **and all endpoints** before invoking these helpers. It SHALL
+6. The supplied-admission consumer SHALL receive an authentic finite `B` for
+   the value **and all endpoints** before invoking these helpers. QSL's caller
+   API omission resolves to QSpec FR-323's published 4096-bit default in the
+   effective request before QSL supplies `B` to QSV; neither the exact helper
+   nor a direct QSV supplied caller SHALL infer that default. It SHALL
    retain [QSV FR-109](ix://agent-ix/quire-semantic-value/FR-109)'s cumulative
    logical-event budget, rooted locus and original cancellation handle, and
    project helper failure without recoding it as traversal Limit or Invalid
    membership. Limb steps SHALL NOT debit an evaluator meter or create a
-   per-limb supplied event. If no authoritative admitted or caller-owned `B`
-   exists, the consumer SHALL retain typed `NumericDomain` unsupported status;
-   a convenient default or value-only measurement is not qualification.
+   per-limb supplied event. The supplied-admission consumer SHALL charge the
+   initiating event before checking `B`. A direct QSV supplied call without `B` SHALL retain typed
+   `NumericDomain` unsupported status; a value-only measurement is not
+   qualification.
 7. When claiming production acceptance, the owner SHALL verify the retained
    Integer representation and actual comparison path against these work,
    storage, cancellation and failure bounds. The current bool-only
@@ -109,7 +117,7 @@ cancellation handle.
 | FR-380-AC-3 | Observed production comparison steps do not exceed 2L for Integer or 4L for Rational, with fixed-width per-step work and constant auxiliary storage on the allocation-free path; source inspection confirms magnitude checks and borrowed limb iteration do not hide input-sized work/allocation. | Test |
 | FR-380-AC-4 | A pre-cancelled original handle prevents input-sized work. Deterministically cancelling during a longest admitted comparison returns that cause before the next step/result; a fresh-handle mutant fails. | Test |
 | FR-380-AC-5 | Inspection identifies whether the production comparison actually performs a fallible native conversion or storage request. For each reachable boundary, a denied checked conversion is typed capacity/resource refusal and an actual reservation denial carries its measured request; neither becomes false, unsupported size or traversal Limit, and retry after removing allocation denial agrees with a fresh run. When neither boundary exists, no artificial capacity/allocator refusal fixture or ceiling is required. | Inspection |
-| FR-380-AC-6 | The QSV supplied caller documents and tests the authentic magnitude ceiling for value plus every endpoint, invokes the qualified helper under one initiating logical event, preserves original cancellation and locus, and leaves evaluator charges unchanged. Without that carrier it returns `UnsupportedHelper::NumericDomain`; no numeric default is added. | Test |
+| FR-380-AC-6 | The QSV supplied caller documents and tests the authenticated finite B for value plus every endpoint, invokes the qualified helper after charging one initiating logical event, preserves original cancellation and locus, and leaves evaluator charges unchanged. A QSL caller resolving omitted B to QSpec FR-323's published 4096-bit default supplies that B; the exact helper and a direct QSV caller do not default B, and a direct QSV call without B returns `UnsupportedHelper::NumericDomain`. | Test |
 
 ## Dependencies
 
@@ -118,13 +126,15 @@ cancellation handle.
 - [QSpec FR-147](ix://agent-ix/quire-specification/FR-147) retains Integer and
   Rational domain meaning. This requirement changes the bounded helper
   response, not mathematical membership.
+- [QSpec FR-323](ix://agent-ix/quire-specification/FR-323) defines QSL's
+  effective `limits.supplied.numeric_magnitude_bits` and published default.
 - [QSV FR-109](ix://agent-ix/quire-semantic-value/FR-109) owns supplied phase,
   cumulative events, locus and consumer projection. Its current logical
-  budget is **not** a magnitude carrier. Establishing an authentic source for
-  `B` is an open prerequisite; until then NumericDomain remains unsupported.
+  budget is **not** a magnitude carrier. QSpec FR-323 defines the QSL-owned
+  `limits.supplied.numeric_magnitude_bits` carrier and its published default;
+  the QSL producer and QSV consumer remain pending.
 
 ## Status
 
-SPEC CANDIDATE. Kernel and QSV implementation/tests are unrun. No admitted or
-caller-owned magnitude ceiling covering the value and all endpoints has been
-identified in the measured published QSV supplied API.
+SPEC CANDIDATE. The kernel helper is implemented; QSL producer and QSV
+consumer implementation/tests remain pending.
