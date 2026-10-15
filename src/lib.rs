@@ -74,6 +74,7 @@ mod key;
 mod location;
 mod node;
 mod numeric;
+mod numeric_membership;
 mod outcome;
 mod quantity;
 mod rational;
@@ -140,6 +141,7 @@ pub use numeric::{
     rational_arithmetic_bits, retain_boolean, ArithmeticOperator, BooleanConnective,
     IntegerArithmetic, OrderedOperands, OrderingOperator, RationalArithmetic,
 };
+pub use numeric_membership::{NumericMembershipFailure, NumericMembershipOperand};
 pub use outcome::{
     BoundViolation, CheckedInvariantCause, InexactTarget, Outcome, Refusal, Undefined,
 };
