@@ -31,3 +31,9 @@ Checked all five FR-381 verification methods against the installed advisor. AC-5
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | Inspection alone cannot establish the required typed denial and retry behavior when conversion or reservation is reachable. The catalog advisor flags Inspection versus Test; pair source inspection with an executed denial/retry test for each reachable path. | spec/functional/FR-381-bounded-retained-numeric-type-equality.md:83 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-5 now requires source inspection plus an executed denial/retry test for each reachable conversion or reservation; the catalog advisor reports no mismatch. |

@@ -36,3 +36,10 @@ Reviewed FR-381 and TC-929 against merged FR-380/TC-928 and QSV FR-109/FR-117. I
 | --- | --- | --- | --- |
 | FND-001 | medium | TC-929 omits B = 0. Because zero has magnitude length one, even an all-zero domain must return typed unsupported size at B = 0; the exact-B fixture cannot cover this boundary. | spec/test-cases/TC-929-bounded-retained-numeric-type-equality.md:24-29 |
 | FND-002 | high | FR-381 scans alternating actual-left/expected-right endpoints, contradicting QSpec FR-323 AC-16's expected-first type-link order. With expected-lower and actual-lower both oversized, FR-381 reports actual while the authoritative envelope requires expected. Use expected lower/upper then actual lower/upper, and for Rational each side's numerator interval before denominator interval; update TC-929's first-refusal oracle. | spec/functional/FR-381-bounded-retained-numeric-type-equality.md:45-50,80 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | B = 0 is now an explicit Integer and Rational fixture; zero has one magnitude bit and refuses at the first expected endpoint. |
+| FND-002 | fixed | The FR now scans expected lower/upper before actual lower/upper, and Rational numerator interval before denominator interval, matching QSpec FR-323 AC-16. |

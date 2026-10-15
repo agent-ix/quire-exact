@@ -31,3 +31,9 @@ Checked cancellation, size refusal, resource denial, identity and purity. A pre-
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | Pre-cancelled oversized inputs have no defined stop precedence. Behavior only requires a poll before input-sized work, so an implementation can inspect O(1) endpoint lengths and return unsupported size before polling, while TC-929 expects the original cancellation cause. Require a poll before bound validation or state the intended precedence. | spec/functional/FR-381-bounded-retained-numeric-type-equality.md:69-73,82 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR now polls the original Cancel before bound validation, and TC-929 pre-cancels both in-bound and oversized domains. |
