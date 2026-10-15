@@ -5,7 +5,7 @@
 //! Borrowed sign, bit length and limb iteration use constant auxiliary storage;
 //! neither a native-size conversion nor an allocation is needed.
 
-use crate::{Cancel, CancelCause, Integer, IntegerInterval, RationalDomain};
+use crate::{Cancel, CancelCause, DecimalType, Integer, IntegerInterval, RationalDomain};
 
 /// The position of a retained numeric type endpoint.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34,6 +34,14 @@ pub enum NumericTypeEndpoint {
     RationalActualDenominatorLower,
     /// Actual Rational denominator interval upper endpoint.
     RationalActualDenominatorUpper,
+    /// Expected Decimal type lower coefficient endpoint.
+    DecimalExpectedLower,
+    /// Expected Decimal type upper coefficient endpoint.
+    DecimalExpectedUpper,
+    /// Actual Decimal type lower coefficient endpoint.
+    DecimalActualLower,
+    /// Actual Decimal type upper coefficient endpoint.
+    DecimalActualUpper,
 }
 
 /// A size or cancellation stop before retained numeric type equality completes.
@@ -85,6 +93,24 @@ impl RationalDomain {
         cancel: &Cancel,
     ) -> Result<bool, NumericTypeEqualityFailure> {
         rational_equal(self, actual, magnitude_bits, cancel, &Unobserved)
+    }
+}
+
+impl DecimalType {
+    /// Compare this expected retained Decimal type with an actual type under the caller's
+    /// finite magnitude ceiling.
+    ///
+    /// All four coefficient endpoints are checked before comparison. At most
+    /// `2 * ceil(magnitude_bits / 32)` borrowed limb pairs are visited. This method
+    /// allocates nothing, borrows the original cancellation handle, and makes no
+    /// semantic evaluator charge.
+    pub fn try_eq_bounded(
+        &self,
+        actual: &Self,
+        magnitude_bits: u64,
+        cancel: &Cancel,
+    ) -> Result<bool, NumericTypeEqualityFailure> {
+        decimal_equal(self, actual, magnitude_bits, cancel, &Unobserved)
     }
 }
 
@@ -216,6 +242,32 @@ fn rational_equal<O: Observation>(
     Ok(equal)
 }
 
+fn decimal_equal<O: Observation>(
+    expected: &DecimalType,
+    actual: &DecimalType,
+    magnitude_bits: u64,
+    cancel: &Cancel,
+    observation: &O,
+) -> Result<bool, NumericTypeEqualityFailure> {
+    check_endpoints(
+        &[
+            (expected.lower(), NumericTypeEndpoint::DecimalExpectedLower),
+            (expected.upper(), NumericTypeEndpoint::DecimalExpectedUpper),
+            (actual.lower(), NumericTypeEndpoint::DecimalActualLower),
+            (actual.upper(), NumericTypeEndpoint::DecimalActualUpper),
+        ],
+        magnitude_bits,
+        cancel,
+    )?;
+    let equal = equal_integer(expected.lower(), actual.lower(), cancel, observation)?
+        && equal_integer(expected.upper(), actual.upper(), cancel, observation)?
+        && expected.min_scale() == actual.min_scale()
+        && expected.max_scale() == actual.max_scale()
+        && expected.rounding() == actual.rounding();
+    poll(cancel)?;
+    Ok(equal)
+}
+
 fn equal_integer<O: Observation>(
     expected: &Integer,
     actual: &Integer,
@@ -247,6 +299,7 @@ mod tests {
     use core::str::FromStr;
 
     use super::*;
+    use crate::RoundingMode;
 
     fn interval(lower: Integer, upper: Integer) -> IntegerInterval {
         IntegerInterval::new(lower, upper).unwrap()
@@ -263,6 +316,16 @@ mod tests {
             interval(denominator_lower, denominator_upper),
         )
         .unwrap()
+    }
+
+    fn decimal(
+        lower: Integer,
+        upper: Integer,
+        min_scale: u64,
+        max_scale: u64,
+        rounding: RoundingMode,
+    ) -> DecimalType {
+        DecimalType::new(lower, upper, min_scale, max_scale, rounding).unwrap()
     }
 
     #[derive(Default)]
@@ -620,6 +683,245 @@ mod tests {
                 assert_eq!(integer.try_eq_bounded(&integer, 257, &fresh), Ok(true));
                 assert_eq!(rational.try_eq_bounded(&rational, 257, &fresh), Ok(true));
             }
+        }
+    }
+
+    /// Trace: FR-382-AC-1
+    #[test]
+    fn retained_decimal_fields_decide_equality_without_changing_borrowed_inputs() {
+        let expected = decimal(
+            Integer::from(-7_i64),
+            Integer::from(7_i64),
+            1,
+            2,
+            RoundingMode::Exact,
+        );
+        let same = decimal(
+            Integer::from_str("-7").unwrap(),
+            Integer::from_str("7").unwrap(),
+            1,
+            2,
+            RoundingMode::Exact,
+        );
+        let expected_before = expected.clone();
+        let same_before = same.clone();
+        let cancel = Cancel::new();
+        assert_eq!(expected.try_eq_bounded(&same, 3, &cancel), Ok(true));
+        for actual in [
+            decimal(
+                Integer::from(-6_i64),
+                Integer::from(7_i64),
+                1,
+                2,
+                RoundingMode::Exact,
+            ),
+            decimal(
+                Integer::from(-7_i64),
+                Integer::from(6_i64),
+                1,
+                2,
+                RoundingMode::Exact,
+            ),
+            decimal(
+                Integer::from(-7_i64),
+                Integer::from(7_i64),
+                0,
+                2,
+                RoundingMode::Exact,
+            ),
+            decimal(
+                Integer::from(-7_i64),
+                Integer::from(7_i64),
+                1,
+                3,
+                RoundingMode::Exact,
+            ),
+        ] {
+            let actual_before = actual.clone();
+            assert_eq!(expected.try_eq_bounded(&actual, 3, &cancel), Ok(false));
+            assert_eq!(actual, actual_before);
+        }
+        for rounding in RoundingMode::ALL {
+            let actual = decimal(Integer::from(-7_i64), Integer::from(7_i64), 1, 2, rounding);
+            let actual_before = actual.clone();
+            assert_eq!(
+                expected.try_eq_bounded(&actual, 3, &cancel),
+                Ok(rounding == RoundingMode::Exact)
+            );
+            assert_eq!(actual, actual_before);
+        }
+        assert_eq!(expected, expected_before);
+        assert_eq!(same, same_before);
+    }
+
+    /// Trace: FR-382-AC-2
+    #[test]
+    fn decimal_endpoints_accept_exact_b_and_report_first_one_over_b() {
+        let cancel = Cancel::new();
+        let exact = Integer::one().shifted_left(7);
+        let over = Integer::one().shifted_left(8);
+        let baseline = decimal(exact.neg(), exact.clone(), 0, 2, RoundingMode::Exact);
+        assert_eq!(
+            baseline.try_eq_bounded(&baseline.clone(), 8, &cancel),
+            Ok(true)
+        );
+        for (expected, actual, position) in [
+            (
+                decimal(over.neg(), exact.clone(), 0, 2, RoundingMode::Exact),
+                baseline.clone(),
+                NumericTypeEndpoint::DecimalExpectedLower,
+            ),
+            (
+                decimal(exact.neg(), over.clone(), 0, 2, RoundingMode::Exact),
+                baseline.clone(),
+                NumericTypeEndpoint::DecimalExpectedUpper,
+            ),
+            (
+                baseline.clone(),
+                decimal(over.neg(), exact.clone(), 0, 2, RoundingMode::Exact),
+                NumericTypeEndpoint::DecimalActualLower,
+            ),
+            (
+                baseline.clone(),
+                decimal(exact.neg(), over.clone(), 0, 2, RoundingMode::Exact),
+                NumericTypeEndpoint::DecimalActualUpper,
+            ),
+        ] {
+            assert_eq!(
+                expected.try_eq_bounded(&actual, 8, &cancel),
+                Err(NumericTypeEqualityFailure::UnsupportedSize {
+                    position,
+                    measured_bits: 9,
+                    limit_bits: 8,
+                })
+            );
+        }
+        let double_over = decimal(over.neg(), over.clone(), 0, 2, RoundingMode::Exact);
+        assert_eq!(
+            double_over.try_eq_bounded(&double_over, 8, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalExpectedLower,
+                measured_bits: 9,
+                limit_bits: 8,
+            })
+        );
+        let expected_upper_over = decimal(exact.neg(), over.clone(), 0, 2, RoundingMode::Exact);
+        let actual_lower_over = decimal(over.neg(), exact.clone(), 0, 2, RoundingMode::Exact);
+        assert_eq!(
+            expected_upper_over.try_eq_bounded(&actual_lower_over, 8, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalExpectedUpper,
+                measured_bits: 9,
+                limit_bits: 8,
+            })
+        );
+        assert_eq!(
+            baseline.try_eq_bounded(&double_over, 8, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalActualLower,
+                measured_bits: 9,
+                limit_bits: 8,
+            })
+        );
+        let actual_over = decimal(exact.neg(), over, 0, 3, RoundingMode::NearestEven);
+        let small_expected = decimal(
+            Integer::from(-1_i64),
+            Integer::one(),
+            0,
+            2,
+            RoundingMode::Exact,
+        );
+        assert_eq!(
+            small_expected.try_eq_bounded(&actual_over, 8, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalActualUpper,
+                measured_bits: 9,
+                limit_bits: 8,
+            })
+        );
+        let zero = decimal(Integer::zero(), Integer::zero(), 0, 0, RoundingMode::Exact);
+        assert_eq!(zero.try_eq_bounded(&zero, 1, &cancel), Ok(true));
+        assert_eq!(
+            zero.try_eq_bounded(&zero, 0, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalExpectedLower,
+                measured_bits: 1,
+                limit_bits: 0,
+            })
+        );
+    }
+
+    /// Trace: FR-382-AC-3
+    #[test]
+    fn decimal_borrowed_limb_work_and_storage_stay_bounded() {
+        for bits in [32_u64, 33, 128, 129, 257] {
+            let value = Integer::one().shifted_left(bits - 1).add(&Integer::one());
+            let expected = decimal(value.neg(), value.clone(), 0, 2, RoundingMode::Exact);
+            let actual = decimal(value.neg(), value.clone(), 0, 2, RoundingMode::Exact);
+            let cancel = Cancel::new();
+            let steps = Steps::default();
+            let allocation = allocation_counter::measure(|| {
+                assert_eq!(
+                    decimal_equal(&expected, &actual, bits, &cancel, &steps),
+                    Ok(true)
+                );
+            });
+            assert_eq!(steps.0.get(), 2 * bits.div_ceil(32));
+            assert_eq!(allocation.count_total, 0);
+
+            let late = decimal(
+                value.neg(),
+                value.add(&Integer::from(2_i64)),
+                0,
+                2,
+                RoundingMode::Exact,
+            );
+            let steps = Steps::default();
+            assert_eq!(
+                decimal_equal(&expected, &late, bits, &cancel, &steps),
+                Ok(false)
+            );
+            assert_eq!(steps.0.get(), 2 * bits.div_ceil(32));
+        }
+    }
+
+    /// Trace: FR-382-AC-4
+    #[test]
+    fn decimal_original_cancel_preempts_size_and_late_comparison() {
+        let value = Integer::one().shifted_left(256).add(&Integer::one());
+        let expected = decimal(value.neg(), value, 0, 2, RoundingMode::Exact);
+        for cause in [CancelCause::Requested, CancelCause::Deadline] {
+            let cancelled = Cancel::new();
+            cancelled.cancel(cause);
+            assert_eq!(
+                expected.try_eq_bounded(&expected, 0, &cancelled),
+                Err(NumericTypeEqualityFailure::Cancelled(cause))
+            );
+            assert_eq!(
+                expected.try_eq_bounded(&expected, 257, &cancelled),
+                Err(NumericTypeEqualityFailure::Cancelled(cause))
+            );
+            assert_eq!(cancelled.tripped(), Some(cause));
+
+            for at in [17, 18] {
+                let cancel = Cancel::new();
+                let observer = CancelAt {
+                    cancel: &cancel,
+                    steps: Steps::default(),
+                    at,
+                    cause,
+                };
+                assert_eq!(
+                    decimal_equal(&expected, &expected, 257, &cancel, &observer),
+                    Err(NumericTypeEqualityFailure::Cancelled(cause))
+                );
+                assert_eq!(observer.steps.0.get(), at);
+                assert_eq!(cancel.tripped(), Some(cause));
+            }
+            assert_eq!(
+                expected.try_eq_bounded(&expected, 257, &Cancel::new()),
+                Ok(true)
+            );
         }
     }
 }
