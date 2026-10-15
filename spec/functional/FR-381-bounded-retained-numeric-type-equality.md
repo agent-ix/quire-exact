@@ -21,8 +21,8 @@ ceiling `B`. This is type equality over both retained domains, separate from
 
 ## Inputs
 
-- Borrowed left and right `IntegerInterval` values, or borrowed left and right
-  `RationalDomain` values.
+- Borrowed expected and actual `IntegerInterval` values, or borrowed expected
+  and actual `RationalDomain` values, in that order.
 - The original borrowed `Cancel` handle and a finite caller-authenticated
   maximum magnitude bit length `B`; zero has magnitude length one. The kernel
   assigns no default and does not derive `B` from one operand or a work budget.
@@ -42,14 +42,17 @@ ceiling `B`. This is type equality over both retained domains, separate from
    interval equality and Rational domain equality. A failed bound or
    cancellation check SHALL NOT fall through to ordinary `Eq`, return `false`,
    or invoke the bool-only membership helpers.
-2. When endpoint comparison is requested, the kernel SHALL first check every endpoint's
-   magnitude length against `B`, in this stable order: left lower, right lower,
-   left upper, right upper for Integer; left numerator lower, right numerator
-   lower, left numerator upper, right numerator upper, left denominator lower,
-   right denominator lower, left denominator upper, right denominator upper for
-   Rational. The first oversized endpoint SHALL produce typed unsupported size
-   naming that exact position and measured bits. Magnitude checking SHALL NOT
-   materialize an absolute value, `BigInt`, clone, or radix string.
+2. When endpoint comparison is requested, the kernel SHALL first check every
+   endpoint's magnitude length against `B`, in this stable order: expected
+   lower, expected upper, actual lower, actual upper for Integer; expected
+   numerator lower, expected numerator upper, expected denominator lower,
+   expected denominator upper, actual numerator lower, actual numerator upper,
+   actual denominator lower, actual denominator upper for Rational. The first
+   oversized endpoint SHALL produce typed unsupported size naming that exact
+   position and measured bits. The kernel SHALL poll the original `Cancel`
+   before this bound validation, so a pre-cancelled oversized call returns
+   cancellation first. Magnitude checking SHALL NOT materialize an absolute
+   value, `BigInt`, clone, or radix string.
 3. When all endpoint checks succeed, Integer equality SHALL compare the lower
    endpoints and upper endpoints for mathematical integer equality. Rational
    equality SHALL compare the corresponding numerator and positive-denominator
@@ -66,7 +69,7 @@ ceiling `B`. This is type equality over both retained domains, separate from
    required, the kernel SHALL use checked sizing and fallible reservation and
    report capacity or actual allocation denial separately from inequality and
    unsupported size.
-5. The kernel SHALL poll the original `Cancel` before input-sized work, before
+5. The kernel SHALL poll the original `Cancel` before bound validation, before
    each limb-pair step, and before publishing equality. Cancellation SHALL
    retain the original cause and prevent the next step or result. Its arithmetic
    response gap is at most one fixed-width limb-pair step; an actual allocator
@@ -77,10 +80,10 @@ ceiling `B`. This is type equality over both retained domains, separate from
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-381-AC-1 | With authenticated B, equal and unequal Integer intervals and Rational domains return the same Boolean equality as independent endpoint arithmetic, including negative, zero, and denominator endpoints, without mutation. Equal spellings or identity of borrowed objects do not substitute for endpoint equality. | Test |
-| FR-381-AC-2 | Every one of the four Integer and eight Rational endpoint positions completes at exact B and returns typed unsupported size when made one bit over B, before endpoint comparison. Two oversized endpoints report the first in the stated order; an oversized endpoint on the right is never skipped by a left-only check. | Test |
+| FR-381-AC-2 | At B >= 1, every one of the four Integer and eight Rational endpoint positions completes at exact B and returns typed unsupported size when made one bit over B, before endpoint comparison. Two oversized endpoints report the first in the stated expected-before-actual order. At B = 0, even zero (one magnitude bit) is refused at the first expected endpoint. | Test |
 | FR-381-AC-3 | Observed production comparisons use no more than 2L Integer or 4L Rational limb-pair steps, fixed-width work per step, and the measured temporary-storage bound, including inline/Large and 32-bit limb boundaries. Inspection finds no input-sized clone or unbounded fallback. | Test |
-| FR-381-AC-4 | A pre-cancelled original handle prevents input-sized work; cancellation on a late observed limb step stops before the next step or equality result with the original cause. | Test |
-| FR-381-AC-5 | Inspection establishes whether production performs native-size conversion or allocation. Each reachable denial is typed with its measured request and retry behavior; an allocation-free route with no failing conversion has no synthetic resource fixture. | Inspection |
+| FR-381-AC-4 | A pre-cancelled original handle stops before bound validation, including when the first endpoint exceeds B; cancellation on a late observed limb step stops before the next step or equality result with the original cause. | Test |
+| FR-381-AC-5 | Source inspection establishes whether production performs native-size conversion or allocation. For each reachable boundary, an executed denial/retry test establishes the typed measured request and retry result. An allocation-free route with no failing conversion has no synthetic resource fixture. | Test |
 
 ## Dependencies
 

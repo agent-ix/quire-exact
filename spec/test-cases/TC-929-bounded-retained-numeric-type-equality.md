@@ -21,20 +21,27 @@ operations. Construct valid retained domains before observing the helper.
    endpoint, including negative and zero Integer bounds and positive Rational
    denominator bounds. Derive expected equality independently from endpoint
    arithmetic. Check that neither borrowed domain changes.
-2. Set B to the largest endpoint magnitude length. For each of the four
-   Integer and eight Rational positions, exercise exact B and then a valid
-   domain whose selected endpoint is B+1 bits. Assert the typed side/endpoint,
-   measured bits and B before comparison. Make two positions oversized to
-   verify the stated first-refusal order, including a small left domain with
-   an oversized right endpoint.
+2. For B >= 1, set B to the largest endpoint magnitude length. For each of
+   the four Integer and eight Rational positions, exercise exact B and then a
+   valid domain whose selected endpoint is B+1 bits. Assert the typed
+   expected/actual side, endpoint, measured bits and B before comparison.
+   Make expected and actual positions oversized together to verify
+   expected-first refusal; within each side verify lower before upper and,
+   for Rational, numerator interval before denominator interval. Include a
+   small expected domain with an oversized actual endpoint. With B = 0, use
+   valid all-zero Integer intervals and a Rational domain with zero numerator
+   interval and positive denominator interval. Assert zero's one-bit magnitude
+   yields unsupported size at the first expected lower endpoint before
+   comparison in each family.
 3. Observe production limb-pair steps for longest equal and late-unequal
    comparisons at inline/Large and 32-bit boundaries. Assert `2L`/`4L` bounds,
    fixed-width steps and the actual storage envelope. Inspect the production
    source for input-sized cloning or fallback. Exercise capacity or allocation
    denial only if an actual reachable conversion/reservation exists; check its
    native request and retry without denial.
-4. Pre-cancel the original handle and cancel it at an observed late limb step.
-   Assert the original cause, no further comparison step, and no Boolean result.
+4. Pre-cancel the original handle on both in-bound and oversized domains, then
+   cancel it at an observed late limb step. Assert the original cause before
+   bound validation, no further comparison step, and no Boolean result.
 
 ## Expected Results
 
