@@ -428,6 +428,12 @@ mod tests {
             baseline.try_eq_bounded(&baseline.clone(), 8, &cancel),
             Ok(true)
         );
+        let exact_denominator_lower =
+            domain(exact.neg(), exact.clone(), exact.clone(), exact.clone());
+        assert_eq!(
+            exact_denominator_lower.try_eq_bounded(&exact_denominator_lower.clone(), 8, &cancel),
+            Ok(true)
+        );
         let variants = [
             domain(over.neg(), exact.clone(), Integer::one(), exact.clone()),
             domain(exact.neg(), over.clone(), Integer::one(), exact.clone()),
