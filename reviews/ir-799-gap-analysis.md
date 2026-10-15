@@ -35,3 +35,13 @@ The computed Test Matrix tags all four FR-382 criteria to live tests. AC-2 has a
 Plan completion: not assessed.
 
 `quire matrix --scope . --format json` reports FR-382-AC-1 through AC-4 tagged to `src/numeric_type_equality.rs` tests at lines 691, 759, 838, and 872. Focused `cargo test --lib decimal_` passed 14 tests. The AC-2 test at lines 799-807 uses only the expected-lower/expected-upper oversized pair; the other ordering edges remain untested.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At frozen head `22024bc5647c7613de62ab687947a3d82d88fde6`, `src/numeric_type_equality.rs:808-824` adds two oversized-endpoint fixtures proving expected-upper precedes actual-lower and actual-lower precedes actual-upper. Together with the original expected-lower/expected-upper fixture, the tests establish every adjacent priority in the required order. The focused AC-2 test passed; no other code changed. |
+
+## Follow-up verdict
+
+**PASS** — The only finding is fixed at `22024bc5647c7613de62ab687947a3d82d88fde6`; no regression appears in the follow-up diff.
