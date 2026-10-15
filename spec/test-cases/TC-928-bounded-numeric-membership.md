@@ -31,25 +31,28 @@ already reduced rationals and domains before observing the membership helper.
 3. Observe production limb-pair steps on a longest admitted comparison, at
    inline/Large representation and 32-bit limb boundaries. Assert the 2L/4L
    ceilings, no input-sized hidden work/storage, and unchanged operands.
-   Trigger a checked native capacity case. If the implementation allocates,
-   deny its actual fallible reservation and assert the reported request; retry
-   without denial.
+   Inspect whether the production path has a fallible native-size conversion
+   or allocation. Exercise a typed capacity refusal only at a genuinely
+   reachable checked conversion. If it allocates, deny its actual fallible
+   reservation, assert the reported request, and retry without denial. Do not
+   fabricate a failure case for an allocation-free path with no failing
+   conversion.
 4. Pre-cancel the original handle, then cancel it on an observed late limb
    step. Assert no later step or completed result, original cause, and no
    replacement handle. Check nonmembership remains Boolean false, distinct
    from all typed stops.
 5. In QSV's supplied caller, use the authenticated bound for value and all
    endpoints; assert its independently enumerated logical event count and
-   rooted locus, no extra limb event, no evaluator debit, and typed resource
-   or cancellation projection. With the magnitude carrier absent, assert
-   `UnsupportedHelper::NumericDomain` instead of completed membership.
+   rooted locus, no extra limb event, no evaluator debit, and typed cancellation
+   or reachable resource-failure projection. With the magnitude carrier absent,
+   assert `UnsupportedHelper::NumericDomain` instead of completed membership.
 
 ## Expected Results
 
 Membership agrees with the domain rule; exact-B operands complete and each
 one-over operand is identified as unsupported size. Comparison and storage
-stay inside the measured envelope. Native capacity, actual allocation denial
-if reachable, cancellation, and nonmembership remain distinguishable. QSV
+stay inside the measured envelope. Reachable native-capacity or actual
+allocation denial, cancellation, and nonmembership remain distinguishable. QSV
 does not claim NumericDomain support until it authenticates a magnitude bound
 for every compared operand.
 

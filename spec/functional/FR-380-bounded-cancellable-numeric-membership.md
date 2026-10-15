@@ -33,11 +33,12 @@ cancellation handle.
 ## Outputs
 
 - Completed Boolean membership, with no mutation of the value or domain; or
-- A typed failure distinguishing an operand exceeding `B`, checked native
-  capacity/size failure, and cancellation with the original `CancelCause`.
-  A comparison requiring any allocation SHALL additionally distinguish actual
-  allocation denial and report its real request; an allocation-free comparison
-  has no such reachable outcome.
+- A typed failure distinguishing an operand exceeding `B` from cancellation
+  with the original `CancelCause`. Where the production path actually converts
+  a size or requests storage, a failed checked conversion SHALL have a distinct
+  capacity/size classification, and an actual allocation denial SHALL retain
+  its real request. An allocation-free path with no fallible native conversion
+  has neither of those resource failures to report.
 
 ## Behavior
 
@@ -53,10 +54,11 @@ cancellation handle.
    denominator interval. Any one operand above `B` SHALL return typed
    unsupported size identifying that operand and its measured bit length,
    without performing a membership comparison or returning nonmembership.
-   The kernel SHALL check conversion of `B` to a native limb count and any storage layout
-   before using that conversion, returning a distinct capacity/size
-   failure on overflow. The bound check itself SHALL NOT materialize a
-   `BigInt`, absolute value, clone, or radix string.
+   If the production path converts `B` to a native limb count or storage
+   layout, the kernel SHALL check that conversion before using it and return
+   a distinct capacity/size failure if it overflows. The kernel SHALL NOT
+   materialize a `BigInt`, absolute value, clone, or radix string while checking
+   the bound.
 3. When input bounds admit the operands, completed Integer membership SHALL be the existing
    inclusive `lower <= value <= upper`; completed Rational membership SHALL
    check the reduced numerator and positive denominator against their
@@ -106,7 +108,7 @@ cancellation handle.
 | FR-380-AC-2 | Exact-B value and every exact-B endpoint are accepted for comparison; one-over-B in each of the three Integer or six Rational operand positions returns typed unsupported size naming that position and measured bits before any comparison. A value-only guard mutant fails an endpoint case. | Test |
 | FR-380-AC-3 | Observed production comparison steps do not exceed 2L for Integer or 4L for Rational, with fixed-width per-step work and constant auxiliary storage on the allocation-free path; source inspection confirms magnitude checks and borrowed limb iteration do not hide input-sized work/allocation. | Test |
 | FR-380-AC-4 | A pre-cancelled original handle prevents input-sized work. Deterministically cancelling during a longest admitted comparison returns that cause before the next step/result; a fresh-handle mutant fails. | Test |
-| FR-380-AC-5 | Checked B-to-native/layout failure is typed capacity/resource refusal, not false, unsupported size or a traversal limit. If implementation requests storage, denial at the actual reservation returns a distinct typed allocation failure carrying its measured request and retry without denial agrees with a fresh run. | Test |
+| FR-380-AC-5 | Inspection identifies whether the production comparison actually performs a fallible native conversion or storage request. For each reachable boundary, a denied checked conversion is typed capacity/resource refusal and an actual reservation denial carries its measured request; neither becomes false, unsupported size or traversal Limit, and retry after removing allocation denial agrees with a fresh run. When neither boundary exists, no artificial capacity/allocator refusal fixture or ceiling is required. | Inspection |
 | FR-380-AC-6 | The QSV supplied caller documents and tests the authentic magnitude ceiling for value plus every endpoint, invokes the qualified helper under one initiating logical event, preserves original cancellation and locus, and leaves evaluator charges unchanged. Without that carrier it returns `UnsupportedHelper::NumericDomain`; no numeric default is added. | Test |
 
 ## Dependencies
