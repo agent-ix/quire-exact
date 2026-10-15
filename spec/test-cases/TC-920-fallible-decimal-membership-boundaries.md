@@ -74,12 +74,20 @@ algorithm into QSV or infer an expected count from the counter under test.
    FR-109 event order and N for a fixture with Decimal membership and another
    argument sharing an initially spent budget. Run N-1 and N. Observe denial
    before the real denied event/helper, successful cumulative spend and the
-   owning phase/locus. Repeat native scratch denial, capacity refusal and
-   cancellation through that caller; assert no descriptor is partially admitted,
-   no helper limb debit or fifth logical event appears, and an external
-   evaluator meter remains unchanged. Exercise replay's final membership
-   through the same admission owner and retain conversion ownership where
-   that shared operation is initiated by conversion.
+   owning phase/locus. Check reachable inclusive membership, adjacent
+   nonmembership and original-handle cancellation through that caller; assert
+   no descriptor is partially admitted, no helper limb debit or fifth logical
+   event appears, and an external evaluator meter remains unchanged. In a
+   separate QSV projection test, construct typed kernel Allocation and
+   Capacity failures with distinct measured fields and pass each through the
+   same production error mapping at a rooted Decimal locus. Assert distinct
+   supplied-admission causes and preservation of measurements and locus,
+   without projecting either as nonmembership or a traversal limit. This
+   projection check does not claim that the public `DecimalType::try_contains`
+   call can inject allocator denial or construct synthetic capacity overflow;
+   step 4 owns the actual kernel mechanism controls. Exercise replay's final
+   membership through the same admission owner and retain conversion
+   ownership where that shared operation is initiated by conversion.
 7. Analyze the final production helper, inline fixed-width unsigned-magnitude
    stream and maintained Large borrowed iterator against
    the Euclidean decomposition, remainder accumulation, carry width, sign
@@ -98,12 +106,16 @@ requests satisfy the symbolic admitted envelope on both actual representation
 paths. Inline streams yield at most four least-significant-first u32 limbs,
 preserve the full magnitude of i128 MIN, and leave initially empty caches empty.
 Neither stream allocates or constructs a BigInt image; the helper retains its
-one fallible scratch request. Actual allocation denial,
-checked capacity refusal and original-handle cancellation have distinct typed
-causes; stopped calls release scratch and expose no accepted result. Integrated
-N/N-1 controls preserve existing phase ownership, cumulative spend and event
-order without evaluator debit. The qualification record establishes the
-production arithmetic/storage/polling mechanism and states allocator limitations.
+one fallible scratch request. The kernel controls observe actual allocation
+denial, checked capacity refusal and original-handle cancellation as distinct
+typed causes; stopped kernel calls release scratch and expose no accepted
+result. Integrated N/N-1, membership, nonmembership and cancellation controls
+preserve supplied phase ownership, cumulative spend, rooted locus and event
+order without evaluator debit. Separate QSV production-projection controls
+preserve constructed kernel allocation/capacity causes and measurements at
+that locus; they do not claim public integrated fault injection. The
+qualification record establishes the production arithmetic/storage/polling
+mechanism and states allocator limitations.
 
 ## Status
 
