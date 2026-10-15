@@ -47,6 +47,15 @@ const _: () = assert!(
     "quire.value.text.unicode-17.0.0/v1 requires Unicode 17.0.0 normalization tables"
 );
 
+/// A valid UTF-8 scalar has exactly one byte that is not a continuation byte.
+/// Callers pass `&str`, so every byte sequence counted here is validated UTF-8.
+fn scalar_count(text: &str) -> usize {
+    text.as_bytes()
+        .iter()
+        .filter(|byte| **byte & 0xc0 != 0x80)
+        .count()
+}
+
 /// One QSpec-FR-141 text profile.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum TextProfile {
@@ -121,7 +130,7 @@ impl TextProfile {
         let count = match self {
             Self::BinaryUtf8 => retained.len(),
             Self::UnicodeScalars | Self::Nfc | Self::Nfd | Self::Nfkc | Self::Nfkd => {
-                retained.chars().count()
+                scalar_count(retained)
             }
         };
         length_amount(count)
@@ -426,8 +435,7 @@ fn prepare<const N: usize>(
         check_length(bound, &inputs)?;
     }
     meter.charge(
-        Charge::new(ChargePoint::TextDecodeScalars)
-            .size(LimitKind::TextScalars, sum(|text| text.chars().count())),
+        Charge::new(ChargePoint::TextDecodeScalars).size(LimitKind::TextScalars, sum(scalar_count)),
     )?;
     // Non-normalizing profiles charge no `text.normalize-*` point.
     let Some(form) = profile.normalization() else {
@@ -511,5 +519,103 @@ mod tests {
             outcome,
             Outcome::Refused(Refusal::TextLengthOutOfDomain { target }) if target == text_type
         ));
+    }
+
+    #[test]
+    fn valid_utf8_scalar_count_matches_char_iteration() {
+        for input in [
+            "",
+            "ASCII",
+            "é",
+            "€",
+            "🦀",
+            "e\u{301}",
+            "🦀e\u{301}€",
+            "\u{212B}\u{FB03}",
+        ] {
+            assert_eq!(scalar_count(input), input.chars().count(), "{input:?}");
+            for form in [
+                NormalizationForm::Nfc,
+                NormalizationForm::Nfd,
+                NormalizationForm::Nfkc,
+                NormalizationForm::Nfkd,
+            ] {
+                let normalized: String = form.apply(input).collect();
+                assert_eq!(
+                    scalar_count(&normalized),
+                    normalized.chars().count(),
+                    "{form:?} of {input:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn admitted_lengths_and_decode_charges_match_scalar_counts() {
+        let input = "🦀e\u{301}€";
+        let payload = TextPayload::from_utf8(input.as_bytes()).unwrap();
+        let decoded = length_amount(input.chars().count());
+
+        for profile in TextProfile::ALL {
+            let mut meter = generous_meter();
+            let expected: String = match profile.normalization() {
+                Some(form) => form.apply(input).collect(),
+                None => input.to_owned(),
+            };
+            let length = if profile == TextProfile::BinaryUtf8 {
+                length_amount(expected.len())
+            } else {
+                length_amount(expected.chars().count())
+            };
+            let text_type = TextType::new(length, length, profile).unwrap();
+            let admitted = admit_text(&payload, &text_type, &mut meter)
+                .completed()
+                .expect("exact profile length is admitted");
+            assert_eq!(admitted.retained(), expected, "{profile:?}");
+            assert_eq!(admitted.length(), length, "{profile:?}");
+            assert_eq!(
+                meter.consumed(LimitKind::TextScalars),
+                decoded,
+                "{profile:?}"
+            );
+            #[cfg(feature = "test-support")]
+            {
+                let charges = meter.admitted_charges();
+                assert_eq!(charges[0].point, ChargePoint::TextInputBytes);
+                assert_eq!(charges[1].point, ChargePoint::TextDecodeScalars);
+                assert_eq!(charges[1].text_scalars, Some(decoded));
+                assert_eq!(charges.last().unwrap().point, ChargePoint::TextResultRetain);
+                if profile.normalization().is_some() {
+                    assert_eq!(charges[2].point, ChargePoint::TextNormalizeInput);
+                    assert!(charges[3..charges.len() - 1]
+                        .iter()
+                        .all(|charge| charge.point == ChargePoint::TextNormalizeOutput));
+                }
+            }
+
+            let too_short = TextType::new(0, length - 1, profile).unwrap();
+            let mut meter = generous_meter();
+            assert!(matches!(
+                admit_text(&payload, &too_short, &mut meter),
+                Outcome::Refused(Refusal::TextLengthOutOfDomain { target }) if target == too_short
+            ));
+        }
+
+        let mut limits = *generous_meter().limits();
+        limits.text_scalars = decoded - 1;
+        let mut meter = Meter::new(limits);
+        let text_type = TextType::new(0, decoded, TextProfile::UnicodeScalars).unwrap();
+        let Outcome::Incomplete(incomplete) = admit_text(&payload, &text_type, &mut meter) else {
+            panic!("decode charge must refuse above its scalar limit");
+        };
+        assert_eq!(incomplete.charge_point, ChargePoint::TextDecodeScalars);
+        assert_eq!(incomplete.limit_kind, LimitKind::TextScalars);
+        assert_eq!(incomplete.next_charge, decoded.into());
+        assert_eq!(meter.consumed(LimitKind::TextScalars), 0);
+
+        assert_eq!(
+            TextPayload::from_utf8(&[0x80]),
+            Err(InvalidUtf8 { valid_up_to: 0 })
+        );
     }
 }
