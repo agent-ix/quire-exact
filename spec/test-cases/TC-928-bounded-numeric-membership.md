@@ -42,10 +42,13 @@ already reduced rationals and domains before observing the membership helper.
    replacement handle. Check nonmembership remains Boolean false, distinct
    from all typed stops.
 5. In QSV's supplied caller, use the authenticated bound for value and all
-   endpoints; assert its independently enumerated logical event count and
-   rooted locus, no extra limb event, no evaluator debit, and typed cancellation
-   or reachable resource-failure projection. With the magnitude carrier absent,
-   assert `UnsupportedHelper::NumericDomain` instead of completed membership.
+   endpoints, including B = 4096 supplied by QSL after caller API omission;
+   assert its independently enumerated logical event count, with the
+   initiating event charged before the B check, rooted locus, no extra limb
+   event, no evaluator debit, and typed cancellation
+   or reachable resource-failure projection. On a direct QSV supplied call
+   without B, assert `UnsupportedHelper::NumericDomain` instead of completed
+   membership; neither QSV nor the exact helper supplies a default.
 
 ## Expected Results
 
@@ -58,6 +61,6 @@ for every compared operand.
 
 ## Status
 
-PLANNED/UNRUN. The published QSV supplied interface has no measured magnitude
-carrier covering all six Rational operands; this case cannot yet serve as
-runtime qualification.
+PLANNED/UNRUN. QSpec FR-323 defines the QSL-owned magnitude carrier; the QSL
+producer and QSV caller are pending, so this case cannot yet serve as runtime
+qualification.
