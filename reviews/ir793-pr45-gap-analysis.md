@@ -38,3 +38,9 @@ Reviewed PR #45 at 10ae170d986d63dfeef46ea5fc05127cf1ddd8ce against base 66c6e05
 Plan completion: not assessed
 
 The strict computed matrix finds FR-381-AC-1 through AC-5 tagged by the new tests. This diff-scoped finding concerns semantic coverage within AC-2, not tag presence. Production source has no input-sized clone, unchecked native-size conversion, allocation, fallback, or unowned behavior in the changed path. The wider repository matrix reports 19 untagged criteria outside this diff, which this review did not attribute to PR #45. The existing full make ci receipt passes; spec validation receipt /tmp/ir793-validate.log reports 1/1 docs grammar-clean.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At head 2152d1e553d280c0b6786fe0c684319fd6afeca4, the Rational test compares a valid domain whose denominator lower and upper are both exactly eight bits against its clone at B=8. This covers expected and actual denominator lower; a denominator-lower-only `>= B` mutant would return unsupported size and fail the Ok(true) assertion. The focused test passed. |
