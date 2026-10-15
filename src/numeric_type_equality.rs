@@ -805,6 +805,24 @@ mod tests {
                 limit_bits: 8,
             })
         );
+        let expected_upper_over = decimal(exact.neg(), over.clone(), 0, 2, RoundingMode::Exact);
+        let actual_lower_over = decimal(over.neg(), exact.clone(), 0, 2, RoundingMode::Exact);
+        assert_eq!(
+            expected_upper_over.try_eq_bounded(&actual_lower_over, 8, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalExpectedUpper,
+                measured_bits: 9,
+                limit_bits: 8,
+            })
+        );
+        assert_eq!(
+            baseline.try_eq_bounded(&double_over, 8, &cancel),
+            Err(NumericTypeEqualityFailure::UnsupportedSize {
+                position: NumericTypeEndpoint::DecimalActualLower,
+                measured_bits: 9,
+                limit_bits: 8,
+            })
+        );
         let actual_over = decimal(exact.neg(), over, 0, 3, RoundingMode::NearestEven);
         let small_expected = decimal(
             Integer::from(-1_i64),
