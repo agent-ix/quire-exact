@@ -95,8 +95,11 @@ impl Model {
     ) -> Result<(), Refusal> {
         let size = |kind| Self::size_short(limits, requests, kind).map(|amount| (kind, amount));
         let cumulative = |kind: LimitKind, amount: u64| {
-            let total = u128::from(self.consumed[slot(kind)]) + u128::from(amount);
-            (total > u128::from(limit_of(limits, kind))).then_some((kind, amount))
+            // Overflow of the exact sum is itself a refusal.
+            let fits = self.consumed[slot(kind)]
+                .checked_add(amount)
+                .is_some_and(|total| total <= limit_of(limits, kind));
+            (!fits).then_some((kind, amount))
         };
         let short = size(LimitKind::IntegerBits)
             .or_else(|| size(LimitKind::DecimalDigits))
