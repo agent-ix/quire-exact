@@ -59,6 +59,33 @@ fn admission_denies_zero_and_borrows_each_original_nonzero_integer() {
     assert_eq!(int(-7).div_mod_floor(token), (int(-4), int(1)));
 }
 
+/// Trace: FR-374-AC-1
+#[test]
+fn admitting_an_inline_integer_does_not_materialize_its_bigint() {
+    let divisor = int(2);
+    let mut admitted = None;
+    let allocations = allocation_counter::measure(|| {
+        admitted = Some(NonZeroInteger::try_from(&divisor));
+    });
+    let token = admitted.unwrap().unwrap();
+    assert!(core::ptr::eq(token.get(), &divisor));
+    assert_eq!(allocations.count_total, 0);
+    assert_eq!(allocations.bytes_total, 0);
+}
+
+/// Trace: FR-374-AC-2
+#[test]
+fn admitted_token_has_no_default_construction() {
+    // The inferred marker is unique only while NonZeroInteger lacks Default.
+    trait AmbiguousIfDefault<Marker> {
+        fn check() {}
+    }
+    impl<T: ?Sized> AmbiguousIfDefault<()> for T {}
+    impl<T: Default> AmbiguousIfDefault<u8> for T {}
+
+    let _ = <NonZeroInteger<'static> as AmbiguousIfDefault<_>>::check;
+}
+
 /// Trace: FR-374-AC-3
 #[test]
 fn admitted_pair_helpers_preserve_signed_zero_and_large_results() {

@@ -154,21 +154,33 @@ impl fmt::Debug for Integer {
 /// Trace: FR-374-AC-2
 ///
 /// Copying the token preserves the borrow and never clones its integer.
+/// External callers obtain it through `TryFrom<&Integer>` and can reuse one
+/// admitted token across all three division helpers:
+///
+/// ```
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let divisor = Integer::from(2_i64);
+/// let token = NonZeroInteger::try_from(&divisor).unwrap();
+/// assert_eq!(Integer::from(6_i64).exact_div(token), Integer::from(3_i64));
+/// assert_eq!(Integer::from(7_i64).div_rem_truncating(token), (Integer::from(3_i64), Integer::from(1_i64)));
+/// assert_eq!(Integer::from(-7_i64).div_mod_floor(token), (Integer::from(-4_i64), Integer::from(1_i64)));
+/// ```
+///
 /// Plain integer borrows cannot be passed to any division helper:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0308
 /// use quire_exact::Integer;
 /// let two = Integer::from(2_i64);
 /// Integer::one().exact_div(&two);
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0308
 /// use quire_exact::Integer;
 /// let two = Integer::from(2_i64);
 /// Integer::one().div_rem_truncating(&two);
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0308
 /// use quire_exact::Integer;
 /// let two = Integer::from(2_i64);
 /// Integer::one().div_mod_floor(&two);
@@ -176,20 +188,20 @@ impl fmt::Debug for Integer {
 ///
 /// The referent is private, immutable and cannot outlive its owner:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0423
 /// use quire_exact::{Integer, NonZeroInteger};
 /// let zero = Integer::zero();
 /// let token = NonZeroInteger(&zero);
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0594
 /// use quire_exact::{Integer, NonZeroInteger};
 /// let two = Integer::from(2_i64);
 /// let token = NonZeroInteger::try_from(&two).unwrap();
 /// *token.get() = Integer::zero();
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0597
 /// use quire_exact::{Integer, NonZeroInteger};
 /// let token = {
 ///     let two = Integer::from(2_i64);
@@ -200,7 +212,7 @@ impl fmt::Debug for Integer {
 ///
 /// The owner cannot be replaced while an admitted borrow remains in use:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0506
 /// use quire_exact::{Integer, NonZeroInteger};
 /// let mut two = Integer::from(2_i64);
 /// let token = NonZeroInteger::try_from(&two).unwrap();
@@ -210,12 +222,12 @@ impl fmt::Debug for Integer {
 ///
 /// Zero cannot be produced through a default or internal constructor:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use quire_exact::NonZeroInteger;
 /// let token: NonZeroInteger<'_> = Default::default();
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0624
 /// use quire_exact::{Integer, NonZeroInteger};
 /// let zero = Integer::zero();
 /// let token = NonZeroInteger::from_proven_nonzero(&zero);
@@ -751,6 +763,13 @@ mod tests {
     use core::str::FromStr;
 
     use super::*;
+
+    /// Trace: FR-374-AC-5
+    #[test]
+    #[should_panic(expected = "canonical divisor must be nonzero")]
+    fn canonical_nonzero_premise_rejects_zero_with_its_own_message() {
+        NonZeroInteger::from_proven_nonzero(&Integer::zero());
+    }
 
     /// Trace: FR-360-AC-1
     #[test]

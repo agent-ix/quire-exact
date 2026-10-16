@@ -185,8 +185,11 @@ refinement. All other FR-371 guarantees retain their existing scope.
 
 ## Status
 
-PROPOSED / UNIMPLEMENTED / UNRUN. This is the exact-owned IR-734 admission
-contract. No executable Trace bindings, build, proof, downstream adoption or
-gate result accompany this specification. Exact-divisibility strengthening,
-compatibility APIs and downstream pin/lock qualification are outside this
-requirement.
+Implemented in the IR-734 branch. Tagged tests bind AC-1 through AC-4 and
+AC-6; AC-5 is verified by inspection of the canonical callers. AC-2's
+external field, constructor, mutation and lifetime exclusions are verified by
+error-code-pinned `compile_fail` doctests, which `quire matrix` does not
+register as binders. Its tagged integration tests verify token reuse, zero
+refusal and the absence of `Default`, but cannot alone verify every exclusion.
+Run `quire matrix` for the current criterion-to-test mapping. Downstream
+adoption and qualification are outside this requirement.
