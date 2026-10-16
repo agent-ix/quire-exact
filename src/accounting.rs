@@ -1797,6 +1797,10 @@ mod tests {
         }
     }
 
+    /// A charge point, its size requests and its result units.
+    #[cfg(feature = "test-support")]
+    type ScheduledCharge = (ChargePoint, &'static [(LimitKind, u64)], u64);
+
     #[cfg(feature = "test-support")]
     fn charge_with(point: ChargePoint, requests: &[(LimitKind, u64)]) -> Charge {
         requests
@@ -1810,7 +1814,7 @@ mod tests {
     #[cfg(feature = "test-support")]
     #[test]
     fn tc_931_admitted_log_matches_model_ordered_prefix() {
-        let schedule: [(ChargePoint, &[(LimitKind, u64)], u64); 3] = [
+        let schedule: [ScheduledCharge; 3] = [
             (
                 ChargePoint::IntegerArithmeticOperands,
                 &[
