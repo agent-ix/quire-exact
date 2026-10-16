@@ -18,6 +18,9 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::num::NonZeroU64;
 
+#[cfg(kani)]
+mod kani_proofs;
+
 #[cfg(feature = "test-support")]
 const CHARGE_LOG_CAPACITY: usize = 4096;
 
@@ -479,8 +482,8 @@ pub struct Charge {
 }
 
 /// Keeps the common single-size charge inline and stores further requests in
-/// insertion order. Meter validation visits each counter kind in normative
-/// order, then scans these requests to preserve stable duplicate ordering.
+/// insertion order. Meter validation visits these requests once, preserving
+/// stable duplicate ordering when a kind occurs more than once.
 #[derive(Clone)]
 struct InlineSizes {
     first: Option<(LimitKind, Integer)>,
@@ -790,22 +793,31 @@ impl Meter {
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
         let point = charge.point;
         self.check_injected(point, charge.work_units.clone())?;
-        // Every semantic-size counter precedes `work_units` and `result_units`
-        // in field order.
-        // Validate in place before changing any counter. Keeping the original
-        // requests avoids a second heap allocation. Scanning kinds first
-        // preserves normative first-failure order; scanning requests in
-        // insertion order preserves stable ordering for duplicate kinds.
-        for kind in LimitKind::ALL {
-            for (requested_kind, amount) in charge.sizes.iter() {
-                if *requested_kind != kind {
-                    continue;
-                }
-                match amount.to_u64() {
-                    Some(amount) if amount <= kind.limit(&self.counters.limits) => {}
-                    _ => return Err(self.incomplete(kind, amount.clone(), point)),
-                }
+        // Keep validation and per-admission maxima local until every counter
+        // is known to fit. An earlier field wins even when requested later;
+        // an equal field keeps its first failing request.
+        let mut sizes = [None; 8];
+        let mut first_fail: Option<(LimitKind, Integer)> = None;
+        #[cfg(feature = "test-support")]
+        let mut record = AdmittedCharge::new(point);
+        for (kind, amount) in charge.sizes.iter() {
+            let valid = amount
+                .to_u64()
+                .filter(|amount| *amount <= kind.limit(&self.counters.limits));
+            if let Some(amount) = valid {
+                let slot = &mut sizes[kind.index()];
+                *slot = Some(slot.map_or(amount, |previous: u64| previous.max(amount)));
+                #[cfg(feature = "test-support")]
+                record.observe(*kind, amount);
+            } else if first_fail
+                .as_ref()
+                .is_none_or(|(first_kind, _)| kind.index() < first_kind.index())
+            {
+                first_fail = Some((*kind, amount.clone()));
             }
+        }
+        if let Some((kind, amount)) = first_fail {
+            return Err(self.incomplete(kind, amount, point));
         }
         let cumulative = |kind: LimitKind, amount: Integer| {
             amount
@@ -816,22 +828,15 @@ impl Meter {
         };
         let work = cumulative(LimitKind::WorkUnits, charge.work_units)?;
         let results = cumulative(LimitKind::ResultUnits, charge.result_units)?;
-        #[cfg(feature = "test-support")]
-        let mut record = AdmittedCharge::new(point);
-        for kind in LimitKind::ALL {
-            for (requested_kind, amount) in charge.sizes.iter() {
-                if *requested_kind != kind {
-                    continue;
-                }
-                let amount = amount
-                    .to_u64()
-                    .expect("size requests were validated before counter updates");
-                #[cfg(feature = "test-support")]
-                record.observe(kind, amount);
-                let slot = &mut self.counters.consumed[kind.index()];
-                *slot = (*slot).max(amount);
-            }
-        }
+        // Straight-line writes have no trip count independent of requests.
+        self.observe_size(0, sizes[0]);
+        self.observe_size(1, sizes[1]);
+        self.observe_size(2, sizes[2]);
+        self.observe_size(3, sizes[3]);
+        self.observe_size(4, sizes[4]);
+        self.observe_size(5, sizes[5]);
+        self.observe_size(6, sizes[6]);
+        self.observe_size(7, sizes[7]);
         self.counters.consumed[LimitKind::WorkUnits.index()] = work;
         self.counters.consumed[LimitKind::ResultUnits.index()] = results;
         self.admit(
@@ -840,6 +845,13 @@ impl Meter {
             record,
         );
         Ok(())
+    }
+
+    fn observe_size(&mut self, index: usize, amount: Option<u64>) {
+        if let Some(amount) = amount {
+            let slot = &mut self.counters.consumed[index];
+            *slot = (*slot).max(amount);
+        }
     }
 
     fn admit(
@@ -1114,6 +1126,7 @@ mod tests {
         );
     }
 
+    /// Trace: FR-359-AC-8
     #[test]
     fn duplicate_size_requests_preserve_first_refusal_and_are_atomic() {
         let mut meter = Meter::new(tight_limits());
@@ -1132,6 +1145,7 @@ mod tests {
         assert_unchanged(&before, &meter);
     }
 
+    /// Trace: FR-359-AC-8
     #[test]
     fn duplicate_sizes_coalesce_by_max_and_retain_explicit_zero() {
         let mut meter = Meter::new(unlimited());
@@ -1152,6 +1166,63 @@ mod tests {
             let admitted = meter.admitted_charges();
             assert_eq!(admitted[0].integer_bits, Some(5));
             assert_eq!(admitted[0].decimal_digits, Some(0));
+        }
+    }
+
+    /// Trace: FR-359-AC-8
+    #[test]
+    fn first_inserted_failing_size_precedes_later_same_kind_maximum() {
+        for (first, second) in [(7, 9), (9, 7)] {
+            let mut limits = unlimited();
+            limits.integer_bits = 5;
+            let mut meter = Meter::new(limits);
+            let before = meter.clone();
+            let denied = meter
+                .charge(
+                    Charge::new(ChargePoint::FunctionCall)
+                        .size(LimitKind::IntegerBits, first)
+                        .size(LimitKind::IntegerBits, second),
+                )
+                .expect_err("first inserted failing amount must be reported");
+            assert_eq!(
+                denied,
+                Incomplete {
+                    limit_kind: LimitKind::IntegerBits,
+                    limit: 5,
+                    consumed: 0,
+                    next_charge: Integer::from(first),
+                    charge_point: ChargePoint::FunctionCall,
+                }
+            );
+            assert_unchanged(&before, &meter);
+            #[cfg(feature = "test-support")]
+            assert_eq!(meter.charge_log_truncated(), before.charge_log_truncated());
+        }
+    }
+
+    /// Trace: FR-359-AC-8
+    #[test]
+    fn size_shortages_use_field_order_across_attachment_orders() {
+        for reverse in [false, true] {
+            let mut limits = unlimited();
+            limits.integer_bits = 5;
+            limits.value_occurrences = 1;
+            let mut charge = Charge::new(ChargePoint::FunctionCall);
+            if reverse {
+                charge = charge
+                    .size(LimitKind::IntegerBits, 7)
+                    .size(LimitKind::ValueOccurrences, 2);
+            } else {
+                charge = charge
+                    .size(LimitKind::ValueOccurrences, 2)
+                    .size(LimitKind::IntegerBits, 7);
+            }
+            let mut meter = Meter::new(limits);
+            let before = meter.clone();
+            let denied = meter.charge(charge).expect_err("both kinds are short");
+            assert_eq!(denied.limit_kind, LimitKind::IntegerBits);
+            assert_eq!(denied.next_charge, Integer::from(7_u64));
+            assert_unchanged(&before, &meter);
         }
     }
 
