@@ -149,6 +149,124 @@ impl fmt::Debug for Integer {
     }
 }
 
+/// A shared borrow admitted as a nonzero mathematical integer (FR-374).
+///
+/// Trace: FR-374-AC-2
+///
+/// Copying the token preserves the borrow and never clones its integer.
+/// External callers obtain it through `TryFrom<&Integer>` and can reuse one
+/// admitted token across all three division helpers:
+///
+/// ```
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let divisor = Integer::from(2_i64);
+/// let token = NonZeroInteger::try_from(&divisor).unwrap();
+/// assert_eq!(Integer::from(6_i64).exact_div(token), Integer::from(3_i64));
+/// assert_eq!(Integer::from(7_i64).div_rem_truncating(token), (Integer::from(3_i64), Integer::from(1_i64)));
+/// assert_eq!(Integer::from(-7_i64).div_mod_floor(token), (Integer::from(-4_i64), Integer::from(1_i64)));
+/// ```
+///
+/// Plain integer borrows cannot be passed to any division helper:
+///
+/// ```compile_fail,E0308
+/// use quire_exact::Integer;
+/// let two = Integer::from(2_i64);
+/// Integer::one().exact_div(&two);
+/// ```
+///
+/// ```compile_fail,E0308
+/// use quire_exact::Integer;
+/// let two = Integer::from(2_i64);
+/// Integer::one().div_rem_truncating(&two);
+/// ```
+///
+/// ```compile_fail,E0308
+/// use quire_exact::Integer;
+/// let two = Integer::from(2_i64);
+/// Integer::one().div_mod_floor(&two);
+/// ```
+///
+/// The referent is private, immutable and cannot outlive its owner:
+///
+/// ```compile_fail,E0423
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let zero = Integer::zero();
+/// let token = NonZeroInteger(&zero);
+/// ```
+///
+/// ```compile_fail,E0594
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let two = Integer::from(2_i64);
+/// let token = NonZeroInteger::try_from(&two).unwrap();
+/// *token.get() = Integer::zero();
+/// ```
+///
+/// ```compile_fail,E0597
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let token = {
+///     let two = Integer::from(2_i64);
+///     NonZeroInteger::try_from(&two).unwrap()
+/// };
+/// let _ = token.get();
+/// ```
+///
+/// The owner cannot be replaced while an admitted borrow remains in use:
+///
+/// ```compile_fail,E0506
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let mut two = Integer::from(2_i64);
+/// let token = NonZeroInteger::try_from(&two).unwrap();
+/// two = Integer::zero();
+/// let _ = token.get();
+/// ```
+///
+/// Zero cannot be produced through a default or internal constructor:
+///
+/// ```compile_fail,E0277
+/// use quire_exact::NonZeroInteger;
+/// let token: NonZeroInteger<'_> = Default::default();
+/// ```
+///
+/// ```compile_fail,E0624
+/// use quire_exact::{Integer, NonZeroInteger};
+/// let zero = Integer::zero();
+/// let token = NonZeroInteger::from_proven_nonzero(&zero);
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NonZeroInteger<'a>(&'a Integer);
+
+/// Admission of a zero integer as a divisor was requested.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("zero integer divisor")]
+pub struct ZeroDivisor;
+
+impl<'a> TryFrom<&'a Integer> for NonZeroInteger<'a> {
+    type Error = ZeroDivisor;
+
+    fn try_from(value: &'a Integer) -> Result<Self, Self::Error> {
+        if value.is_zero() {
+            Err(ZeroDivisor)
+        } else {
+            Ok(Self(value))
+        }
+    }
+}
+
+impl<'a> NonZeroInteger<'a> {
+    /// Borrow the original admitted integer without granting mutation.
+    pub fn get(self) -> &'a Integer {
+        self.0
+    }
+
+    /// Borrow an integer whose owning canonical path proves it nonzero.
+    /// Every caller documents that mathematical premise. A violated premise
+    /// is an implementation defect, rather than a substitute arithmetic value.
+    pub(crate) fn from_proven_nonzero(value: &'a Integer) -> Self {
+        assert!(!value.is_zero(), "canonical divisor must be nonzero");
+        Self(value)
+    }
+}
+
 impl Integer {
     /// The integer zero.
     pub fn zero() -> Self {
@@ -310,14 +428,15 @@ impl Integer {
         Self::from_big_normalized(self.as_big().gcd(other.as_big()))
     }
 
-    /// Exact quotient of a division known to be exact; `divisor` is nonzero.
-    pub fn exact_div(&self, divisor: &Self) -> Self {
-        Self::from_big_normalized(self.as_big() / divisor.as_big())
+    /// Quotient rounded toward zero with an admitted nonzero divisor.
+    /// Intended for division known to be exact; divisibility is not checked.
+    pub fn exact_div(&self, divisor: NonZeroInteger<'_>) -> Self {
+        Self::from_big_normalized(self.as_big() / divisor.get().as_big())
     }
 
     /// Truncating quotient/remainder; `divisor` is nonzero.
-    pub fn div_rem_truncating(&self, divisor: &Self) -> (Self, Self) {
-        let (quotient, remainder) = self.as_big().div_rem(divisor.as_big());
+    pub fn div_rem_truncating(&self, divisor: NonZeroInteger<'_>) -> (Self, Self) {
+        let (quotient, remainder) = self.as_big().div_rem(divisor.get().as_big());
         (
             Self::from_big_normalized(quotient),
             Self::from_big_normalized(remainder),
@@ -325,8 +444,8 @@ impl Integer {
     }
 
     /// Floor quotient/remainder; `divisor` is nonzero.
-    pub fn div_mod_floor(&self, divisor: &Self) -> (Self, Self) {
-        let (quotient, remainder) = self.as_big().div_mod_floor(divisor.as_big());
+    pub fn div_mod_floor(&self, divisor: NonZeroInteger<'_>) -> (Self, Self) {
+        let (quotient, remainder) = self.as_big().div_mod_floor(divisor.get().as_big());
         (
             Self::from_big_normalized(quotient),
             Self::from_big_normalized(remainder),
@@ -644,6 +763,13 @@ mod tests {
     use core::str::FromStr;
 
     use super::*;
+
+    /// Trace: FR-374-AC-5
+    #[test]
+    #[should_panic(expected = "canonical divisor must be nonzero")]
+    fn canonical_nonzero_premise_rejects_zero_with_its_own_message() {
+        NonZeroInteger::from_proven_nonzero(&Integer::zero());
+    }
 
     /// Trace: FR-360-AC-1
     #[test]

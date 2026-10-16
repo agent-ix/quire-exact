@@ -132,7 +132,7 @@ pub use ieee::{
 };
 pub use integer::{
     BoundedInteger, EmptyInterval, Integer, IntegerDomain, IntegerInterval, NonCanonicalInteger,
-    OutOfDomain,
+    NonZeroInteger, OutOfDomain, ZeroDivisor,
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};

@@ -85,7 +85,11 @@ requests and admitted prefixes.
 
 ## Status
 
-PLANNED / UNRUN. This document specifies controls only; it records no executed
-test, review verdict, build, proof, allocation benchmark, consumer adoption or
-gate result. It does not alter the prospective qualification obligations of
+Implemented in the IR-734 branch. Tagged integration tests cover admission,
+token reuse, direct helpers and metered outcomes; a crate-internal test guards
+the canonical nonzero premise. Error-code-pinned `compile_fail` doctests check
+the public type and lifetime exclusions, though `quire matrix` does not bind
+doctests. AC-5's canonical callers are checked by inspection. Run `quire
+matrix` for the current criterion-to-test mapping. This status does not alter
+the qualification obligations of
 [TC-919](./TC-919-bounded-integer-representation-refinement.md).
