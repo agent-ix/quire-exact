@@ -48,6 +48,17 @@ fn limit_of(limits: &ScalarLimits, kind: LimitKind) -> u64 {
     }
 }
 
+/// The model's expected refusal. Every amount in the checked schedules is a
+/// `u64`, so the amount is compared through [`Integer::to_u64`] rather than
+/// by building and comparing a second big integer.
+struct Refusal {
+    kind: LimitKind,
+    limit: u64,
+    consumed: u64,
+    amount: u64,
+    point: ChargePoint,
+}
+
 struct Model {
     consumed: [u64; 10],
     admissions: u64,
@@ -81,7 +92,7 @@ impl Model {
         point: ChargePoint,
         requests: &Requests,
         results: u64,
-    ) -> Result<(), Incomplete> {
+    ) -> Result<(), Refusal> {
         let size = |kind| Self::size_short(limits, requests, kind).map(|amount| (kind, amount));
         let cumulative = |kind: LimitKind, amount: u64| {
             let total = u128::from(self.consumed[slot(kind)]) + u128::from(amount);
@@ -98,12 +109,12 @@ impl Model {
             .or_else(|| cumulative(LimitKind::WorkUnits, 1))
             .or_else(|| cumulative(LimitKind::ResultUnits, results));
         if let Some((kind, amount)) = short {
-            return Err(Incomplete {
-                limit_kind: kind,
+            return Err(Refusal {
+                kind,
                 limit: limit_of(limits, kind),
                 consumed: self.consumed[slot(kind)],
-                next_charge: Integer::from(amount),
-                charge_point: point,
+                amount,
+                point,
             });
         }
         for (kind, amount) in requests.iter().flatten() {
@@ -158,7 +169,17 @@ fn step(
         };
     }
     let actual = meter.charge(charge);
-    assert_eq!(actual, expected);
+    match (&actual, &expected) {
+        (Ok(()), Ok(())) => {}
+        (Err(actual), Err(expected)) => {
+            assert_eq!(actual.limit_kind, expected.kind);
+            assert_eq!(actual.limit, expected.limit);
+            assert_eq!(actual.consumed, expected.consumed);
+            assert_eq!(actual.charge_point, expected.point);
+            assert_eq!(actual.next_charge.to_u64(), Some(expected.amount));
+        }
+        _ => panic!("the meter and the model disagree on admission"),
+    }
     model.check(meter);
     actual.is_ok()
 }
