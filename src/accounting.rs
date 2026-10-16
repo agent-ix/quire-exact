@@ -796,7 +796,7 @@ impl Meter {
         // Keep validation and per-admission maxima local until every counter
         // is known to fit. An earlier field wins even when requested later;
         // an equal field keeps its first failing request.
-        let mut sizes = [None; 8];
+        let mut sizes = [None; 10];
         let mut first_fail: Option<(LimitKind, Integer)> = None;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
@@ -828,7 +828,9 @@ impl Meter {
         };
         let work = cumulative(LimitKind::WorkUnits, charge.work_units)?;
         let results = cumulative(LimitKind::ResultUnits, charge.result_units)?;
-        // Straight-line writes have no trip count independent of requests.
+        // Straight-line writes have no trip count independent of requests. A
+        // size request naming a cumulative counter is validated above and
+        // then superseded by that counter's own total below.
         self.observe_size(0, sizes[0]);
         self.observe_size(1, sizes[1]);
         self.observe_size(2, sizes[2]);
@@ -1682,6 +1684,36 @@ mod tests {
 
     /// Trace: FR-359-AC-8
     #[test]
+    fn size_request_naming_a_cumulative_counter_is_validated_in_field_order() {
+        let mut limits = unlimited();
+        limits.work_units = 4;
+        limits.result_units = 4;
+        let mut meter = Meter::new(limits);
+        let before = meter.clone();
+        let refused = meter
+            .charge(
+                Charge::new(ChargePoint::FunctionCall)
+                    .results(9)
+                    .size(LimitKind::ResultUnits, 6)
+                    .size(LimitKind::WorkUnits, 5),
+            )
+            .expect_err("the work-units size request exceeds its limit");
+        assert_eq!(refused.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(refused.next_charge, Integer::from(5_u64));
+        assert_unchanged(&before, &meter);
+        meter
+            .charge(
+                Charge::new(ChargePoint::FunctionCall)
+                    .size(LimitKind::WorkUnits, 3)
+                    .size(LimitKind::ResultUnits, 3),
+            )
+            .expect("both size requests are within their limits");
+        assert_eq!(meter.consumed(LimitKind::WorkUnits), 1);
+        assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+    }
+
+    /// Trace: FR-359-AC-8
+    #[test]
     fn request_counts_from_zero_to_many_gain_no_denial() {
         let mut meter = Meter::new(unlimited());
         let mut expected_bits = 0_u64;
@@ -1723,8 +1755,8 @@ mod tests {
             assert_eq!(meter.consumed(LimitKind::WorkUnits), 1);
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 2);
             meter
-                .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 1))
-                .expect("a lower later request is admitted");
+                .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 0))
+                .expect("a zero later request is admitted");
             assert_eq!(meter.consumed(LimitKind::IntegerBits), expected);
             assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
         }
