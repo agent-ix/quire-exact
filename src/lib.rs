@@ -147,6 +147,69 @@ pub use numeric_type_equality::{NumericTypeEndpoint, NumericTypeEqualityFailure}
 pub use outcome::{
     BoundViolation, CheckedInvariantCause, InexactTarget, Outcome, Refusal, Undefined,
 };
+
+#[cfg(kani)]
+mod ir705_shape_spike {
+    use crate as rt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum OracleStop {
+        InvalidConstant,
+    }
+
+    fn integer(spelling: &str) -> Result<rt::Integer, OracleStop> {
+        spelling.parse().map_err(|_| OracleStop::InvalidConstant)
+    }
+
+    fn oracle_integer_add(
+        left: &rt::Integer,
+        right: &rt::Integer,
+        meter: &mut rt::Meter,
+    ) -> Result<rt::Outcome<rt::Integer>, OracleStop> {
+        let domain = rt::IntegerInterval::new(integer("0")?, integer("9")?)
+            .map_err(|_| OracleStop::InvalidConstant)?;
+        Ok(rt::evaluate_integer_arithmetic(
+            rt::IntegerArithmetic::Add(left, right),
+            Some(&domain),
+            meter,
+        ))
+    }
+
+    #[kani::proof]
+    fn routed_integer_add() {
+        let left: i64 = kani::any();
+        kani::assume(left >= 0 && left <= 9);
+        let left_native = left;
+        let left = rt::Integer::from(left);
+        let right: i64 = kani::any();
+        kani::assume(right >= 1 && right <= 1);
+        let right_native = right;
+        let right = rt::Integer::from(right);
+        let mut meter = rt::Meter::new(rt::ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        });
+        let outcome = oracle_integer_add(&left, &right, &mut meter);
+        let exact: i128 = i128::from(left_native) + i128::from(right_native);
+        let admitted = exact >= i128::from(0) && exact <= i128::from(9);
+        let sound = match &outcome {
+            Ok(rt::Outcome::Completed(value)) => admitted && *value == rt::Integer::from(exact),
+            Ok(rt::Outcome::Refused(_)) => !admitted,
+            _ => false,
+        };
+        assert!(sound);
+        let completed = matches!(outcome, Ok(rt::Outcome::Completed(_)));
+        kani::cover!(completed);
+    }
+}
 pub use quantity::{compare_quantity, evaluate_quantity_arithmetic, Quantity, QuantityArithmetic};
 pub use rational::{NonPositiveDenominatorBound, Rational, RationalDomain, ZeroDenominator};
 pub use reference::ObjectReference;
