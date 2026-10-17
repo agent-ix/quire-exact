@@ -192,7 +192,7 @@ fn bits(value: i64) -> u64 {
     u64::from(64 - value.unsigned_abs().leading_zeros())
 }
 
-/// Trace: FR-359-AC-9
+// FR-359-AC-9 is PLANNED on IR-844; this harness exhausts memory at 40 GiB.
 #[kani::proof]
 fn meter_integer_arithmetic_schedule_matches_reference() {
     let left: i64 = kani::any();
