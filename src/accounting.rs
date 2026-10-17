@@ -1330,11 +1330,13 @@ mod tests {
             point: ChargePoint::FunctionCall,
             occurrence: NonZeroU64::new(1).expect("one is nonzero"),
         });
+        let before = injected.clone();
         let denial = injected
             .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, u64::MAX))
             .expect_err("an injected denial precedes size validation");
         assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
         assert_eq!(denial.limit, denial.consumed);
+        assert_unchanged(&before, &injected);
     }
 
     /// A meter polls its handle at every charge. A cancelled handle

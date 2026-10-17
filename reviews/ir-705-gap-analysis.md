@@ -47,3 +47,11 @@ AC-9 is honestly unbacked. One AC-8 clause relies on an untagged test.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | FR-359-AC-8 says cancellation precedence remains unchanged, and TC-931 step 1 asks for a cancellation-order check on a separate meter. No `Trace: FR-359-AC-8` test covers cancellation. The existing `a_cancelled_handle_denies_the_next_charge_and_records_the_trip` passes, but it is not bound to AC-8, so the matrix does not show this clause covered. | src/accounting.rs:1286, spec/functional/FR-359-cumulative-meter-boundary.md:36 |
+
+## Dispositions
+
+Round 1, checked at head 8ca1796d84188735672352ea609ee62bf1991311 (fix commits 9eab47c..8ca1796).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix 29cd242: new test cancellation_and_injection_precede_size_refusal, tagged Trace: FR-359-AC-8, checks that cancellation and an injected denial both precede an oversized size request; quire matrix now lists ten AC-8 tests. |

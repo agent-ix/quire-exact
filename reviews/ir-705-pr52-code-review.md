@@ -56,3 +56,11 @@ oracles that can fail. The one finding is a maintainability nit.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | The local maxima array uses a literal length (`[None; 10]`) and eight `observe_size(0..7, sizes[0..7])` writes with literal indices. This repeats the `LimitKind::index` mapping by hand: if a kind is added or the order changes, a semantic size is silently not written. `LimitKind::ALL.len()` for the length and named `LimitKind::X.index()` indices would tie it to the enum. | src/accounting.rs:799, src/accounting.rs:834-841 |
+
+## Dispositions
+
+Round 1, checked at head 8ca1796d84188735672352ea609ee62bf1991311 (fix commits 9eab47c..8ca1796).
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix 29cd242: array lengths come from LimitKind::COUNT (= ALL.len()); the eight writes name LimitKind::X.index() and observe_size takes a LimitKind; const assert COUNT == 8 + 2 fails to compile if a counter is added. Straight-line writes kept, as AC-11 forbids an ALL traversal. |
