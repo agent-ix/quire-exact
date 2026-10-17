@@ -125,6 +125,9 @@ impl LimitKind {
         matches!(self, Self::WorkUnits | Self::ResultUnits)
     }
 
+    /// The number of counters; every per-counter array is sized from it.
+    const COUNT: usize = Self::ALL.len();
+
     fn index(self) -> usize {
         match self {
             Self::IntegerBits => 0,
@@ -658,7 +661,7 @@ pub struct Meter {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Counters {
     limits: ScalarLimits,
-    consumed: [u64; 10],
+    consumed: [u64; LimitKind::COUNT],
     denial: Option<InjectedDenial>,
     /// Admissions so far at `denial`'s point; zero when no denial is set.
     denied_point_admissions: u64,
@@ -676,7 +679,7 @@ impl Meter {
         Self {
             counters: Counters {
                 limits,
-                consumed: [0; 10],
+                consumed: [0; LimitKind::COUNT],
                 denial: None,
                 denied_point_admissions: 0,
                 admissions: 0,
@@ -796,7 +799,7 @@ impl Meter {
         // Keep validation and per-admission maxima local until every counter
         // is known to fit. An earlier field wins even when requested later;
         // an equal field keeps its first failing request.
-        let mut sizes = [None; 10];
+        let mut sizes = [None; LimitKind::COUNT];
         let mut first_fail: Option<(LimitKind, Integer)> = None;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
@@ -831,14 +834,38 @@ impl Meter {
         // Straight-line writes have no trip count independent of requests. A
         // size request naming a cumulative counter is validated above and
         // then superseded by that counter's own total below.
-        self.observe_size(0, sizes[0]);
-        self.observe_size(1, sizes[1]);
-        self.observe_size(2, sizes[2]);
-        self.observe_size(3, sizes[3]);
-        self.observe_size(4, sizes[4]);
-        self.observe_size(5, sizes[5]);
-        self.observe_size(6, sizes[6]);
-        self.observe_size(7, sizes[7]);
+        // Eight high-water kinds, named rather than numbered. The assertion
+        // below fails to compile if a counter is added without a write here.
+        const _: () = assert!(LimitKind::COUNT == 8 + 2);
+        self.observe_size(
+            LimitKind::IntegerBits,
+            sizes[LimitKind::IntegerBits.index()],
+        );
+        self.observe_size(
+            LimitKind::DecimalDigits,
+            sizes[LimitKind::DecimalDigits.index()],
+        );
+        self.observe_size(
+            LimitKind::ScaleExpansion,
+            sizes[LimitKind::ScaleExpansion.index()],
+        );
+        self.observe_size(
+            LimitKind::TextInputBytes,
+            sizes[LimitKind::TextInputBytes.index()],
+        );
+        self.observe_size(
+            LimitKind::TextScalars,
+            sizes[LimitKind::TextScalars.index()],
+        );
+        self.observe_size(
+            LimitKind::NormalizedScalars,
+            sizes[LimitKind::NormalizedScalars.index()],
+        );
+        self.observe_size(LimitKind::UnitEdges, sizes[LimitKind::UnitEdges.index()]);
+        self.observe_size(
+            LimitKind::ValueOccurrences,
+            sizes[LimitKind::ValueOccurrences.index()],
+        );
         self.counters.consumed[LimitKind::WorkUnits.index()] = work;
         self.counters.consumed[LimitKind::ResultUnits.index()] = results;
         self.admit(
@@ -849,9 +876,9 @@ impl Meter {
         Ok(())
     }
 
-    fn observe_size(&mut self, index: usize, amount: Option<u64>) {
+    fn observe_size(&mut self, kind: LimitKind, amount: Option<u64>) {
         if let Some(amount) = amount {
-            let slot = &mut self.counters.consumed[index];
+            let slot = &mut self.counters.consumed[kind.index()];
             *slot = (*slot).max(amount);
         }
     }
@@ -1277,6 +1304,37 @@ mod tests {
             assert_eq!(meter.admission_count(), target);
             assert_eq!(meter.consumed(LimitKind::WorkUnits), target);
         }
+    }
+
+    /// Trace: FR-359-AC-8
+    ///
+    /// A cancelled handle and a pending injected denial both precede size
+    /// validation: an oversized request is reported as the cancellation
+    /// (`WorkUnits`, `limit = consumed`), never as its own size refusal, and
+    /// the refused charge changes nothing.
+    #[test]
+    fn cancellation_and_injection_precede_size_refusal() {
+        let cancel = Cancel::new();
+        let mut cancelled = Meter::new(tight_limits()).with_cancel(cancel.clone());
+        let before = cancelled.clone();
+        cancel.cancel(crate::CancelCause::Deadline);
+        let denial = cancelled
+            .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, u64::MAX))
+            .expect_err("a cancelled handle denies before size validation");
+        assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(denial.limit, denial.consumed);
+        assert_eq!(cancelled.consumed(LimitKind::IntegerBits), 0);
+        assert_unchanged(&before, &cancelled);
+
+        let mut injected = Meter::new(tight_limits()).with_injected_denial(InjectedDenial {
+            point: ChargePoint::FunctionCall,
+            occurrence: NonZeroU64::new(1).expect("one is nonzero"),
+        });
+        let denial = injected
+            .charge(Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, u64::MAX))
+            .expect_err("an injected denial precedes size validation");
+        assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
+        assert_eq!(denial.limit, denial.consumed);
     }
 
     /// A meter polls its handle at every charge. A cancelled handle
