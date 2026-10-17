@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify planned FR-359-AC-8, AC-9, AC-11 and AC-12 and record the permanently external AC-10 receipt. Kernel accounting and its Kani obligation belong to quire-exact. The five unchanged CG scalar tests are a separate consumer-owned IR-705/IR-17 acceptance receipt, not kernel test cases.
+Verify FR-359-AC-8, AC-11 and AC-12 (delivered), the planned AC-9 (deferred to IR-844) and record the permanently external AC-10 receipt. Kernel accounting and its Kani obligation belong to quire-exact. The five unchanged CG scalar tests are a separate consumer-owned IR-705/IR-17 acceptance receipt, not kernel test cases.
 
 ## Test Procedure
 
@@ -26,4 +26,4 @@ Charge processing has no traversal whose trip count exceeds the charge's semanti
 
 ## Status
 
-PLANNED / UNRUN for local AC-8, AC-9, AC-11 and AC-12 checks. AC-10 is permanently externally evidenced in CG and deliberately untagged in quire-exact; its receipt is UNRUN. AC-9 and this step 3 are planned for IR-844: the harness exhausts memory (measured: Kani at 40 GiB, symex 67.4 s, 1,758,078 steps, 74,098 VCCs (23,675 after simplification), then cgroup OOM kill after 123 s in CBMC propositional reduction; the 16 GiB run and each per-shape run also exhausted memory.) and carries no Trace tag. No local Trace binding, standalone proof, mutant result or consumer acceptance receipt is claimed.
+AC-8, AC-11 and AC-12 are delivered by IR-705: AC-8 and AC-12 by the Trace-tagged unit tests in `src/accounting.rs` (AC-12 by the two named `tc_931_admitted_log_matches_model_*` tests), AC-11 by inspection. AC-9 is PLANNED / UNRUN, deferred to IR-844. AC-10 is permanently externally evidenced in CG and deliberately untagged in quire-exact; its receipt is UNRUN. AC-9 and this step 3 are planned for IR-844: the harness exhausts memory (measured: Kani at 40 GiB, symex 67.4 s, 1,758,078 steps, 74,098 VCCs (23,675 after simplification), then cgroup OOM kill after 123 s in CBMC propositional reduction; the 16 GiB run and each per-shape run also exhausted memory.) and carries no Trace tag. No local Trace binding, standalone proof, mutant result or consumer acceptance receipt is claimed.
