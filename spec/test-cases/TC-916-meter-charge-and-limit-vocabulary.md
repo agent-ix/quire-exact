@@ -14,12 +14,12 @@ Verify [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md) throu
 
 ## Test Procedure
 
-1. For AC-1, exhaustively match every public charge-point variant against an independently authored name expectation; compare the set with `ChargePoint::ALL`, check uniqueness and each `from_code(as_str())`, and reject an unknown spelling. Check that `temporal.visit` follows `model.navigate` at the end, without changing the preceding 62 entries.
+1. For AC-1, exhaustively match every public charge-point variant against an independently authored name expectation; compare the set with `ChargePoint::ALL`, check uniqueness and each `from_code(as_str())`, and reject an unknown spelling. Check that the FR-368 temporal-visit point is at index 62 after `ModelNavigate` at index 61, without changing entries 0 through 61.
 2. For AC-2, exhaustively match every public limit-kind variant against the named ten-field sequence in `ScalarLimits`; compare with `LimitKind::ALL` and check name uniqueness. Include work before results at the end.
 
 ## Expected Results
 
-Every enum variant occurs once, each spelling is unique and documented, charge points round-trip, unknown points refuse, and limit kinds follow the ten-field order. `temporal.visit` is the final charge point, distinct from `graph.expand`. Adding an unaccounted enum variant fails the exhaustive match.
+Every enum variant occurs once, each spelling is unique and documented, charge points round-trip, unknown points refuse, and limit kinds follow the ten-field order. The temporal-visit point is final and distinct from `graph.expand`. Adding an unaccounted enum variant fails the exhaustive match.
 
 ## Status
 
