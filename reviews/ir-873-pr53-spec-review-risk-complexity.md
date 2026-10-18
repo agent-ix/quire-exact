@@ -35,3 +35,11 @@ Ticket IR-873, PR #53 at 31a07bc7f7ca2584d8529a53f71d2aebd9db7241. Meter mechani
 ## Evidence
 
 Four changed documents validate grammar-clean; full spec validates 79/79. At exact base 2134917 strict coverage is 165/192 backed, 27 unbacked, 0 contradicted; at head 31a07bc it is 165/194, 29 unbacked, 0 contradicted. Meter::charge and Charge::new were read for oracle coherence; no production code changed.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | deferred | The fix now labels TemporalVisit / temporal.visit as provisional in FR-368 and removes the spelling from the other three changed documents. The external terra:QSL:plan spelling and owning-criterion ruling is still pending; PR #53 must stay open until the final public name is confirmed and set in the spec. |
+
+Round 1 checked fix head `9908962f792c0d43a7ab1679e605444b51b37ed4`. The spelling decision remains a pre-merge hold.
