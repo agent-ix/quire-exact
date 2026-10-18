@@ -12,6 +12,8 @@ relationships:
 
 When evaluating kernel-owned integer or rational arithmetic, integer or rational ordering, or a Boolean connective over already-decided operands, the `quire-exact` kernel SHALL return the exact outcome and charge the point order and amounts defined below.
 
+For a caller-owned temporal operator visit, the public `Meter` SHALL admit or refuse a direct `temporal.visit` charge with the same atomic work-limit and named-point behavior as other charges. The caller owns the temporal formula traversal and decides when a visit occurs.
+
 The kernel SHALL construct rational values with a positive denominator, numerator and denominator reduced to lowest terms, and a unique zero representation `0/1`.
 
 ## Behavior
@@ -27,6 +29,7 @@ For the following amounts, `B(x)` is the bit length of the magnitude of `x`, wit
 | Integer ordering | `ordering.operands`, `ordering.arithmetic`, `ordering.result-retain` | Operands: `integer_bits = max(B(a), B(c))`, `value_occurrences = 2`. Arithmetic: `integer_bits = max(B(a), B(c))`. |
 | Rational ordering | `ordering.operands`, `ordering.arithmetic`, `ordering.result-retain` | Operands: `integer_bits = max(B(a), B(p), B(c), B(q))`, `value_occurrences = 2`. Arithmetic: `integer_bits = max(B(a)+B(q), B(c)+B(p))`. |
 | Already-decided Boolean retention | `boolean.result-retain` | No size amount; one work unit and one result unit. |
+| Caller-owned temporal operator visit | `temporal.visit` | No size amount; one work unit and no result unit. |
 
 Where `test-support` is enabled, the kernel SHALL expose each admitted rational normalize `integer_bits` request through the actual size observations defined by [FR-358](./FR-358-meter-denial-and-bounded-diagnostic-log.md), independently of the final high-water counter and the reduced result.
 
@@ -56,6 +59,8 @@ An integer result outside an optional bound refuses after arithmetic and before 
 | FR-362-AC-18 | For `k` in 63, 64, 65, 127, 128, 200 and 511, compare exact results and charged bit high-water sizes around `2^k`: `(2^k - 1)(2^k + 1)` charges `2k + 1` bits for a `2k`-bit result, `(2^k)^2` charges `2k + 2` for a `2k + 1`-bit result, and adding `(2^k - 1) + 1` charges `k + 1` for a `k + 1`-bit result. Subtracting `(2^k + 1) - 2^k` or `2^k - 2^k` still charges `k + 2` bits despite a one-bit result. | Test |
 | FR-362-AC-19 | Through public `evaluate_integer_arithmetic` and a fresh public `Meter` for each call, add `8 + 3` and `3 + 8`, subtract `8 - 7`, and multiply `8 * 3`, without a result bound and with all non-bit limits sufficient. The independently calculated `integer-arithmetic.arithmetic` bit amounts are respectively 5, 5, 5 and 6: add/subtract use `max(B(a), B(c)) + 1`, including the larger right operand and a result that cancels to one bit; multiply uses `B(a) + B(c)`. At each exact `integer_bits` limit, the call completes to respectively 11, 11, 1 and 24, admits operands, arithmetic and result-retain in order, and reports `integer_bits` consumed equal to the arithmetic amount, `value_occurrences = 2`, three work units and one result unit. At one below each exact limit, it returns `Incomplete` with no value at `integer-arithmetic.arithmetic`, `limit_kind = IntegerBits`, `limit` one below the arithmetic amount, `consumed = 4`, and `next_charge` equal to the arithmetic amount; only `integer-arithmetic.operands` was admitted, leaving two value occurrences, one work unit and zero result units. | Test |
 | FR-362-AC-20 | On fresh sufficient public meters under `test-support`, evaluate the six rational calls listed below with no result domain. Each completes to the listed canonical value and admits operands, arithmetic, normalize and result-retain in order, consuming four work units and one result unit. The actual normalize record has only IntegerBits present, with the listed amount independently derived from the unreduced parts and `B(0) = 1`. The recorded arithmetic amount equals its separate listed bound. The normalize observation is not replaced by that bound, the final bit maximum or the reduced value's part lengths. | Test |
+| FR-362-AC-21 | On a fresh public meter, a direct default charge at `temporal.visit` succeeds with `work_units = 1`, `result_units = 0` and no semantic-size request when the work limit is exactly 1. With work limit 0, the same call returns `Incomplete` with `limit_kind = WorkUnits`, `limit = consumed = 0`, `next_charge = 1` and `charge_point = TemporalVisit`; no charge is admitted and all counters remain zero. | Test |
+| FR-362-AC-22 | A one-shot injected denial of the first direct `temporal.visit` charge returns `Incomplete` naming `TemporalVisit` and `WorkUnits`, with `limit = consumed = 0` and `next_charge = 1`; it admits no charge, changes no counter and consumes the one-shot denial, so a second identical charge on the same otherwise sufficient meter succeeds. | Test |
 
 ### FR-362-AC-20
 
@@ -71,6 +76,8 @@ An integer result outside an optional bound refuses after arithmetic and before 
 ## Status
 
 PR #9 adds executable Trace bindings for AC-11 through AC-18. AC-1 through AC-9 retain earlier bindings. AC-19 is the separately testable public-meter integer add/subtract/multiply boundary slice; its existing executable Trace binding is `public_integer_arithmetic_admits_exact_bits_and_denies_one_under` in `tests/ir653_scalar.rs`. AC-10 remains planned and untagged for IR-667; the current point-only public test-support log cannot expose the rational normalize charge bit amount. AC-20 allocates the direct normalize-size observation separately and remains planned until implementation and executable bindings land. The enriched observation contract alone does not discharge AC-10's complete exact-limit and one-under-limit scope or claim runtime conformance. AC-19 does not discharge AC-10's negate, rational or ordering cases. Run `quire matrix` for the current criterion-to-test mapping.
+
+AC-21 and AC-22 allocate direct-meter temporal-visit charges for IR-873. They remain planned until the separate code change supplies executable `#[trace]` bindings. These criteria do not make `quire-exact` responsible for a caller's temporal traversal or visit count.
 
 ## Dependencies
 

@@ -14,6 +14,8 @@ The `quire-exact` meter SHALL expose a complete, uniquely spelled public `Charge
 
 `ChargePoint::ALL` and `LimitKind::ALL` enumerate their respective public enum variants once. Each `as_str()` returns its documented name. `ChargePoint::from_code()` resolves precisely those spellings and rejects unknown spellings. The public limit-kind order is the order in which a charge tests semantic sizes before cumulative work and results.
 
+The `temporal.visit` charge point follows `model.navigate` at the end of `ChargePoint::ALL`; the first 62 entries retain their existing order. It names a caller-owned temporal operator visit charged through the existing `WorkUnits` limit, not a new limit kind. Its spelling is distinct from the graph-walk points `graph.expand`, `graph.edge` and `graph.result-retain`.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
