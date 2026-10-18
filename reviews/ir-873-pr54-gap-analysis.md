@@ -31,3 +31,9 @@ Base coverage: 165/194 backed, 29 unbacked, 0 contradicted. PR head: 167/194 bac
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | FR-362 and TC-910 still say AC-21/22 are planned until traced tests exist, although this PR supplies both tests; after merge that status text would be false. | spec/functional/FR-362-exact-scalar-arithmetic-and-atom-charges.md:80; spec/test-cases/TC-910-exact-scalar-arithmetic-and-atom-charges.md:46 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | At `6829f97bdddba16cb4a910e5315494572e4d5595`, both status paragraphs identify `tests/ir873_temporal_visit.rs` as the executable `#[trace]` binding for AC-21/22; the two test functions carry `FR-362-AC-21` and `FR-362-AC-22` respectively. |
