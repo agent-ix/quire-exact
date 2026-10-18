@@ -41,5 +41,8 @@ Four changed documents validate grammar-clean; full spec validates 79/79. At exa
 | FND | Outcome | Reason |
 | --- | --- | --- |
 | FND-001 | deferred | The fix now labels TemporalVisit / temporal.visit as provisional in FR-368 and removes the spelling from the other three changed documents. The external terra:QSL:plan spelling and owning-criterion ruling is still pending; PR #53 must stay open until the final public name is confirmed and set in the spec. |
+| FND-001 | fixed | The IR plan resolved the cross-repo name volatility by selecting `TemporalVisit` / `temporal.visit` for this kernel contract now. FR-368 documents that a later specification amendment may rename it; QSL consumer adoption remains separate. |
 
 Round 1 checked fix head `9908962f792c0d43a7ab1679e605444b51b37ed4`. The spelling decision remains a pre-merge hold.
+
+Round 2 checked head `d7a7b4cc5973d4a7ee48c3ca197213728b9bb8b5`. The earlier hold is superseded by the IR plan's naming decision and the normative text on this head.
