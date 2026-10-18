@@ -296,11 +296,13 @@ pub enum ChargePoint {
     /// `model.navigate`: one model attribute field read
     /// (`self.f`/`deref(r).f`).
     ModelNavigate,
+    /// `temporal.visit`: one caller-owned temporal operator visit.
+    TemporalVisit,
 }
 
 impl ChargePoint {
     /// Every named point, grouped by family in normative order.
-    pub const ALL: [Self; 62] = [
+    pub const ALL: [Self; 63] = [
         Self::DecimalOperands,
         Self::DecimalScaleExpansion,
         Self::DecimalArithmetic,
@@ -363,6 +365,7 @@ impl ChargePoint {
         Self::GraphResultRetain,
         Self::ModelDeref,
         Self::ModelNavigate,
+        Self::TemporalVisit,
     ];
 
     /// Normative identifier.
@@ -430,6 +433,7 @@ impl ChargePoint {
             Self::GraphResultRetain => "graph.result-retain",
             Self::ModelDeref => "model.deref",
             Self::ModelNavigate => "model.navigate",
+            Self::TemporalVisit => "temporal.visit",
         }
     }
 

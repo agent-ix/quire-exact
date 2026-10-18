@@ -43,4 +43,4 @@ For AC-21 and AC-22, the direct temporal-visit charge admits exactly one work un
 
 FR-362-AC-1 through AC-9 retain earlier Trace bindings. PR #9 adds executable Trace bindings for FR-362-AC-11 through AC-18. FR-362-AC-19 has an existing executable Trace binding in `public_integer_arithmetic_admits_exact_bits_and_denies_one_under` (`tests/ir653_scalar.rs`). FR-362-AC-10 remains planned and untagged for IR-667; AC-19 does not claim its rational, negate or ordering coverage. FR-362-AC-20 separately allocates direct normalize-size observation and remains planned until executable bindings land. Its proposed observation does not discharge AC-10's complete boundary scope or claim runtime conformance. Run `quire matrix` for the current criterion-to-test mapping.
 
-FR-362-AC-21 and AC-22 remain planned for IR-873 until direct-meter tests carry executable `#[trace]` bindings. Run `quire matrix` for the current criterion-to-test mapping.
+FR-362-AC-21 and AC-22 have executable `#[trace]` bindings in `tests/ir873_temporal_visit.rs`. Run `quire matrix` for the current criterion-to-test mapping.

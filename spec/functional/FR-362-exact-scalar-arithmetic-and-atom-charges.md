@@ -77,7 +77,7 @@ An integer result outside an optional bound refuses after arithmetic and before 
 
 PR #9 adds executable Trace bindings for AC-11 through AC-18. AC-1 through AC-9 retain earlier bindings. AC-19 is the separately testable public-meter integer add/subtract/multiply boundary slice; its existing executable Trace binding is `public_integer_arithmetic_admits_exact_bits_and_denies_one_under` in `tests/ir653_scalar.rs`. AC-10 remains planned and untagged for IR-667; the current point-only public test-support log cannot expose the rational normalize charge bit amount. AC-20 allocates the direct normalize-size observation separately and remains planned until implementation and executable bindings land. The enriched observation contract alone does not discharge AC-10's complete exact-limit and one-under-limit scope or claim runtime conformance. AC-19 does not discharge AC-10's negate, rational or ordering cases. Run `quire matrix` for the current criterion-to-test mapping.
 
-AC-21 and AC-22 allocate direct-meter temporal-visit charges for IR-873. They remain planned until the separate code change supplies executable `#[trace]` bindings. These criteria do not make `quire-exact` responsible for a caller's temporal traversal or visit count.
+AC-21 and AC-22 allocate direct-meter temporal-visit charges for IR-873. Their executable `#[trace]` bindings are in `tests/ir873_temporal_visit.rs`. These criteria do not make `quire-exact` responsible for a caller's temporal traversal or visit count.
 
 ## Dependencies
 

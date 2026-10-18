@@ -3,6 +3,7 @@
 
 use std::{collections::HashSet, num::NonZeroU64};
 
+use ix_trace_rs::trace;
 use quire_exact::{
     divide, form_collection, modulo, BoundViolation, CardinalityBound, Charge, ChargePoint,
     CollectionKind, CollectionType, DivisionMember, DivisionProfile, InjectedDenial, Integer,
@@ -347,7 +348,7 @@ fn meter_uses_field_order_and_all_counters_are_queryable() {
     );
 }
 
-/// Trace: TC-916, FR-368-AC-1
+#[trace("TC-916", "FR-368-AC-1")]
 #[test]
 fn charge_point_vocabulary_is_unique_and_round_trips() {
     const _: () = {
@@ -542,6 +543,7 @@ fn charge_point_vocabulary_is_unique_and_round_trips() {
         ));
         assert!(matches!(ChargePoint::ALL[60], ChargePoint::ModelDeref));
         assert!(matches!(ChargePoint::ALL[61], ChargePoint::ModelNavigate));
+        assert!(matches!(ChargePoint::ALL[62], ChargePoint::TemporalVisit));
     };
     let mut seen = HashSet::new();
     for point in ChargePoint::ALL {
@@ -608,12 +610,13 @@ fn charge_point_vocabulary_is_unique_and_round_trips() {
             ChargePoint::GraphResultRetain => "graph.result-retain",
             ChargePoint::ModelDeref => "model.deref",
             ChargePoint::ModelNavigate => "model.navigate",
+            ChargePoint::TemporalVisit => "temporal.visit",
         };
         assert!(seen.insert(point), "duplicate {point:?}");
         assert_eq!(point.as_str(), name);
         assert_eq!(ChargePoint::from_code(name), Some(point));
     }
-    assert_eq!(seen.len(), 62);
+    assert_eq!(seen.len(), 63);
     assert_eq!(ChargePoint::from_code("not-a-charge"), None);
 }
 
