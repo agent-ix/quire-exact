@@ -23,4 +23,4 @@ Equal and unequal cases return `true` and `false`; each reports 17 planned pairs
 
 ## Status
 
-PLANNED: no direct kernel test is tagged to these new criteria yet.
+IMPLEMENTED: direct kernel tests in `src/equality.rs` trace FR-375-AC-9 and FR-375-AC-10, including the admitted pair prefixes on refusal.
