@@ -704,6 +704,12 @@ impl Meter {
         self
     }
 
+    /// The installed cancellation handle, borrowed from this meter. Clone it
+    /// to share its state while mutably charging this meter or another meter.
+    pub fn cancel(&self) -> Option<&Cancel> {
+        self.cancel.as_ref()
+    }
+
     /// Add the qualification seam that denies one exact named charge. The
     /// occurrence counts admissions at the denied point from this call on.
     pub fn with_injected_denial(mut self, denial: InjectedDenial) -> Self {

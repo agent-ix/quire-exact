@@ -51,9 +51,12 @@ replacement. The method SHALL remain available in the crate's `no_std` +
 
 ## Status
 
-PLANNED for IR-895. [TC-933](../test-cases/TC-933-meter-cancellation-handle-access.md)
-defines the future direct public-API controls. No implementation or test Trace
-binding is claimed; use the computed `quire matrix` for coverage.
+Implemented for IR-895. [TC-933](../test-cases/TC-933-meter-cancellation-handle-access.md)
+has direct public-API Trace bindings for AC-1 and AC-2. AC-3 is verified by
+inspection of the borrowing accessor; AC-4 is verified by `make build-no-std`.
+The computed `quire matrix` reports AC-1 and AC-2 as tagged, AC-3 as
+method-without-symbol, and AC-4 as untagged because its build gate has no
+source Trace binding.
 
 ## Dependencies
 
