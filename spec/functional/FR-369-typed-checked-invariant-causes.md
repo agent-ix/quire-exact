@@ -12,6 +12,8 @@ relationships:
 ---
 # FR-369: Carry the precise cause of a checked-invariant failure
 
+The shared cause carrier and kernel producers are owned here. The producer controls formerly FR-369-AC-3/4, AC-7 and AC-9 are allocated without weakening their text to [RT FR-278](ix://agent-ix/quire-contract-runtime/FR-278), [CG FR-042](ix://agent-ix/quire-contract-codegen/FR-042) and [QSV FR-122](ix://agent-ix/quire-semantic-value/FR-122), respectively. Their tests remain PLANNED at those owners.
+
 ## Description
 
 When the exact kernel, the checked-expression residue in `quire-contract-runtime`, the shared `quire-semantic-value` leaf, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish each condition in the tables below, including a re-entrant meter borrow, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results. Runtime-managed calls use explicit frames and `work_units` execution fuel under RT FR-273; exhausted fuel returns `Incomplete` with `limit_kind: work_units`, and no call-depth ceiling or `CallDepthExceeded` checked-invariant cause decides an outcome.
@@ -150,13 +152,9 @@ states this narrow boundary.
 |---|---|---|
 | FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
 | FR-369-AC-2 | Every kernel producer in collection, value, division and equality returns exactly its table cause; two population values return `PopulationPair`, a population paired with another kind returns `ValueKindMismatch`, and unlike collection kinds return `CollectionKindMismatch`. Two composites of different declarations return `false` and a composite paired with a non-composite returns `ValueKindMismatch` (FR-376-AC-1, FR-376-AC-6). | Test |
-| FR-369-AC-3 | Every RT checked-package/function invariant producer returns its table cause: unknown name is `UnknownCheckedFunction`, a foreign expression is `ForeignCheckedExpression`, and each meter reborrow is `MeterBorrowConflict`. Runtime-managed calls use explicit frames and `work_units` fuel under RT FR-273; the final carrier has no `CallDepthExceeded` variant, and fuel exhaustion is `Incomplete` with `limit_kind: work_units`, never `CheckedInvariant`. | Test |
-| FR-369-AC-4 | Every RT collection, composite, equality and quantity producer returns its table cause, including all six `operand_value` failures and the original kernel-owned `IllTypedCause` when a scheduled comparison or checked equality quantity conversion refuses; no site flattens a comparison or conversion error to a message. | Test |
 | FR-369-AC-5 | For every typed checked-invariant cause, `Refusal::code()` and `Refusal::cause()` return `None`, and `Eq` distinguishes otherwise equal refusals whose causes differ. Ordinary kernel refusal codes and causes are unchanged. | Test |
 | FR-369-AC-6 | Every received typed cause follows QSL's existing internal-fault path: no refusal record or `Evaluation`, `runtime_invariant`/`S6a`/`checked-program-invariant` at S6a, `CallFailure::Fault` at the public call, and `Failed` with unavailable basis for an internal replay fault. It never becomes an ordinary replay refusal, `Inconclusive`, `Incomplete(Cancelled)`, a proved result or a certification rejection; an unknown received cause retains fault provenance. | Inspection |
-| FR-369-AC-7 | CG's native Boolean, equality, function and pre-check placeholder constructors use the exact nine CG-owned causes in the table, retaining `IllTypedCause` from `check_type` and `check_equality`; downstream replay consumers preserve the typed payload or match it explicitly, retain charge/failure behavior, and accept neither the former unit constructor nor an invented default. | Test |
 | FR-369-AC-8 | The public carrier contains no QSL model/checker/catalog type or dependency on RT or QSV, RT and QSV own no second refusal enum or compatibility shim, and an exhaustive source inventory finds every kernel, RT, QSV and CG production checked-invariant constructor assigned exactly one cause from the two tables. | Inspection |
-| FR-369-AC-9 | QSV's deferred field or tuple result uses `DeferredResultNotAdmitted`; missing enum variant and unresolved unit use their distinct rows; schedule mismatch and comparator refusal retain their existing rows; each equality operand failure uses its exact table row; and scale-zero integer placement uses `ExpectedIntegerPlacement`. The comparator and quantity conversion retain their original `IllTypedCause` payload, while prior non-result and charge behavior is unchanged. | Test |
 
 ## Status
 
@@ -183,8 +181,7 @@ behavior is claimed by this spec-only change.
   typed-producer tests must retain unknown name, foreign expression and meter
   borrow through the shared type. RT's
   collection/equality/composite/quantity cases need matching tagged tests.
-  QSV's QSpec FR-142/FR-143/FR-149 contracts must test their corresponding
-  internal-fault routes without adding a QSV-local duplicate requirement.
+  [QSV FR-122](ix://agent-ix/quire-semantic-value/FR-122) owns the corresponding QSV internal-fault controls; [RT FR-278](ix://agent-ix/quire-contract-runtime/FR-278) and [CG FR-042](ix://agent-ix/quire-contract-codegen/FR-042) own their producer controls.
   CG FR-018/FR-021 must migrate generated constructors and replay consumers;
   QSpec/QSL FR-096/FR-100 must migrate unit matches. QSL's two production
   constructor sites additionally need a QSL-owned typed-cause/family-fault
