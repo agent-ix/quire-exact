@@ -51,3 +51,5 @@ Round 1, PR head c58ab92.
 | FND-001 | fixed | TC-923 keeps only the AC-7 step. RT TC-203 (RT #132 5312d30) verifies FR-277 and carries steps for AC-1..6. Its oracles drop the explicit consumed totals (WorkUnits 51, ResultUnits 1, ValueOccurrences 17). That loss is in the RT repo and does not affect this PR. |
 | FND-002 | fixed | AC-7, TC-923 step 1 and FR-375 Behavior/Dependencies now name the RT edge and kernel operands. The e21_operands/qsl-eval grounding has been removed. |
 | FND-003 | fixed | FR-369 Dependencies line 184. |
+| FND-004 | fixed | Round 2 (452e01a): verified in the fix commit |
+| FND-005 | fixed | Round 2 (452e01a): verified in the fix commit |
