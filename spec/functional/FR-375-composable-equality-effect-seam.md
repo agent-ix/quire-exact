@@ -36,10 +36,10 @@ The kernel `EqualityPlan` and `planned_equality` remain the source of count and 
 
 - The architecture decision is [AD-002](../assurance/AD-002-composable-equality-proof-seam.md).
 - [RT FR-277](ix://agent-ix/quire-contract-runtime/FR-277) owns the real checked-evaluator controls formerly FR-375-AC-1 through AC-5 and AC-8. FR-277-AC-7 carries FR-375-AC-6 verbatim in the RT Kani lane (owner titan:kani:plan, PLANNED). This kernel leaf claims no proof.
-- [TC-923](../test-cases/TC-923-composable-equality-effect-seam.md) points to RT TC-203 for end-to-end controls; kernel controls for AC-9/10 are PLANNED under TC-932.
+- [TC-923](../test-cases/TC-923-composable-equality-effect-seam.md) points to RT TC-203 for end-to-end controls; kernel controls for AC-9/10 are implemented under [TC-932](../test-cases/TC-932-kernel-equality-plan-and-admitted-pairs.md).
 - Source grounding: `src/equality.rs` (`EqualityPlan`, `plan_equality`, `planned_equality`, `planned_equality_stop`, private `plan_pairs`); `src/accounting.rs` (`Meter`, `ChargePoint`, `LimitKind`).
 - The RT-to-kernel tool boundary remains open until a focused dependency-contract control proves it; a same-crate proof or toy contract is insufficient.
 
 ## Status
 
-PLANNED: kernel AC-9 and AC-10 need direct tagged tests. FR-277-AC-7 is PLANNED at RT owner titan:kani:plan.
+IMPLEMENTED: kernel AC-9 and AC-10 have direct tagged tests. FR-277-AC-7 is PLANNED at RT owner titan:kani:plan.
