@@ -47,12 +47,24 @@ divides one half by zero under a `Meter` with generous limits:
 ```rust
 use quire_exact::{
     evaluate_rational_arithmetic as rational_op, Integer, Meter, Outcome, Rational,
-    RationalArithmetic, Undefined,
+    RationalArithmetic, ScalarLimits, Undefined,
 };
 
-// `meter()` builds a Meter from ScalarLimits; `r(a, b)` is
-// Rational::new(Integer::from(a), Integer::from(b)).unwrap().
-let mut m = meter();
+// Every operation is charged to a meter; these limits never run out.
+let mut m = Meter::new(ScalarLimits {
+    integer_bits: u64::MAX,
+    decimal_digits: u64::MAX,
+    scale_expansion: u64::MAX,
+    text_input_bytes: u64::MAX,
+    text_scalars: u64::MAX,
+    normalized_scalars: u64::MAX,
+    unit_edges: u64::MAX,
+    value_occurrences: u64::MAX,
+    work_units: u64::MAX,
+    result_units: u64::MAX,
+});
+let r = |a: i64, b: i64| Rational::new(Integer::from(a), Integer::from(b)).unwrap();
+
 let undefined = rational_op(RationalArithmetic::Divide(&r(1, 2), &r(0, 1)), None, &mut m);
 assert_eq!(
     undefined.clone(),
