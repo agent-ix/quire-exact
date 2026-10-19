@@ -22,15 +22,15 @@ For the bounded kernel qualification input, two separately constructed depth-fou
 
 The kernel evaluation preserves this ordered effect schedule: `equality.plan-form`, `equality.plan`, one `equality.pair` for each planned occurrence-path pair, then `equality.result-retain`. The plan-form charge uses the maximum operand occurrence count as `ValueOccurrences` and the sum of operand occurrence counts as `WorkUnits`. The plan charge sets the `ValueOccurrences` high-water size to the pair count, requires `pair_count + 2` remaining `WorkUnits` and one remaining `ResultUnit`, then consumes one plan work unit. Each pair charge consumes one work unit; result retention consumes one work unit and one result unit. For ordinary charges, `Meter::charge` checks semantic-size limits in `LimitKind` field order before cumulative `WorkUnits` and then `ResultUnits`; it admits no part of a refused charge. `charge_plan` checks a named denial first, then pair-count `ValueOccurrences`, remaining work reservation, and remaining result capacity before mutation. A `ForeignReference` or checked-invariant refusal during plan formation occurs after plan-form admission and before plan and pair charges. A meter refusal stops at its first unavailable charge and does not admit later charges.
 
-The kernel `EqualityPlan` and `planned_equality` remain the source of count and relation semantics. `plan_pairs` and `PlannedPairs` stay private; QSL does not copy the occurrence-pair walker, construct a parallel charge schema, or substitute a plan-only assertion for `CheckedEquality::evaluate`.
+The kernel `EqualityPlan` and `planned_equality` remain the source of count and relation semantics. `plan_pairs` and `PlannedPairs` stay private. RT currently has a local occurrence-pair walker; FR-277 requires `CheckedEquality::evaluate` to route through the kernel plan and remove that RT copy rather than construct a parallel charge schema or substitute a plan-only assertion.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
+| FR-375-AC-7 | No cross-crate Kani contract, stub, or assumed postcondition is treated as checked unless a focused tool control demonstrates both a passing and a deliberately failing dependency-contract case through the actual RT-to-quire-exact dependency boundary. Until that evidence exists, the proof status is unsupported at that boundary and the real callee remains in the outer CBMC graph. | Inspection |
 | FR-375-AC-9 | On equal and first-head-unequal bounded kernel operands, `planned_equality_with_plan` returns the Boolean relation and 17 planned pair events from the same formed plan; `plan_equality` agrees on that count, and the admitted meter log contains 17 pair charges on success. | Test |
 | FR-375-AC-10 | When `Meter::charge` refuses the 17th pair, the result-bearing kernel operation returns the typed stop with exactly the prior 16 pair charges admitted and no result-retain charge; it does not report all 17 planned pairs as admitted. A result-retain refusal after all 17 pair charges retains that admitted prefix. | Test |
-| FR-375-AC-7 | No cross-crate Kani contract, stub, or assumed postcondition is treated as checked unless a focused tool control demonstrates both a passing and a deliberately failing dependency-contract case through the actual RT-to-quire-exact dependency boundary. Until that evidence exists, the proof status is unsupported at that boundary and the real callee remains in the outer CBMC graph. | Inspection |
 
 ## Dependencies
 

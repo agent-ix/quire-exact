@@ -48,7 +48,12 @@ already reduced rationals and domains before observing the membership helper.
    event, no evaluator debit, and typed cancellation
    or reachable resource-failure projection. On a direct QSV supplied call
    without B, assert `UnsupportedHelper::NumericDomain` instead of completed
-   membership; neither QSV nor the exact helper supplies a default.
+   membership; the direct QSV caller selects no default.
+6. Inspect the `IntegerInterval::try_contains_bounded` and
+   `RationalDomain::try_contains_bounded` signatures and implementations: both
+   require a finite `magnitude_bits: u64` argument, use it for the value and
+   every endpoint, and select no default. An omitted-bound call has no kernel
+   API or kernel result.
 
 ## Expected Results
 
