@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Planned public-API tests for [FR-383](../functional/FR-383-meter-cancellation-handle-access.md).
+Public-API tests for [FR-383](../functional/FR-383-meter-cancellation-handle-access.md).
 Scope: FR-383-AC-1 through AC-4.
 
 ## Test Procedure
@@ -35,5 +35,7 @@ satisfies FR-383-AC-3, and the `make build-no-std` gate satisfies FR-383-AC-4.
 
 ## Status
 
-PLANNED. Four criteria; zero implemented Trace bindings. The test matrix is
-computed by `quire matrix`, not maintained in this file.
+AC-1 and AC-2 have implemented Trace bindings in `tests/ir895_meter_cancel.rs`.
+AC-3 is verified by inspection and AC-4 by `make build-no-std`; neither has a
+source Trace binding. The computed `quire matrix` reports AC-1 and AC-2 as
+tagged, AC-3 as method-without-symbol, and AC-4 as untagged.
