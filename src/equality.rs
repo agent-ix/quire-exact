@@ -314,12 +314,11 @@ mod tests {
 
     #[cfg(feature = "test-support")]
     use alloc::vec::Vec;
-    #[cfg(feature = "test-support")]
     use core::num::NonZeroU64;
     use ix_trace_rs::trace;
 
     use super::*;
-    use crate::accounting::ScalarLimits;
+    use crate::accounting::{InjectedDenial, ScalarLimits};
 
     fn generous_limits() -> ScalarLimits {
         ScalarLimits {
@@ -466,6 +465,21 @@ mod tests {
                     .collect();
                 assert_eq!(actual_points, expected_points);
             }
+
+            // The production meter has no log. Denying result retention
+            // exposes the admitted prefix through its public counters: both
+            // setup charges and all 17 pair charges must precede the denial.
+            let denial = InjectedDenial {
+                point: ChargePoint::EqualityResultRetain,
+                occurrence: NonZeroU64::new(1).unwrap(),
+            };
+            let mut stopped_meter = Meter::new(generous_limits()).with_injected_denial(denial);
+            let stopped = planned_equality_with_plan(&left, &right, &mut stopped_meter);
+            assert!(matches!(stopped, Outcome::Incomplete(ref incomplete)
+                if incomplete.charge_point == ChargePoint::EqualityResultRetain));
+            assert_eq!(stopped_meter.admission_count(), 19);
+            assert_eq!(stopped_meter.consumed(LimitKind::WorkUnits), 50);
+            assert_eq!(stopped_meter.consumed(LimitKind::ResultUnits), 0);
         }
     }
 
@@ -511,8 +525,6 @@ mod tests {
     #[trace("TC-932", "FR-375-AC-10")]
     #[test]
     fn pair_and_result_refusals_stop_at_the_first_denied_charge() {
-        use crate::accounting::InjectedDenial;
-
         let (left, right) = e21_list_shape_operands(true);
         let pair_denial = InjectedDenial {
             point: ChargePoint::EqualityPair,
