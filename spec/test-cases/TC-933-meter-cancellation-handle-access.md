@@ -11,7 +11,7 @@ relationships:
 ## Description
 
 Planned public-API tests for [FR-383](../functional/FR-383-meter-cancellation-handle-access.md).
-Scope: FR-383-AC-1 through AC-3.
+Scope: FR-383-AC-1 through AC-4.
 
 ## Test Procedure
 
@@ -23,16 +23,17 @@ Scope: FR-383-AC-1 through AC-3.
    unchanged counters and admission count. Repeat with only an independent
    handle cancelled and assert the charge is admitted.
 3. Inspect the accessor implementation for a borrow of the meter field and no
-   counter copy or state mutation. Compile the public call under `no_std` +
-   `alloc`.
+   counter copy or state mutation.
+4. Run `make build-no-std` to compile the public accessor signature under
+   `no_std` + `alloc`.
 
 ## Expected Results
 
 The absent, installed and replacement handles satisfy FR-383-AC-1. Only the
 installed handle controls the meter charge as FR-383-AC-2 states. Inspection
-and compilation satisfy FR-383-AC-3.
+satisfies FR-383-AC-3, and the `make build-no-std` gate satisfies FR-383-AC-4.
 
 ## Status
 
-PLANNED. Three criteria; zero implemented Trace bindings. The test matrix is
+PLANNED. Four criteria; zero implemented Trace bindings. The test matrix is
 computed by `quire matrix`, not maintained in this file.
