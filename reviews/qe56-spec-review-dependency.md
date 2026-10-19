@@ -33,3 +33,18 @@ Ticket: IR-878
 ## Verdict
 
 The RT FR-277/FR-278, CG FR-042 and QSV FR-122 ids are unused on their mains and defined on their PR heads. Their relationships point back to quire-exact FR-375/FR-369/FR-372/FR-380, which exist. The QSL FR-391 id collides and blocks the PR.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | FR-376 Dependencies links `ix://agent-ix/quire-contract-runtime/FR-277-AC-4`, and QSV #47 FR-122-AC-3 links `ix://agent-ix/quire-exact/FR-380-AC-7`. These are criterion-level ix:// addresses, and no spec in quire-exact, RT, CG or QSL uses that form. Every other link in this allocation addresses the FR artifact. An AC id is not an artifact id, so link resolution will likely miss. Link the FR and name the AC in the link text. | spec/functional/FR-376-composite-equality-across-declarations.md:60 |
+
+## Dispositions
+
+Round 1, PR head c58ab92.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | QSL #995 head 6862c2f defines FR-394 (spec/functional/FR-394-supplied-admission-evaluator-boundary.md), and its AC-2/AC-3 are unchanged from the former FR-391. QSL origin/main 3634209 has FR-391..393 but no FR-394. #995 is now MERGEABLE. FR-380 and QSV #47 FR-109/FR-122 were repointed too. No FR-391 reference remains in quire-exact. |
+| FND-002 | still-open | Merge order still matters. RT #132, CG #449, QSV #47 and QSL #995 are all OPEN (MERGEABLE), so the FR-277/278, FR-042, FR-122, FR-394 and TC-203 links do not yet exist on any main. Merge the companions first, or all together; this resolves without a code change. |

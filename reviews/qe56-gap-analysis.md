@@ -37,3 +37,11 @@ Ticket: IR-878
 ## Verdict
 
 Coverage delta (`quire coverage --strict`): rows 194 -> 182, backed 167 -> 167, unbacked 27 -> 15. Removed unbacked rows are exactly the 12 moved ids: FR-369-AC-3/4/7/9, FR-372-AC-5, FR-375-AC-1..5/8 and FR-380-AC-6. No row was newly unbacked, `status_lies` is 0, and `unmatched_tags` is unchanged at 26. A grep of src/ and tests/ finds no trace tag on a removed id, so no dangling binding is left. The remaining unbacked rows in the touched FRs are FR-369-AC-6/8 (Inspection), FR-372-AC-6 (Analysis), FR-375-AC-6 (Kani, see SR-13011 FND-001) and FR-375-AC-7 (Inspection). The single gap is that the kernel equality seam now has no criterion of its own.
+
+## Dispositions
+
+Round 1, PR head c58ab92.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-375-AC-9/AC-10 and TC-932 now give the kernel seam its own criteria. Both are PLANNED and untagged, as is the new FR-380-AC-7. Strict coverage at c58ab92 vs origin/main b83cab9: rows 194 -> 184, backed 167 -> 167, unbacked 27 -> 17. 13 moved ids were removed (the round-0 12 plus FR-375-AC-6) and 3 new PLANNED kernel rows were added (FR-375-AC-9, AC-10, FR-380-AC-7). Status lies 0, unmatched tags unchanged at 26, and no trace tag references a removed id. |

@@ -33,3 +33,18 @@ Ticket: IR-878
 ## Verdict
 
 The moved criteria are correctly allocated. RT owns `CheckedEquality::evaluate` and its producer sites, CG owns the generated constructors, QSV owns the supplied caller and its producers, and QSL owns the evaluator meter and the omitted-B default. Two boundary defects remain on the quire-exact side: FR-375-AC-6 and the FR-376 citation.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | high | The new FR-380-AC-7 says a direct kernel helper call lacking B returns 'the kernel's typed unsupported numeric-domain result'. No such call or result exists. `IntegerInterval::try_contains_bounded` and `RationalDomain::try_contains_bounded` (src/numeric_membership.rs:60,77) take a required `magnitude_bits: u64`, and `NumericMembershipFailure` has only `UnsupportedSize` and `Cancelled`. The original FR-380-AC-6 attributed `NumericDomain` to the direct QSV call only, and so does FR-380 Behavior 6. The split moved a QSV result onto the kernel, which no test can satisfy without an API change. Keep only the kernel-true clause: B is a required finite parameter and no default is selected. That clause can be verified by signature or inspection. | spec/functional/FR-380-bounded-cancellable-numeric-membership.md:119 |
+
+## Dispositions
+
+Round 1, PR head c58ab92.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-375-AC-6 has been removed from quire-exact. RT #132 head 5312d30 has FR-277-AC-7, which is byte-identical to the 159f170 AC-6 text, and that text is a superset of origin/main AC-6. The RT matrix row maps it to TC-203 with owner titan:kani:plan. |
+| FND-002 | fixed | FR-376 Behavior 1 now states the property at kernel level and no longer cites RT. |

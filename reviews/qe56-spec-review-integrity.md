@@ -34,3 +34,20 @@ Ticket: IR-878
 ## Verdict
 
 The ids stay unique and sequential where they remain, `quire validate` is clean, and no test tag in src/ or tests/ references a removed id. The three consistency defects above are left behind by the move.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | FR-375 Behavior line 25 still names QSL as the consumer that must not copy the walker. The consumer is RT, and RT FR-277 (#132) says RT's `CheckedEquality::evaluate` still calls RT-local `planned_equality`/`plan_pairs`. The no-copy constraint names the wrong repo and misses the one that actually holds the copy. | spec/functional/FR-375-composable-equality-effect-seam.md:25 |
+| FND-005 | low | The acceptance tables are out of id order. FR-375 lists AC-9, AC-10, then AC-7, and FR-380 inserts AC-7 between AC-4 and AC-5. Layout only. | spec/functional/FR-375-composable-equality-effect-seam.md:31-33 |
+
+## Dispositions
+
+Round 1, PR head c58ab92.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-923 keeps only the AC-7 step. RT TC-203 (RT #132 5312d30) verifies FR-277 and carries steps for AC-1..6. Its oracles drop the explicit consumed totals (WorkUnits 51, ResultUnits 1, ValueOccurrences 17). That loss is in the RT repo and does not affect this PR. |
+| FND-002 | fixed | AC-7, TC-923 step 1 and FR-375 Behavior/Dependencies now name the RT edge and kernel operands. The e21_operands/qsl-eval grounding has been removed. |
+| FND-003 | fixed | FR-369 Dependencies line 184. |
