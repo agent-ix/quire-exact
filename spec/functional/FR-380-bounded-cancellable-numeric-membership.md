@@ -117,7 +117,8 @@ cancellation handle.
 | FR-380-AC-3 | Observed production comparison steps do not exceed 2L for Integer or 4L for Rational, with fixed-width per-step work and constant auxiliary storage on the allocation-free path; source inspection confirms magnitude checks and borrowed limb iteration do not hide input-sized work/allocation. | Test |
 | FR-380-AC-4 | A pre-cancelled original handle prevents input-sized work. Deterministically cancelling during a longest admitted comparison returns that cause before the next step/result; a fresh-handle mutant fails. | Test |
 | FR-380-AC-5 | Inspection identifies whether the production comparison actually performs a fallible native conversion or storage request. For each reachable boundary, a denied checked conversion is typed capacity/resource refusal and an actual reservation denial carries its measured request; neither becomes false, unsupported size or traversal Limit, and retry after removing allocation denial agrees with a fresh run. When neither boundary exists, no artificial capacity/allocator refusal fixture or ceiling is required. | Inspection |
-| FR-380-AC-6 | The QSV supplied caller documents and tests the authenticated finite B for value plus every endpoint, invokes the qualified helper after charging one initiating logical event, preserves original cancellation and locus, and leaves evaluator charges unchanged. A QSL caller resolving omitted B to QSpec FR-323's published 4096-bit default supplies that B; the exact helper and a direct QSV caller do not default B, and a direct QSV call without B returns `UnsupportedHelper::NumericDomain`. | Test |
+
+The supplied-caller controls formerly FR-380-AC-6 are allocated to [QSV FR-122-AC-3](ix://agent-ix/quire-semantic-value/FR-122) and [QSL FR-391-AC-2](ix://agent-ix/quire-spec-language/FR-391); the evaluator charge control remains with QSL. Owner tests are PLANNED.
 
 ## Dependencies
 

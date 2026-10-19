@@ -10,7 +10,7 @@ relationships:
 
 ## Description
 
-Verify FR-375 through QSL's actual `CheckedEquality::evaluate` path and the `quire-exact` meter effects. Use the fixed E21 depth-four `List` operands: 16 occurrences per operand and 17 occurrence-path pairs.
+This procedure is retained as the IR-241 Kani-lane context for FR-375-AC-6 and the FR-375-AC-7 cross-crate tool inspection. The actual `CheckedEquality::evaluate` path belongs to quire-contract-runtime `src/exact/equality.rs`; its end-to-end test obligations are RT FR-277-AC-1 through AC-6. Use the fixed E21 depth-four `List` operands: 16 occurrences per operand and 17 occurrence-path pairs. No test tag or proof credit is assigned by this procedure.
 
 ## Test Procedure
 
