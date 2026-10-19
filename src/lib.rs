@@ -136,7 +136,9 @@ pub use integer::{
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
-pub use node::{is_identifier, Identifier, InvalidIdentifier, NodeKey, NODE_KEY_DOMAIN};
+pub use node::{
+    is_identifier, parse_hex32, Identifier, InvalidIdentifier, NodeKey, NODE_KEY_DOMAIN,
+};
 pub use numeric::{
     evaluate_boolean, evaluate_integer_arithmetic, evaluate_rational_arithmetic, order_numbers,
     rational_arithmetic_bits, retain_boolean, ArithmeticOperator, BooleanConnective,

@@ -23,6 +23,7 @@
 //! package, never by parsing a digest string directly: parsing a wire digest is
 //! the caller's concern. Bridging another digest type's bytes into a `NodeKey`
 //! has no canonical role either.
+//! [`parse_hex32`] decodes text to plain bytes only; it does not make a key.
 //!
 //! Like `from_digest`, `decode_admitted` accepts any 32 bytes: the guarantee is
 //! the caller allow-list plus the verified binding, not the type.
@@ -32,6 +33,37 @@ use core::fmt;
 
 /// Digest domain of every checked semantic node key.
 pub const NODE_KEY_DOMAIN: &str = "quire.checked-semantic-node/v1";
+
+fn lower_hex_nibble(digit: u8) -> Option<u8> {
+    match digit {
+        b'0'..=b'9' => Some(digit - b'0'),
+        b'a'..=b'f' => Some(digit - b'a' + 10),
+        _ => None,
+    }
+}
+
+/// Decode exactly 64 lowercase ASCII hex digits to 32 plain bytes.
+///
+/// No prefix, whitespace, uppercase digit, or other character is accepted.
+/// This function neither mints a [`NodeKey`] nor constructs a value; callers
+/// separately establish admission before decoding a key from these bytes.
+pub fn parse_hex32(text: &str) -> Option<[u8; 32]> {
+    let digits = text.as_bytes();
+    if digits.len() != 64 {
+        return None;
+    }
+
+    let mut bytes = [0_u8; 32];
+    let (pairs, []) = digits.as_chunks::<2>() else {
+        return None;
+    };
+    for (slot, &[high, low]) in bytes.iter_mut().zip(pairs) {
+        let high = lower_hex_nibble(high)?;
+        let low = lower_hex_nibble(low)?;
+        *slot = (high << 4) | low;
+    }
+    Some(bytes)
+}
 
 /// Whether `text` is `^[A-Za-z_][A-Za-z0-9_]*$`: the one definition of this
 /// character class, which every identifier-shaped field and [`Identifier`]

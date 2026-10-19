@@ -31,3 +31,8 @@ and returns exactly the decoded byte array. It works in the crate's
 | --- | --- | --- |
 | FR-384-AC-1 | The public function decodes 64 lowercase hex digits to the expected 32 bytes and recovers byte arrays rendered as lowercase hex; the result is only `[u8; 32]`. | Test |
 | FR-384-AC-2 | Inputs of 63 or 65 digits, uppercase, `0x` prefix, leading or trailing whitespace, nonhex ASCII, empty text, sign, and multibyte characters all return `None`; mutations that weaken exact length or lowercase charset checks fail these tests. | Test |
+
+## Dependencies
+
+None within this crate. Callers own admission and may pass the returned bytes
+to `NodeKey::decode_admitted` only after its documented precondition holds.
