@@ -18,7 +18,7 @@ The kernel seam is owned by `quire-exact::equality`, where `plan_pairs` forms bo
 
 The successful evaluation record SHALL carry the kernel's Boolean relation and exact planned `equality.pair` event count from the same formed plan. The meter SHALL remain authoritative for effects: only pair charges whose `Meter::charge` call succeeds are admitted. The seam SHALL NOT claim all planned pairs were admitted when an earlier charge refuses. Existing callers of `planned_equality` SHALL retain its current result and refusal semantics.
 
-For the bounded IR-241 qualification input, operands are the two separately constructed depth-four `List` values in `qsl-eval/tests/it/equality_matrix.rs::e21_operands`: each has `occ() == 16` and the pair plan has 17 events. The input is fixed and finite; the seam does not promise a bound for arbitrary recursive or caller-supplied values. Admission of the input and its composite declaration identity precedes evaluation.
+For the bounded kernel qualification input, two separately constructed depth-four `CollectionKind::Sequence` values each have 16 visited occurrences and one plan has 17 pair events. This fixed input provides a finite test control without asserting a bound for arbitrary recursive values.
 
 The kernel evaluation preserves this ordered effect schedule: `equality.plan-form`, `equality.plan`, one `equality.pair` for each planned occurrence-path pair, then `equality.result-retain`. The plan-form charge uses the maximum operand occurrence count as `ValueOccurrences` and the sum of operand occurrence counts as `WorkUnits`. The plan charge sets the `ValueOccurrences` high-water size to the pair count, requires `pair_count + 2` remaining `WorkUnits` and one remaining `ResultUnit`, then consumes one plan work unit. Each pair charge consumes one work unit; result retention consumes one work unit and one result unit. For ordinary charges, `Meter::charge` checks semantic-size limits in `LimitKind` field order before cumulative `WorkUnits` and then `ResultUnits`; it admits no part of a refused charge. `charge_plan` checks a named denial first, then pair-count `ValueOccurrences`, remaining work reservation, and remaining result capacity before mutation. A `ForeignReference` or checked-invariant refusal during plan formation occurs after plan-form admission and before plan and pair charges. A meter refusal stops at its first unavailable charge and does not admit later charges.
 
@@ -28,13 +28,18 @@ The kernel `EqualityPlan` and `planned_equality` remain the source of count and 
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-375-AC-6 | The IR-241 Kani claim remains `plan_equality(left, right).pair_events() == count_of_EqualityPair_charges_from_the_same_real_CheckedEquality::evaluate(left, right, meter)` for both equal and first-head-unequal bounded operands, with the existing exact operand bound and proof ceiling. The real evaluator is owned by quire-contract-runtime; a plan-only equality or duplicated QSL walker does not satisfy this criterion. | Test |
-| FR-375-AC-7 | No cross-crate Kani contract, stub, or assumed postcondition is treated as checked unless a focused tool control demonstrates both a passing and a deliberately failing dependency-contract case through the exact QSL-to-quire-exact dependency boundary. Until that evidence exists, the proof status is unsupported at that boundary and the real callee remains in the outer CBMC graph. | Inspection |
+| FR-375-AC-9 | On equal and first-head-unequal bounded kernel operands, `planned_equality_with_plan` returns the Boolean relation and 17 planned pair events from the same formed plan; `plan_equality` agrees on that count, and the admitted meter log contains 17 pair charges on success. | Test |
+| FR-375-AC-10 | When `Meter::charge` refuses the 17th pair, the result-bearing kernel operation returns the typed stop with exactly the prior 16 pair charges admitted and no result-retain charge; it does not report all 17 planned pairs as admitted. A result-retain refusal after all 17 pair charges retains that admitted prefix. | Test |
+| FR-375-AC-7 | No cross-crate Kani contract, stub, or assumed postcondition is treated as checked unless a focused tool control demonstrates both a passing and a deliberately failing dependency-contract case through the actual RT-to-quire-exact dependency boundary. Until that evidence exists, the proof status is unsupported at that boundary and the real callee remains in the outer CBMC graph. | Inspection |
 
 ## Dependencies
 
 - The architecture decision is [AD-002](../assurance/AD-002-composable-equality-proof-seam.md).
-- [RT FR-277](ix://agent-ix/quire-contract-runtime/FR-277) owns the real checked-evaluator controls formerly FR-375-AC-1 through AC-5 and AC-8. FR-375-AC-6 stays in the Kani lane; this allocation does not credit a proof.
-- The falsifying controls are [TC-923](../test-cases/TC-923-composable-equality-effect-seam.md).
-- Source grounding: `src/equality.rs` (`EqualityPlan`, `plan_equality`, `planned_equality`, `planned_equality_stop`, private `plan_pairs`); `src/accounting.rs` (`Meter`, `ChargePoint`, `LimitKind`); QSL's `qsl-eval/tests/it/equality_matrix.rs` (`e21_operands`, `checked_equality_records_the_full_plan_for_equal_and_unequal_lists`, `list_equality_refuses_distinct_declaration_identities`).
-- The cross-crate tool boundary remains open until an exact dependency-contract control proves it; a same-crate proof or toy contract is insufficient.
+- [RT FR-277](ix://agent-ix/quire-contract-runtime/FR-277) owns the real checked-evaluator controls formerly FR-375-AC-1 through AC-5 and AC-8. FR-277-AC-7 carries FR-375-AC-6 verbatim in the RT Kani lane (owner titan:kani:plan, PLANNED). This kernel leaf claims no proof.
+- [TC-923](../test-cases/TC-923-composable-equality-effect-seam.md) points to RT TC-203 for end-to-end controls; kernel controls for AC-9/10 are PLANNED under TC-932.
+- Source grounding: `src/equality.rs` (`EqualityPlan`, `plan_equality`, `planned_equality`, `planned_equality_stop`, private `plan_pairs`); `src/accounting.rs` (`Meter`, `ChargePoint`, `LimitKind`).
+- The RT-to-kernel tool boundary remains open until a focused dependency-contract control proves it; a same-crate proof or toy contract is insufficient.
+
+## Status
+
+PLANNED: kernel AC-9 and AC-10 need direct tagged tests. FR-277-AC-7 is PLANNED at RT owner titan:kani:plan.

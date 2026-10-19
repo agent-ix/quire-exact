@@ -116,9 +116,10 @@ cancellation handle.
 | FR-380-AC-2 | Exact-B value and every exact-B endpoint are accepted for comparison; one-over-B in each of the three Integer or six Rational operand positions returns typed unsupported size naming that position and measured bits before any comparison. A value-only guard mutant fails an endpoint case. | Test |
 | FR-380-AC-3 | Observed production comparison steps do not exceed 2L for Integer or 4L for Rational, with fixed-width per-step work and constant auxiliary storage on the allocation-free path; source inspection confirms magnitude checks and borrowed limb iteration do not hide input-sized work/allocation. | Test |
 | FR-380-AC-4 | A pre-cancelled original handle prevents input-sized work. Deterministically cancelling during a longest admitted comparison returns that cause before the next step/result; a fresh-handle mutant fails. | Test |
+| FR-380-AC-7 | The direct exact-kernel Integer and Rational helpers require an authenticated finite B for value and every endpoint and do not select a default B. A direct call lacking B returns the kernel's typed unsupported numeric-domain result before comparison. | Test |
 | FR-380-AC-5 | Inspection identifies whether the production comparison actually performs a fallible native conversion or storage request. For each reachable boundary, a denied checked conversion is typed capacity/resource refusal and an actual reservation denial carries its measured request; neither becomes false, unsupported size or traversal Limit, and retry after removing allocation denial agrees with a fresh run. When neither boundary exists, no artificial capacity/allocator refusal fixture or ceiling is required. | Inspection |
 
-The supplied-caller controls formerly FR-380-AC-6 are allocated to [QSV FR-122-AC-3](ix://agent-ix/quire-semantic-value/FR-122) and [QSL FR-391-AC-2](ix://agent-ix/quire-spec-language/FR-391); the evaluator charge control remains with QSL. Owner tests are PLANNED.
+The supplied-caller controls formerly FR-380-AC-6 are allocated to [QSV FR-122-AC-3](ix://agent-ix/quire-semantic-value/FR-122) and [QSL FR-394-AC-2](ix://agent-ix/quire-spec-language/FR-394); the evaluator charge control remains with QSL. The no-default exact helper clause is owned here by FR-380-AC-7, with tests PLANNED; QSV and QSL point to it.
 
 ## Dependencies
 

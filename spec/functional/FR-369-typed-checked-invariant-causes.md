@@ -181,8 +181,7 @@ behavior is claimed by this spec-only change.
   typed-producer tests must retain unknown name, foreign expression and meter
   borrow through the shared type. RT's
   collection/equality/composite/quantity cases need matching tagged tests.
-  QSV's QSpec FR-142/FR-143/FR-149 contracts must test their corresponding
-  internal-fault routes without adding a QSV-local duplicate requirement.
+  [QSV FR-122](ix://agent-ix/quire-semantic-value/FR-122) owns the corresponding QSV internal-fault controls; [RT FR-278](ix://agent-ix/quire-contract-runtime/FR-278) and [CG FR-042](ix://agent-ix/quire-contract-codegen/FR-042) own their producer controls.
   CG FR-018/FR-021 must migrate generated constructors and replay consumers;
   QSpec/QSL FR-096/FR-100 must migrate unit matches. QSL's two production
   constructor sites additionally need a QSL-owned typed-cause/family-fault

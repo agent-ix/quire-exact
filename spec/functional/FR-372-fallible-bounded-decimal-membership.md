@@ -170,7 +170,7 @@ semantic meter, replacement cancellation handle or partial admission output.
 | FR-372-AC-4 | A pre-cancelled original handle causes no scratch request. Cancellation observed during the longest admitted division/comparison path returns the original cause before another limb step or result; cancellation observed immediately after successful reservation prevents scratch work. Neither failure is classified as nonmembership or work exhaustion. | Test |
 | FR-372-AC-6 | Final implementation qualification establishes the Euclidean/remainder and sign invariants, exact reservation boundary, checked layout conversions, allocation-free inline unsigned-magnitude stream and Large borrowed dependency iterator, absence of cache initialization or BigInt-image construction on those streams, and stated arithmetic polling gap. Its record distinguishes requested storage from allocator overhead and work latency from unbounded allocator elapsed time. | Analysis |
 
-The integrated supplied Decimal control formerly FR-372-AC-5 is allocated to [QSV FR-122-AC-2](ix://agent-ix/quire-semantic-value/FR-122) for the supplied path and [QSL FR-391-AC-3](ix://agent-ix/quire-spec-language/FR-391) for evaluator effects. Both remain PLANNED for owner tests.
+The integrated supplied Decimal control formerly FR-372-AC-5 is allocated to [QSV FR-122-AC-2](ix://agent-ix/quire-semantic-value/FR-122) for the supplied path and [QSL FR-394-AC-3](ix://agent-ix/quire-spec-language/FR-394) for evaluator effects. Both remain PLANNED for owner tests.
 
 ## Dependencies
 
