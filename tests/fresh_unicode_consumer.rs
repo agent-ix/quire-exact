@@ -77,7 +77,7 @@ fn fresh_consumer_resolves_and_runs_unicode17_normalization() {
     // Cargo serializes this cache independently of the outer cargo test target.
     // Offline resolution uses the ordinary registry cache without consumer pins.
     let output = Command::new(env!("CARGO"))
-        .current_dir(&directory)
+        .current_dir(directory)
         .args(["run", "--offline", "--jobs", "1"])
         .env(
             "CARGO_TARGET_DIR",
