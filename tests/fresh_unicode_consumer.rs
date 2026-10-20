@@ -3,7 +3,7 @@
 
 use std::{fs, path::Path, process::Command};
 
-/// Trace: ix://agent-ix/quire-specification/FR-141-AC-1
+/// Trace: FR-141-AC-1
 /// Provenance: IR-935, QSpec TC-186
 #[test]
 fn fresh_consumer_resolves_and_runs_unicode17_normalization() {
