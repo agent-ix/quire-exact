@@ -249,14 +249,6 @@ pub fn evaluate_integer_arithmetic(
     bound: Option<&IntegerInterval>,
     meter: &mut Meter,
 ) -> Outcome<Integer> {
-    Outcome::from_stop(integer_arithmetic(operation, bound, meter))
-}
-
-fn integer_arithmetic(
-    operation: IntegerArithmetic<'_>,
-    bound: Option<&IntegerInterval>,
-    meter: &mut Meter,
-) -> Result<Integer, Stop> {
     let (bits, count) = match operation {
         IntegerArithmetic::Add(left, right)
         | IntegerArithmetic::Subtract(left, right)
@@ -265,15 +257,21 @@ fn integer_arithmetic(
         }
         IntegerArithmetic::Negate(operand) => (operand.magnitude_bits(), 1),
     };
-    meter.charge(
+    // Construct Outcome directly rather than carrying Integer through an
+    // intermediate Result discriminant on this evaluator path.
+    if let Err(record) = meter.charge(
         Charge::new(ChargePoint::IntegerArithmeticOperands)
             .size(LimitKind::IntegerBits, bits)
             .size(LimitKind::ValueOccurrences, count),
-    )?;
-    meter.charge(
+    ) {
+        return Outcome::Incomplete(record);
+    }
+    if let Err(record) = meter.charge(
         Charge::new(ChargePoint::IntegerArithmeticArithmetic)
             .exact_size(LimitKind::IntegerBits, integer_arithmetic_bits(operation)),
-    )?;
+    ) {
+        return Outcome::Incomplete(record);
+    }
     let result = match operation {
         IntegerArithmetic::Add(left, right) => left.add(right),
         IntegerArithmetic::Subtract(left, right) => left.sub(right),
@@ -281,12 +279,16 @@ fn integer_arithmetic(
         IntegerArithmetic::Multiply(left, right) => left.mul(right),
     };
     if let Some(bound) = bound.filter(|bound| !bound.contains(&result)) {
-        return Err(Stop::Refused(Refusal::IntegerOutOfDomain {
+        return Outcome::Refused(Refusal::IntegerOutOfDomain {
             target: Box::new(bound.clone()),
-        }));
+        });
     }
-    meter.charge(Charge::new(ChargePoint::IntegerArithmeticResultRetain).results(1))?;
-    Ok(result)
+    if let Err(record) =
+        meter.charge(Charge::new(ChargePoint::IntegerArithmeticResultRetain).results(1))
+    {
+        return Outcome::Incomplete(record);
+    }
+    Outcome::Completed(result)
 }
 
 /// One `Rational[..]` arithmetic operation. An `Integer` or `Int[..]` `/`
@@ -431,8 +433,11 @@ pub fn retain_boolean(
 #[cfg(test)]
 mod tests {
 
+    use ix_trace_rs::trace;
+
     use super::*;
     use crate::accounting::ScalarLimits;
+    use crate::{Cancel, CancelCause};
 
     fn generous_meter() -> Meter {
         Meter::new(ScalarLimits {
@@ -457,6 +462,73 @@ mod tests {
         let outcome =
             evaluate_integer_arithmetic(IntegerArithmetic::Add(&two, &three), None, &mut meter);
         assert_eq!(outcome.completed(), Some(Integer::from(5_u64)));
+    }
+
+    #[trace("FR-371-AC-3", "FR-362-AC-11")]
+    #[test]
+    fn integer_refusal_owns_full_bound_and_precedes_result_retention() {
+        let min = Integer::from(i128::MIN);
+        let max = Integer::from(i128::MAX);
+        let one = Integer::one();
+        let two = Integer::from(2_u64);
+        for operation in [
+            IntegerArithmetic::Add(&max, &one),
+            IntegerArithmetic::Subtract(&min, &one),
+            IntegerArithmetic::Multiply(&max, &two),
+            IntegerArithmetic::Negate(&min),
+        ] {
+            let bound = IntegerInterval::spanning(min.clone(), max.clone());
+            let mut limits = *generous_meter().limits();
+            // A domain refusal must win over an unavailable result-retain charge.
+            limits.result_units = 0;
+            let mut meter = Meter::new(limits);
+            let outcome = evaluate_integer_arithmetic(operation, Some(&bound), &mut meter);
+            drop(bound);
+            let Outcome::Refused(Refusal::IntegerOutOfDomain { target }) = outcome else {
+                panic!("overflow outside the declared bound must refuse before retention");
+            };
+            assert_eq!(*target, IntegerInterval::spanning(min.clone(), max.clone()));
+            assert_eq!(meter.admission_count(), 2);
+            assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
+            assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+            #[cfg(feature = "test-support")]
+            assert_eq!(
+                meter.admitted_charges().iter().map(|charge| charge.point).collect::<alloc::vec::Vec<_>>(),
+                [ChargePoint::IntegerArithmeticOperands, ChargePoint::IntegerArithmeticArithmetic]
+            );
+        }
+    }
+
+    #[trace("FR-371-AC-3")]
+    #[test]
+    fn integer_arithmetic_preserves_original_cancellation_and_spent_meter() {
+        let two = Integer::from(2_u64);
+        for cause in [CancelCause::Requested, CancelCause::Deadline] {
+            for operation in [
+                IntegerArithmetic::Add(&two, &two),
+                IntegerArithmetic::Subtract(&two, &two),
+                IntegerArithmetic::Multiply(&two, &two),
+                IntegerArithmetic::Negate(&two),
+            ] {
+                let cancel = Cancel::new();
+                let mut meter = generous_meter().with_cancel(cancel.clone());
+                meter.charge(Charge::new(ChargePoint::FunctionCall).results(1)).unwrap();
+                let before = meter.clone();
+                cancel.cancel(cause);
+                assert_eq!(
+                    evaluate_integer_arithmetic(operation, None, &mut meter),
+                    Outcome::Incomplete(crate::Incomplete {
+                        limit_kind: LimitKind::WorkUnits,
+                        limit: 1,
+                        consumed: 1,
+                        next_charge: Integer::one(),
+                        charge_point: ChargePoint::IntegerArithmeticOperands,
+                    })
+                );
+                assert_eq!(cancel.tripped(), Some(cause));
+                assert_eq!(meter, before);
+            }
+        }
     }
 
     /// `a implies b` is false only when `a` is true and `b` is
