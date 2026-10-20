@@ -1,31 +1,27 @@
 # quire-exact
 
-`quire-exact` is a small Rust library of exact values: integers and fractions
-of any size, decimals, text, IEEE floating-point numbers, quantities and
-collections, plus the checked identities and result types that go with them.
-It is `no_std` (it needs only `alloc`), contains no `unsafe` code, and depends
-on no other Quire crate.
+quire-exact is a Rust library of exact values: integers and fractions of any
+size, decimals, text, IEEE floating-point numbers, quantities and collections,
+plus the checked identities and result types that go with them.
 
-It exists so the layers above it never have to answer "what does this operation
-mean?" for themselves. A float turns `0.1 + 0.2` into `0.30000000000000004`
-and moves on. A formal checker cannot do that: a rule that holds or fails
-because of a rounding error is worse than no rule. Here, arithmetic is exact,
-and when an operation has no honest answer (dividing by zero, a result outside
-its declared range, a budget that ran out) it returns a closed, named outcome
-instead of a wrong number.
+It is `no_std` (it needs only `alloc`), contains no `unsafe` code, and depends
+on no other Quire crate. The layers above it use it for arithmetic with no
+rounding error. When an operation has no value (dividing by zero, a result
+outside its declared range, a budget that ran out), it returns a closed, named
+outcome.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
-  <img alt="Binary floating point rounds 0.1 + 0.2 to 0.30000000000000004. quire-exact adds the fractions 1/10 and 2/10 exactly and gets 3/10, and when an operation such as 1/2 divided by 0 has no value it returns undefined instead of a number." src="docs/images/hero-light.svg">
+  <img alt="Binary floating point rounds 0.1 + 0.2 to 0.30000000000000004. quire-exact adds the fractions 1/10 and 2/10 exactly and gets 3/10, and when an operation such as 1/2 divided by 0 has no value it returns undefined." src="docs/images/hero-light.svg">
 </picture>
 
 > **Status: public prerelease.** The crate is at version 0.1.0 and is not
 > published (`publish = false`). Its API is still changing. Expect breaking
 > changes.
 
-## Every operation ends in one outcome
+## Outcomes
 
-Exact operations return an `Outcome<T>`, which is exactly one of four things:
+Exact operations return an `Outcome<T>`, which is one of four variants:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/outcomes-dark.svg">
@@ -34,15 +30,15 @@ Exact operations return an `Outcome<T>`, which is exactly one of four things:
 
 | Outcome | Meaning |
 | --- | --- |
-| `Completed(value)` | The exact result. A false Boolean is a completed value, not a failure. |
+| `Completed(value)` | The exact result. A false Boolean is a completed value. |
 | `Undefined(reason)` | The operation has no mathematical value, for example `DivisionByZero` or `IeeeNotFinite` (a NaN or infinity has no exact value). |
 | `Refused(reason)` | The operation is defined, but its result is not admitted by the declared type, for example `IntegerOutOfDomain` or `InexactDecimal`. |
 | `Incomplete(record)` | A named limit on a `Meter` was used up. The record says which one. No partial value exists. |
 
-## A first operation
+## Usage
 
-This is adapted from `tests/ir673_scalar.rs`, which the test suite runs. It
-divides one half by zero under a `Meter` with generous limits:
+This example is adapted from `tests/ir673_scalar.rs`, which the test suite runs.
+It divides one half by zero under a `Meter` with generous limits:
 
 ```rust
 use quire_exact::{
@@ -75,10 +71,10 @@ assert_eq!(undefined.completed(), None);
 
 `Rational::new` reduces to lowest terms and fixes the sign, so equal fractions
 are equal values. Every metered operation charges the `Meter` before it does
-large work, which is how an adversarial input becomes an `Incomplete` outcome
-instead of an out-of-memory crash.
+large work, so an oversized input produces an `Incomplete` outcome and does not
+exhaust memory.
 
-## What is in the crate
+## Types
 
 | Area | Types |
 | --- | --- |
@@ -94,24 +90,24 @@ instead of an out-of-memory crash.
 
 The crate does not hash or serialize anything. Every digest identity is made
 by wrapping an already-computed digest through its `from_digest` constructor,
-so this crate has no wire-format or hashing dependency. Everything is
+so the crate has no wire-format or hashing dependency. Everything is
 re-exported from the crate root; the modules are private.
 
 ## Cargo features
 
 | Feature | Effect |
 | --- | --- |
-| `test-support` | Keeps the ordered log of every charge a `Meter` admits (`Meter::admitted_charges`), so tests can assert exact charge sequences. Enable it only from a dev-dependency, never from a normal dependency. |
+| `test-support` | Keeps the ordered log of every charge a `Meter` admits (`Meter::admitted_charges`), so tests can assert exact charge sequences. Enable it only from a dev-dependency. |
 
-## The Quire ecosystem
+## Quire ecosystem
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
   <img alt="The Quire repositories. The main chain runs from the standard, quire-specification, to the compiler, quire-spec-language, then quire-contract-ir, quire-contract-codegen and quire-contract-runtime. quire-spec-language also feeds quire-protocol, and quire-contract-ir feeds quire-analyze. quire-observation feeds quire-protocol and quire-mltl. Above the chain, quire-driver runs it, quire-integration tests it and quire-verification plans verification. Below it, shared libraries used throughout: quire-exact, quire-semantic-value, quire-walk, quire-canonical and quire-verification-contracts." src="docs/images/ecosystem-light.svg">
 </picture>
 
-`quire-exact` is a foundation, the bottom leaf of the stack. It depends on no
-other Quire crate, only on small `no_std` libraries (`num-bigint`,
+`quire-exact` is the bottom leaf of the stack. It depends on no other Quire
+crate, only on small `no_std` libraries (`num-bigint`,
 `unicode-normalization` and a few more, see `Cargo.toml`). The
 [Quire Specification Language](https://github.com/agent-ix/quire-spec-language)
 uses it as the shared exact-value layer under its checker and evaluator. The
@@ -130,7 +126,7 @@ The toolchain is pinned in `rust-toolchain.toml`. Everything runs through
 | `make lint` | Clippy with warnings denied, including a `no_std` target |
 | `make fmt-check` | Verify formatting |
 | `make build-no-std` | Build for `thumbv7em-none-eabi`, which proves nothing pulls in `std` |
-| `make deny` | `cargo deny` licence and advisory check |
+| `make deny` | `cargo deny` license and advisory check |
 | `make docs` | Build the docs, failing on missing or broken links |
 | `make ci` | All of the above |
 
@@ -140,6 +136,6 @@ Every contribution needs a signed Contributor License Agreement; read
 [`CLA.md`](CLA.md) and see [`CONTRIBUTING.md`](CONTRIBUTING.md). What may be
 committed is described in [`CONTENT_RIGHTS.md`](CONTENT_RIGHTS.md).
 
-## Licence
+## License
 
 AGPL-3.0-or-later. See [`LICENSE`](LICENSE).
