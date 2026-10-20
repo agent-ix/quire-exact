@@ -311,9 +311,9 @@ impl Integer {
 
     /// The value as a `u64`, if it is one.
     pub fn to_u64(&self) -> Option<u64> {
-        match self.native() {
-            Some(value) => u64::try_from(value).ok(),
-            None => u64::try_from(self.as_big()).ok(),
+        match &self.0 {
+            IntegerRepr::Small { value, .. } => u64::try_from(*value).ok(),
+            IntegerRepr::Large(value) => u64::try_from(value).ok(),
         }
     }
 
@@ -762,7 +762,88 @@ mod tests {
     use alloc::string::ToString;
     use core::str::FromStr;
 
+    use ix_trace_rs::trace;
+
     use super::*;
+
+    #[test]
+    #[trace("FR-371-AC-1", "FR-371-AC-2", "FR-371-AC-4")]
+    fn to_u64_preserves_inline_boundaries_without_materializing() {
+        for (native, spelling, expected) in [
+            (i128::MIN, "-170141183460469231731687303715884105728", None),
+            (-1, "-1", None),
+            (0, "0", Some(0)),
+            (1, "1", Some(1)),
+            (
+                18_446_744_073_709_551_614,
+                "18446744073709551614",
+                Some(u64::MAX - 1),
+            ),
+            (
+                18_446_744_073_709_551_615,
+                "18446744073709551615",
+                Some(u64::MAX),
+            ),
+            (18_446_744_073_709_551_616, "18446744073709551616", None),
+            (i128::MAX, "170141183460469231731687303715884105727", None),
+        ] {
+            let big = BigInt::from_str(spelling).unwrap();
+            for value in [
+                Integer::from(native),
+                Integer::from_str(spelling).unwrap(),
+                Integer::from_big(big.clone()),
+            ] {
+                assert!(matches!(
+                    &value.0,
+                    IntegerRepr::Small { cache, .. } if cache.get().is_none()
+                ));
+                let mut observed = None;
+                let allocations = allocation_counter::measure(|| {
+                    observed = value.to_u64();
+                });
+                assert_eq!(observed, expected, "{spelling}");
+                assert_eq!(allocations.bytes_total, 0);
+                assert_eq!(allocations.count_total, 0);
+                assert!(matches!(
+                    &value.0,
+                    IntegerRepr::Small { cache, .. } if cache.get().is_none()
+                ));
+
+                let retained = value.as_big();
+                assert_eq!(retained, &big);
+                let allocations = allocation_counter::measure(|| {
+                    observed = value.to_u64();
+                });
+                assert_eq!(observed, expected, "materialized {spelling}");
+                assert_eq!(allocations.bytes_total, 0);
+                assert_eq!(allocations.count_total, 0);
+                assert!(core::ptr::eq(retained, value.as_big()));
+                assert_eq!(retained, &big);
+            }
+        }
+    }
+
+    #[test]
+    #[trace("FR-371-AC-1", "FR-371-AC-2")]
+    fn to_u64_rejects_large_signed_boundaries_and_preserves_borrows() {
+        for spelling in [
+            "170141183460469231731687303715884105728",
+            "-170141183460469231731687303715884105729",
+        ] {
+            let big = BigInt::from_str(spelling).unwrap();
+            for value in [
+                Integer::from_str(spelling).unwrap(),
+                Integer::from_big(big.clone()),
+            ] {
+                assert!(matches!(&value.0, IntegerRepr::Large(_)));
+                let retained = value.as_big();
+                assert_eq!(retained, &big);
+                assert_eq!(value.to_u64(), None, "{spelling}");
+                assert!(core::ptr::eq(retained, value.as_big()));
+                assert_eq!(retained, &big);
+            }
+        }
+    }
 
     /// Trace: FR-374-AC-5
     #[test]
