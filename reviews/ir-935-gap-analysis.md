@@ -6124,3 +6124,157 @@ bindings:
   basis: The asserted kernel normalization behavior belongs to external QSpec FR-141-AC-1; the tag omits the documented
     QSpec namespace.
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Existing source-owned IR-844 proof work, outside this Unicode dependency correction: FR-359-AC-9 and its unchanged Status explicitly remain planned and untagged. No proof or new waiver is supplied. The underlying obligation remains unclosed and the whole-repository verdict remains FAIL. |
+| FND-002 | deferred | Existing external IR-705/IR-17 consumer qualification, outside this owner dependency correction: unchanged FR-359 Status calls the original five-test receipt UNRUN and permanently consumer-owned. No local replacement, changed harness or normalization-test proof credit is accepted. The underlying obligation remains unclosed; global FAIL remains. |
+| FND-003 | deferred | Existing IR-705/IR-17 consumer representation qualification, outside this Unicode dependency correction: FR-371-AC-6 still requires genuine healthy and substantive mutant outcomes under its original bounds. Those checks are UNRUN by this reviewer and absent from this fix delivery. The criterion remains unclosed; global FAIL remains. |
+| FND-004 | deferred | Preexisting FR-383 cancellation-accessor assurance bookkeeping is outside this Unicode correction: its unchanged Status documents make build-no-std evidence with no source Trace binder. Author bare-metal clippy compilation supports implementation availability, not a newly added binder or strict pass. No new exemption is granted; the structural gap and global FAIL remain. |
+
+## Disposition round 1
+
+FAIL remains for whole-repository assurance; four inherited obligations remain unclosed. These dispositions classify them outside the narrow IR-935 correction using their existing ownership, without granting a waiver or claiming implementation/proof delivery.
+
+Reviewed actual ec37d86/d878209 code and source-owned classifications at d878209d5c11b4085963dee17cbb0619dc961110. Source, dependency, public Unicode identity/assertion, fixture normalization vectors and feature boundaries remain unchanged except the reviewed harness fix. Fresh consumers still have independently created source/manifest inputs and no initial Cargo.lock; the shared build cache contains build products only and cannot supply a consumer lockfile. The separate cache has its own Cargo lock, so it does not recurse into the outer owner test target. Parent test process environment is preserved apart from the child target override and explicit serial jobs. RAII cleanup is best-effort with path/error diagnostics on filesystem deletion failure; successful-run and caught-unwind removal are asserted. The current scratch parent is empty. Earlier red/green evidence directories are retained separately and never used as inputs. No new findings were identified in this fix review.
+
+Reviewer actually ran Quire trace and strict matrix only. Trace resolves the canonical external attribute; strict exits 1 for exactly the same four inherited gaps, with zero ignored-only. Author fix1-consumer-default.log and fix1-consumer-test-support.log each report one passing real Cargo consumer test including lifecycle controls. Author fix1-fmt-lint-final.log shows fmt-check and all three clippy lanes passing; existing stable-rustfmt configuration warnings remain visible. Reviewer Cargo/rustc/fmt/Kani checks are UNRUN under the no-heavy grant. Aggregate make ci, downstream CG native qualification and Kani/mutation obligations await their owners; none is credited from the owner normalization test.
+
+Plan completion: not assessed
+
+Runtime model: gpt-6.1-sol; run: ir935-disposition1-e929a750-9cf8-4d45-81ae-71afdbb0a68c. No source edits, commits or PR review comments by this reviewer.
+
+```yaml
+round: 1
+head: d878209d5c11b4085963dee17cbb0619dc961110
+base: aa63308958b7fa3a08142a24ce3694e94c28d62b
+current_verdict: FAIL remains for whole-repository assurance; four inherited obligations remain unclosed. These
+  dispositions classify them outside the narrow IR-935 correction using their existing ownership, without granting
+  a waiver or claiming implementation/proof delivery.
+scope:
+- id: FR-359-AC-9
+  path: spec/functional/FR-359-cumulative-meter-boundary.md
+  lines: '37'
+  role: examined
+  excerpt: 'PLANNED, deferred to IR-844 (u64 Meter redesign). The planned `cfg(kani)` harness, tagged `Trace: FR-359-AC-9`
+    only once verified, uses production `Meter::charge` for the exact three-charge FR-362 schedule (operand charge
+    with at most two semantic-size requests, arithmetic charge with one, result-retain charge with none) over the
+    full `i64` operand range, plus separate repeated-kind charge controls with at most two requests each. Symbolic
+    `i64` operands and symbolic limits including `ResultUnits` cover first-short and simultaneous shortages and
+    absence of the third admission. Under `'
+- id: FR-359-AC-10
+  path: spec/functional/FR-359-cumulative-meter-boundary.md
+  lines: '38'
+  role: examined
+  excerpt: After CG re-locks to the reviewed kernel, the five unchanged consumer tests below pass their own assertions
+    under their original domains, oracle, completion and counterexample checks, unwind 3, Cadical, 16 GiB and 600
+    seconds. Record their individual Kani verdicts as an external IR-705/IR-17 receipt; no quire-exact test or altered
+    consumer harness substitutes for it.
+- id: FR-371-AC-6
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  lines: '84'
+  role: examined
+  excerpt: Genuine consumer healthy TC027, its bound mutant, and TC025 arithmetic mutant retain the original input/domain
+    bounds, oracle, unwind3, Cadical, 600-second native ceiling, 16GiB memory ceiling, completion cover and counterexample
+    checks. Healthy verification and both substantive falsifications are required. Existing all-four-operation,
+    accounting/denial and refinement obligations remain required. A compiler error, MemoryExhausted, timeout, missing
+    mutation execution or missing teardown is inconclusive and does not satisfy this criterion.
+- id: FR-383-AC-4
+  path: spec/functional/FR-383-meter-cancellation-handle-access.md
+  lines: '50'
+  role: examined
+  excerpt: The public `Meter::cancel(&self) -> Option<&Cancel>` signature compiles in the crate's `no_std` + `alloc`
+    build.
+- id: FR-359-inherited-status
+  path: spec/functional/FR-359-cumulative-meter-boundary.md
+  lines: 63-63
+  role: context_only
+  excerpt: 'AC-8, AC-11 and AC-12 are delivered by IR-705. AC-8 is bound by the `Trace: FR-359-AC-8` unit tests
+    in `src/accounting.rs` (including `first_inserted_failing_size_precedes_later_same_kind_maximum`, `size_shortages_use_field_order_across_attachment_orders`
+    and `request_counts_from_zero_to_many_gain_no_denial`). AC-11 is verified by inspection: the only semantic-size
+    loop in `Meter::charge` is over the charge''s own requests. AC-12 is bound by `tc_931_admitted_log_matches_model_ordered_prefix`
+    and `tc_931_admitted_log_matches_model_same_kind`. No Kani result or mutation control is claim'
+- id: FR-371-inherited-status
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  lines: 92-92
+  role: context_only
+  excerpt: PROPOSED / UNIMPLEMENTED / UNRUN. All six criteria are prospective. No new executable Trace bindings,
+    proof receipt or memory-improvement claim accompanies this Markdown proposal. The selected mechanism and its
+    trade-offs are recorded in [AD-003](../assurance/AD-003-bounded-integer-representation.md); implementation and
+    independent review remain outstanding. The original healthy exact-kernel qualification had an unavailable measured
+    peak; an older distinct control's peak and a separate compiler-only panic cannot establish the cause or success
+    of this proposal. No 16GiB Kani improveme
+- id: FR-383-inherited-status
+  path: spec/functional/FR-383-meter-cancellation-handle-access.md
+  lines: 54-59
+  role: context_only
+  excerpt: 'Implemented for IR-895. [TC-933](../test-cases/TC-933-meter-cancellation-handle-access.md)
+
+    has direct public-API Trace bindings for AC-1 and AC-2. AC-3 is verified by
+
+    inspection of the borrowing accessor; AC-4 is verified by `make build-no-std`.
+
+    The computed `quire matrix` reports AC-1 and AC-2 as tagged, AC-3 as
+
+    method-without-symbol, and AC-4 as untagged because its build gate has no
+
+    source Trace binding.'
+- id: ScratchDirectory::new
+  path: tests/fresh_unicode_consumer.rs
+  lines: 15-30
+  role: examined
+  excerpt: "    fn new(parent: &Path) -> io::Result<Self> {\n        fs::create_dir_all(parent)?;\n        // Atomic\
+    \ directory creation claims ownership; PID reuse and concurrent\n        // invocations skip existing directories\
+    \ rather than reading their inputs.\n        for attempt in 0..128 {\n            let path = parent.join(format!(\"\
+    consumer-{}-{attempt}\", std::process::id()));\n            match fs::create_dir(&path) {\n                Ok(())\
+    \ => return Ok(Self(path)),\n                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,\n\
+    \                Err(error) => return Err("
+- id: ScratchDirectory::drop
+  path: tests/fresh_unicode_consumer.rs
+  lines: 34-45
+  role: examined
+  excerpt: "impl Drop for ScratchDirectory {\n    fn drop(&mut self) {\n        // Also runs if a Cargo invocation\
+    \ or assertion panics. Keep diagnostics\n        // without risking a second panic while an assertion is unwinding.\n\
+    \        if let Err(error) = fs::remove_dir_all(&self.0) {\n            eprintln!(\n                \"could\
+    \ not remove consumer scratch {}: {error}\",\n                self.0.display()\n            );\n        }\n\
+    \    }\n}"
+- id: canonical-external-test-trace
+  path: tests/fresh_unicode_consumer.rs
+  lines: 47-50
+  role: examined
+  excerpt: '/// Provenance: IR-935, QSpec-TC-186
+
+    #[trace("QSpec-FR-141-AC-1")]
+
+    #[test]
+
+    fn fresh_consumer_resolves_and_runs_unicode17_normalization() {'
+bindings: []
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: 'Existing source-owned IR-844 proof work, outside this Unicode dependency correction: FR-359-AC-9 and
+    its unchanged Status explicitly remain planned and untagged. No proof or new waiver is supplied. The underlying
+    obligation remains unclosed and the whole-repository verdict remains FAIL.'
+- fnd: FND-002
+  outcome: deferred
+  reason: 'Existing external IR-705/IR-17 consumer qualification, outside this owner dependency correction: unchanged
+    FR-359 Status calls the original five-test receipt UNRUN and permanently consumer-owned. No local replacement,
+    changed harness or normalization-test proof credit is accepted. The underlying obligation remains unclosed;
+    global FAIL remains.'
+- fnd: FND-003
+  outcome: deferred
+  reason: 'Existing IR-705/IR-17 consumer representation qualification, outside this Unicode dependency correction:
+    FR-371-AC-6 still requires genuine healthy and substantive mutant outcomes under its original bounds. Those
+    checks are UNRUN by this reviewer and absent from this fix delivery. The criterion remains unclosed; global
+    FAIL remains.'
+- fnd: FND-004
+  outcome: deferred
+  reason: 'Preexisting FR-383 cancellation-accessor assurance bookkeeping is outside this Unicode correction: its
+    unchanged Status documents make build-no-std evidence with no source Trace binder. Author bare-metal clippy
+    compilation supports implementation availability, not a newly added binder or strict pass. No new exemption
+    is granted; the structural gap and global FAIL remain.'
+new_findings: []
+```

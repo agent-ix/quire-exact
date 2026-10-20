@@ -420,3 +420,234 @@ bindings:
   line: 264
   basis: Existing test asserts distinct-profile refusal and zero accounting; author logs cover both feature modes.
 ```
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Atomic create_dir claims skip occupied names with a bounded 128-candidate search; an owned Drop guard removes fresh source/manifest/lock inputs on normal completion and unwind. Explicit controls verify sentinel preservation and removal. One reusable build cache replaces per-run build targets; cleanup errors report path/error and success paths assert removal. |
+| FND-002 | fixed | The actual test now uses the existing ix_trace_rs canonical attribute with the QSpec- namespace. Independent reviewer Quire trace reports exactly one canonical claim; no new dependency or locally copied requirement was introduced. |
+
+## Disposition round 1
+
+PASS for the current PR delta; both actionable code-review findings fixed. Original CONDITIONAL verdict is retained as the historical review result.
+
+Reviewed actual ec37d86/d878209 code and source-owned classifications at d878209d5c11b4085963dee17cbb0619dc961110. Source, dependency, public Unicode identity/assertion, fixture normalization vectors and feature boundaries remain unchanged except the reviewed harness fix. Fresh consumers still have independently created source/manifest inputs and no initial Cargo.lock; the shared build cache contains build products only and cannot supply a consumer lockfile. The separate cache has its own Cargo lock, so it does not recurse into the outer owner test target. Parent test process environment is preserved apart from the child target override and explicit serial jobs. RAII cleanup is best-effort with path/error diagnostics on filesystem deletion failure; successful-run and caught-unwind removal are asserted. The current scratch parent is empty. Earlier red/green evidence directories are retained separately and never used as inputs. No new findings were identified in this fix review.
+
+Reviewer actually ran Quire trace and strict matrix only. Trace resolves the canonical external attribute; strict exits 1 for exactly the same four inherited gaps, with zero ignored-only. Author fix1-consumer-default.log and fix1-consumer-test-support.log each report one passing real Cargo consumer test including lifecycle controls. Author fix1-fmt-lint-final.log shows fmt-check and all three clippy lanes passing; existing stable-rustfmt configuration warnings remain visible. Reviewer Cargo/rustc/fmt/Kani checks are UNRUN under the no-heavy grant. Aggregate make ci, downstream CG native qualification and Kani/mutation obligations await their owners; none is credited from the owner normalization test.
+
+Plan completion: not assessed
+
+Runtime model: gpt-6.1-sol; run: ir935-disposition1-e929a750-9cf8-4d45-81ae-71afdbb0a68c. No source edits, commits or PR review comments by this reviewer.
+
+```yaml
+round: 1
+head: d878209d5c11b4085963dee17cbb0619dc961110
+base: aa63308958b7fa3a08142a24ce3694e94c28d62b
+current_verdict: PASS for the current PR delta; both actionable code-review findings fixed. Original CONDITIONAL
+  verdict is retained as the historical review result.
+scope:
+- id: ScratchDirectory::new
+  path: tests/fresh_unicode_consumer.rs
+  lines: 15-30
+  role: examined
+  excerpt: "    fn new(parent: &Path) -> io::Result<Self> {\n        fs::create_dir_all(parent)?;\n        // Atomic\
+    \ directory creation claims ownership; PID reuse and concurrent\n        // invocations skip existing directories\
+    \ rather than reading their inputs.\n        for attempt in 0..128 {\n            let path = parent.join(format!(\"\
+    consumer-{}-{attempt}\", std::process::id()));\n            match fs::create_dir(&path) {\n                Ok(())\
+    \ => return Ok(Self(path)),\n                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,\n\
+    \                Err(error) => return Err("
+- id: ScratchDirectory::drop
+  path: tests/fresh_unicode_consumer.rs
+  lines: 34-45
+  role: examined
+  excerpt: "impl Drop for ScratchDirectory {\n    fn drop(&mut self) {\n        // Also runs if a Cargo invocation\
+    \ or assertion panics. Keep diagnostics\n        // without risking a second panic while an assertion is unwinding.\n\
+    \        if let Err(error) = fs::remove_dir_all(&self.0) {\n            eprintln!(\n                \"could\
+    \ not remove consumer scratch {}: {error}\",\n                self.0.display()\n            );\n        }\n\
+    \    }\n}"
+- id: canonical-external-test-trace
+  path: tests/fresh_unicode_consumer.rs
+  lines: 47-50
+  role: examined
+  excerpt: '/// Provenance: IR-935, QSpec-TC-186
+
+    #[trace("QSpec-FR-141-AC-1")]
+
+    #[test]
+
+    fn fresh_consumer_resolves_and_runs_unicode17_normalization() {'
+- id: collision-control
+  path: tests/fresh_unicode_consumer.rs
+  lines: 51-59
+  role: examined
+  excerpt: "    let owner = Path::new(env!(\"CARGO_MANIFEST_DIR\"));\n    let scratch_parent = owner.join(\"target/fresh-unicode-consumers\"\
+    );\n    // Occupy the first candidate to exercise collision handling, without granting\n    // the consumer\
+    \ ownership of another invocation's files.\n    let occupied = ScratchDirectory::new(&scratch_parent).unwrap();\n\
+    \    fs::write(occupied.0.join(\"sentinel\"), \"preserve other owner\").unwrap();\n    let scratch = ScratchDirectory::new(&scratch_parent).unwrap();\n\
+    \    let directory = &scratch.0;\n    fs::create_dir(directory.join(\"src\")).unwrap();"
+- id: fresh-consumer-manifest-and-lock
+  path: tests/fresh_unicode_consumer.rs
+  lines: 60-74
+  role: examined
+  excerpt: "    fs::write(\n        directory.join(\"Cargo.toml\"),\n        format!(\n            \"[package]\\\
+    nname = \\\"fresh-unicode-consumer\\\"\\nversion = \\\"0.0.0\\\"\\nedition = \\\"2021\\\"\\n\\\n           \
+    \  [workspace]\\n\\\n             [dependencies]\\nquire-exact = {{ path = {owner:?} }}\\n\"\n        ),\n \
+    \   )\n    .unwrap();\n    fs::write(\n        directory.join(\"src/main.rs\"),\n        include_str!(\"fixtures/unicode17_consumer.rs\"\
+    ),\n    )\n    .unwrap();\n    assert!(!directory.join(\"Cargo.lock\").exists());"
+- id: independent-build-cache
+  path: tests/fresh_unicode_consumer.rs
+  lines: 76-87
+  role: examined
+  excerpt: "    // Reuse a separate build cache without retaining consumer inputs or locks.\n    // Cargo serializes\
+    \ this cache independently of the outer cargo test target.\n    // Offline resolution uses the ordinary registry\
+    \ cache without consumer pins.\n    let output = Command::new(env!(\"CARGO\"))\n        .current_dir(directory)\n\
+    \        .args([\"run\", \"--offline\", \"--jobs\", \"1\"])\n        .env(\n            \"CARGO_TARGET_DIR\"\
+    ,\n            owner.join(\"target/fresh-unicode-consumer-build\"),\n        )\n        .output()\n        .expect(\"\
+    run the real consumer through Cargo\");"
+- id: success-cleanup-and-owner-isolation
+  path: tests/fresh_unicode_consumer.rs
+  lines: 95-108
+  role: examined
+  excerpt: "    assert!(directory.join(\"Cargo.lock\").is_file());\n    let removed = directory.clone();\n    drop(scratch);\n\
+    \    assert!(\n        !removed.exists(),\n        \"consumer inputs and lock must be removed\"\n    );\n  \
+    \  assert_eq!(\n        fs::read_to_string(occupied.0.join(\"sentinel\")).unwrap(),\n        \"preserve other\
+    \ owner\"\n    );\n    let removed = occupied.0.clone();\n    drop(occupied);\n    assert!(!removed.exists(),\
+    \ \"collision control must be removed\");"
+- id: unwind-cleanup-control
+  path: tests/fresh_unicode_consumer.rs
+  lines: 110-118
+  role: examined
+  excerpt: "    let failure = ScratchDirectory::new(&scratch_parent).unwrap();\n    let removed = failure.0.clone();\n\
+    \    fs::write(removed.join(\"Cargo.lock\"), \"failure cleanup control\").unwrap();\n    let failed = std::panic::catch_unwind(move\
+    \ || {\n        let _owned_until_unwind = failure;\n        panic!(\"simulate a consumer assertion failure\"\
+    );\n    });\n    assert!(failed.is_err());\n    assert!(!removed.exists(), \"failed consumer inputs must be\
+    \ removed\");"
+- id: owning-normalization-constraint
+  path: Cargo.toml
+  lines: 31-32
+  role: examined
+  excerpt: '# The Unicode 17 text definition requires 0.1.25''s tables; 0.1.26 uses Unicode 18.
+
+    unicode-normalization = { version = "=0.1.25", default-features = false }'
+- id: existing-normalization-fixture
+  path: tests/fixtures/unicode17_consumer.rs
+  lines: 28-36
+  role: examined
+  excerpt: "        assert_eq!(profile.normalization(), Some(form));\n        assert_eq!(profile.table_definition(),\
+    \ Some(UNICODE_TEXT_DEFINITION));\n        let normalized: String = form.apply(input).collect();\n        assert_eq!(normalized,\
+    \ expected, \"{profile:?}\");\n        assert_ne!(normalized, form.apply(\"distinct\").collect::<String>());\n\
+    \    }\n    assert_eq!(TextProfile::UnicodeScalars.table_definition(), None);\n    assert_eq!(TextProfile::BinaryUtf8.table_definition(),\
+    \ None);\n}"
+- id: documented-external-namespace
+  path: src/lib.rs
+  lines: 44-50
+  role: context_only
+  excerpt: '//!
+
+    //! Value-semantics requirements (decimals, text and enumerations, quantities
+
+    //! and units, integer division, IEEE profiles) are owned by
+
+    //! `agent-ix/quire-specification`. A test carries a `QSpec-` tagged AC only
+
+    //! where its own assertions, not merely its module doc''s citation, tell the
+
+    //! AC''s claim from a wrong implementation. The requirements this repository
+
+    //! owns are in `spec/`.'
+- id: fix1-consumer-default.log
+  path: /home/peter/dev/worktrees/kani-lead-codex/ir935/fix1-consumer-default.log
+  lines: 5-10
+  role: context_only
+  excerpt: '
+
+    running 1 test
+
+    test fresh_consumer_resolves_and_runs_unicode17_normalization ... ok
+
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.08s
+
+    '
+- id: fix1-consumer-test-support.log
+  path: /home/peter/dev/worktrees/kani-lead-codex/ir935/fix1-consumer-test-support.log
+  lines: 5-10
+  role: context_only
+  excerpt: '
+
+    running 1 test
+
+    test fresh_consumer_resolves_and_runs_unicode17_normalization ... ok
+
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+    '
+- id: author-final-lint
+  path: /home/peter/dev/worktrees/kani-lead-codex/ir935/fix1-fmt-lint-final.log
+  lines: 38-55
+  role: context_only
+  excerpt: "Warning: can't set `group_imports = StdExternalCrate`, unstable features are only available in nightly\
+    \ channel.\ncargo clippy --all-targets -- -D warnings\n    Checking quire-exact v0.1.0 (/home/peter/dev/worktrees/ir935-unicode)\n\
+    \    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s\ncargo clippy --all-targets --features\
+    \ test-support -- -D warnings\n    Checking quire-exact v0.1.0 (/home/peter/dev/worktrees/ir935-unicode)\n \
+    \   Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s\ncargo clippy --lib --target thumbv7em-none-eabi\
+    \ -- -D warnings\n    Finished `d"
+- id: reviewer-trace-result
+  path: /home/peter/dev/worktrees/kani-lead-codex/ir935/review/round1-trace.json
+  lines: 1-1
+  role: context_only
+  excerpt: '{"query":{"kind":"file","path":"tests/fresh_unicode_consumer.rs"},"resolved":true,"claims":{"verifies":[{"trace_id":"QSpec-FR-141-AC-1","symbol":"fresh_consumer_resolves_and_runs_unicode17_normalization","path":"tests/fresh_unicode_consumer.rs","line":50,"form":"rust-trace-attribute","provenance":"canonical","language":"rust","confidence":"structural"}],"implements":[]},"citations":[{"trace_id":"AGPL-3","path":"tests/fresh_unicode_consumer.rs","symbol":null,"kind":null,"bucket":"mention","line":1,"excerpt":"//
+    SPDX-License-Identifier: AGPL-3.0-or-later","language":"rust","confidence"'
+- id: FR-141-AC-1
+  path: /home/peter/dev/quire-specification/spec/functional/type-model/FR-141-evaluate-text-and-enumerations.md
+  lines: '119'
+  role: examined
+  excerpt: Canonically equivalent text compares according to the selected normalization profile and distinct text
+    remains distinct.
+- id: QSpec-unicode-table-context
+  path: /home/peter/dev/quire-specification/spec/functional/type-model/FR-141-evaluate-text-and-enumerations.md
+  lines: 38-45
+  role: context_only
+  excerpt: '
+
+    ## Text and enumeration profiles
+
+
+    `unicode-scalars` compares the decoded scalar sequence without normalization;
+
+    `nfc`, `nfd`, `nfkc` and `nfkd` apply exactly the named Unicode normalization
+
+    form using the `quire.value.text.unicode-17.0.0/v1` tables; `binary-utf8`
+
+    compares the admitted UTF-8 payload bytes. A source string''s payload is the
+
+    canonical UTF-8 encoding of its decoded scalar sequence, so raw `é` and'
+bindings:
+- test_id: fresh_consumer_resolves_and_runs_unicode17_normalization
+  ac_id: QSpec-FR-141-AC-1
+  trace: correct
+  path: tests/fresh_unicode_consumer.rs
+  line: 50
+  basis: Actual reviewer quire trace finds one canonical rust-trace-attribute verifies claim; assertion fixture
+    exercises kernel normalization and distinctness, not all TC-186 evaluator cases.
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "        for attempt in 0..128 {\n            let path = parent.join(format!(\"consumer-{}-{attempt}\"\
+    , std::process::id()));\n            match fs::create_dir(&path) {\n                Ok(()) => return Ok(Self(path)),\n\
+    \                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,\n                Err(error)\
+    \ => return Err(error),\n            }"
+  reason: Atomic create_dir claims skip occupied names with a bounded 128-candidate search; an owned Drop guard
+    removes fresh source/manifest/lock inputs on normal completion and unwind. Explicit controls verify sentinel
+    preservation and removal. One reusable build cache replaces per-run build targets; cleanup errors report path/error
+    and success paths assert removal.
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: '#[trace("QSpec-FR-141-AC-1")]'
+  reason: The actual test now uses the existing ix_trace_rs canonical attribute with the QSpec- namespace. Independent
+    reviewer Quire trace reports exactly one canonical claim; no new dependency or locally copied requirement was
+    introduced.
+new_findings: []
+```
