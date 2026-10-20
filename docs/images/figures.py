@@ -42,7 +42,7 @@ def hero():
         264,
         "Binary floating point rounds 0.1 + 0.2 to 0.30000000000000004. quire-exact adds the "
         "fractions 1/10 and 2/10 exactly and gets 3/10, and when an operation such as 1/2 divided "
-        "by 0 has no value it returns undefined instead of a number.",
+        "by 0 has no value it returns undefined.",
     )
     for i, (expr, how, why, out, note, mid, end) in enumerate(rows):
         y = i * 80

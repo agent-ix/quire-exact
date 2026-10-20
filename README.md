@@ -12,7 +12,7 @@ outcome.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
-  <img alt="Binary floating point rounds 0.1 + 0.2 to 0.30000000000000004. quire-exact adds the fractions 1/10 and 2/10 exactly and gets 3/10, and when an operation such as 1/2 divided by 0 has no value it returns undefined instead of a number." src="docs/images/hero-light.svg">
+  <img alt="Binary floating point rounds 0.1 + 0.2 to 0.30000000000000004. quire-exact adds the fractions 1/10 and 2/10 exactly and gets 3/10, and when an operation such as 1/2 divided by 0 has no value it returns undefined." src="docs/images/hero-light.svg">
 </picture>
 
 > **Status: public prerelease.** The crate is at version 0.1.0 and is not
