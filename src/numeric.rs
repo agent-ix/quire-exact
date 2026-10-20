@@ -493,8 +493,15 @@ mod tests {
             assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
             #[cfg(feature = "test-support")]
             assert_eq!(
-                meter.admitted_charges().iter().map(|charge| charge.point).collect::<alloc::vec::Vec<_>>(),
-                [ChargePoint::IntegerArithmeticOperands, ChargePoint::IntegerArithmeticArithmetic]
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [
+                    ChargePoint::IntegerArithmeticOperands,
+                    ChargePoint::IntegerArithmeticArithmetic
+                ]
             );
         }
     }
@@ -512,7 +519,9 @@ mod tests {
             ] {
                 let cancel = Cancel::new();
                 let mut meter = generous_meter().with_cancel(cancel.clone());
-                meter.charge(Charge::new(ChargePoint::FunctionCall).results(1)).unwrap();
+                meter
+                    .charge(Charge::new(ChargePoint::FunctionCall).results(1))
+                    .unwrap();
                 let before = meter.clone();
                 cancel.cancel(cause);
                 assert_eq!(
