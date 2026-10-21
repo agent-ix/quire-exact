@@ -28,7 +28,7 @@ Charge processing has no traversal whose trip count exceeds the charge's semanti
 
 AC-8, AC-11 and AC-12 are delivered by IR-705: AC-8 and AC-12 by the Trace-tagged unit tests in `src/accounting.rs` (AC-12 by the two named `tc_931_admitted_log_matches_model_*` tests), AC-11 by inspection.
 
-IR-844 baseline on source `c824270f3820ea04187f5689bc73677285987bfa` is `Verified` with Kani 0.68.0, CBMC 6.11.0 and CaDiCaL 3.0.0: 0 / 2,565 checks failed, 2,534 succeeded, 31 were unreachable and all six unwinding checks succeeded. Verification took 131.5852 s; command wall time was 137.15 s. The cgroup measured 8,183,332,864 bytes peak under an enforced 17,179,869,184-byte ceiling, zero swap allowance and zero memory events. The actual timed command was:
+The IR-844 baseline is `Verified` with Kani 0.68.0, CBMC 6.11.0 and CaDiCaL 3.0.0: 0 / 2,565 checks failed, 2,534 succeeded, 31 were unreachable and all six unwinding checks succeeded. Verification took 131.5852 s; command wall time was 137.15 s. The cgroup measured 8,183,332,864 bytes peak under an enforced 17,179,869,184-byte ceiling, zero swap allowance and zero memory events. The actual timed command was:
 
 ```bash
 timeout --signal=TERM --kill-after=10s 600s cargo kani --harness meter_integer_arithmetic_schedule_matches_reference --unwind 3 --solver cadical
