@@ -9,8 +9,9 @@ use std::{str::FromStr, string::ToString};
 #[cfg(not(feature = "test-support"))]
 use quire_exact::Charge;
 use quire_exact::{
-    order_numbers, OrderedOperands, OrderingOperator, evaluate_integer_arithmetic, ChargePoint, InjectedDenial, Integer, IntegerArithmetic,
-    IntegerInterval, LimitKind, Meter, Outcome, ScalarLimits,
+    evaluate_integer_arithmetic, order_numbers, ChargePoint, InjectedDenial, Integer,
+    IntegerArithmetic, IntegerInterval, LimitKind, Meter, OrderedOperands, OrderingOperator,
+    Outcome, ScalarLimits,
 };
 
 fn limits() -> ScalarLimits {
@@ -1147,15 +1148,23 @@ fn native_public_metered_call_matches_accounting_only_allocation_observation() {
 #[test]
 fn integer_ordering_preserves_values_sizes_and_denied_prefixes() {
     let values = [
-        Integer::from(i64::MIN), Integer::from(-1_i64), Integer::zero(),
-        Integer::from(1_i64), Integer::from(i64::MAX),
-        Integer::from(i128::MIN), Integer::from(-1_i128), Integer::from(1_i128),
+        Integer::from(i64::MIN),
+        Integer::from(-1_i64),
+        Integer::zero(),
+        Integer::from(1_i64),
+        Integer::from(i64::MAX),
+        Integer::from(i128::MIN),
+        Integer::from(-1_i128),
+        Integer::from(1_i128),
         Integer::from(i128::MAX),
         Integer::from_str("-340282366920938463463374607431768211456").unwrap(),
         Integer::from_str("340282366920938463463374607431768211456").unwrap(),
     ];
-    let points = [ChargePoint::OrderingOperands, ChargePoint::OrderingArithmetic,
-        ChargePoint::OrderingResultRetain];
+    let points = [
+        ChargePoint::OrderingOperands,
+        ChargePoint::OrderingArithmetic,
+        ChargePoint::OrderingResultRetain,
+    ];
     for left in &values {
         for right in &values {
             // The maintained arbitrary-precision implementation supplies both
@@ -1173,7 +1182,10 @@ fn integer_ordering_preserves_values_sizes_and_denied_prefixes() {
                 exact.integer_bits = bits;
                 exact.work_units = 3;
                 let mut meter = Meter::new(exact);
-                assert_eq!(order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter), Outcome::Completed(expected));
+                assert_eq!(
+                    order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter),
+                    Outcome::Completed(expected)
+                );
                 assert_metered_counters(&meter, bits, 2, 3, 1);
                 assert_points(&meter, &points);
                 #[cfg(feature = "test-support")]
@@ -1188,8 +1200,11 @@ fn integer_ordering_preserves_values_sizes_and_denied_prefixes() {
                 let mut short = limits();
                 short.integer_bits = bits - 1;
                 let mut meter = Meter::new(short);
-                let outcome = order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter);
-                let Outcome::Incomplete(denial) = outcome else { panic!("expected bit denial: {outcome:?}"); };
+                let outcome =
+                    order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter);
+                let Outcome::Incomplete(denial) = outcome else {
+                    panic!("expected bit denial: {outcome:?}");
+                };
                 assert_eq!(denial.charge_point, points[0]);
                 assert_eq!(denial.limit_kind, LimitKind::IntegerBits);
                 assert_eq!(denial.limit, bits - 1);
@@ -1199,22 +1214,39 @@ fn integer_ordering_preserves_values_sizes_and_denied_prefixes() {
                 assert_points(&meter, &[]);
                 for (index, point) in points.into_iter().enumerate() {
                     let mut meter = Meter::new(limits()).with_injected_denial(InjectedDenial {
-                        point, occurrence: NonZeroU64::new(1).unwrap(),
+                        point,
+                        occurrence: NonZeroU64::new(1).unwrap(),
                     });
-                    let outcome = order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter);
-                    let Outcome::Incomplete(denial) = outcome else { panic!("expected injected denial: {outcome:?}"); };
+                    let outcome =
+                        order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter);
+                    let Outcome::Incomplete(denial) = outcome else {
+                        panic!("expected injected denial: {outcome:?}");
+                    };
                     assert_eq!(denial.charge_point, point);
                     assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
                     assert_eq!(denial.limit, index as u64);
                     assert_eq!(denial.consumed, index as u64);
                     assert_eq!(denial.next_charge, Integer::one());
-                    assert_metered_counters(&meter, if index == 0 {0} else {bits}, if index == 0 {0} else {2}, index as u64, 0);
+                    assert_metered_counters(
+                        &meter,
+                        if index == 0 { 0 } else { bits },
+                        if index == 0 { 0 } else { 2 },
+                        index as u64,
+                        0,
+                    );
                     assert_points(&meter, &points[..index]);
                     // The injected stop is one-shot. Reuse the actual meter:
                     // the next comparison retains its independent full schedule.
-                    assert_eq!(order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter), Outcome::Completed(expected));
+                    assert_eq!(
+                        order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter),
+                        Outcome::Completed(expected)
+                    );
                     assert_metered_counters(&meter, bits, 2, index as u64 + 3, 1);
-                    let expected_points = points[..index].iter().chain(points.iter()).copied().collect::<Vec<_>>();
+                    let expected_points = points[..index]
+                        .iter()
+                        .chain(points.iter())
+                        .copied()
+                        .collect::<Vec<_>>();
                     assert_points(&meter, &expected_points);
                 }
             }

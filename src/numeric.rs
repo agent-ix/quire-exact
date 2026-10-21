@@ -99,8 +99,7 @@ fn order(
                     .size(occurrences, 2),
             )?;
             meter.charge(
-                Charge::new(ChargePoint::OrderingArithmetic)
-                    .size(LimitKind::IntegerBits, bits),
+                Charge::new(ChargePoint::OrderingArithmetic).size(LimitKind::IntegerBits, bits),
             )?;
             left.cmp(right)
         }
