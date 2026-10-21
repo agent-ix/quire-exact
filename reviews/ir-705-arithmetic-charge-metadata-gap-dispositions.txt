@@ -1,0 +1,46 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-exact visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15232 round=1 model=unavailable run=cc635296-050c-4005-9a12-7857ed4cc5ba -->
+
+Separate same-reviewer disposition at unchanged clean PR75 head 2e2edf1fad5f8d6d8bf52a9fb1c01d5cfdf2adde. Allfour inherited local findings remain real and DEFERRED under current root decisionc17b5325; full repository gap remains FAIL. No new finding or code fix. SR15231 code/Rust remains PASS. No matrix/heavy rerun. Final aggregate and exact latest review-artifact custody remain required before merge.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | deferred | Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers the unchanged ignored-only local Meter-wrapper gap outside PR75. Existing IR810 Done gate/assurance handoff5b08d0b8-40ba-4497-978c-476e8119236a and IR705/IR17 adoption retain ownership. Delivered Meter implementation is not reopened; strict local matrix remains non-green. |
+| FND-002 | deferred | Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers current five-test CG proof/receipt qualification to existing IR705/IR17 owners. Actual IR17 handoff7d0df838-11c4-4027-a7d7-ae368a8e0549 retains the QSL937 owner-key API blocker. Native ordering checks supply no current consumer verdict or receipt. |
+| FND-003 | deferred | Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers the unchanged local FR371AC6 trace-binding gap to existing IR705/IR17 qualification owners. Actual IR7056ce5acee-ac3c-47e2-9f09-c17376e80e14 records original healthy plus canonical bound/arithmetic controls genuinely passed at16GiB; this disposition does not call those controls unexecuted or OOM-only. Their execution does not create a local binder or satisfy separate current five-test/native-attested or larger IR917 acceptance. |
+| FND-004 | deferred | Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers unchanged Test-method/no_std binding reconciliation to existing IR895 Done requirement/verification owner, actual handoffc41187f2-aae7-4f5a-a34f-c3f63b9b1208. Actual supported no_std checks remain distinct from the absent Test-symbol binder; accessor implementation is not reopened. |
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers the unchanged
+    ignored-only local Meter-wrapper gap outside PR75. Existing IR810 Done gate/assurance
+    handoff5b08d0b8-40ba-4497-978c-476e8119236a and IR705/IR17 adoption retain ownership.
+    Delivered Meter implementation is not reopened; strict local matrix remains non-green.
+- fnd: FND-002
+  outcome: deferred
+  reason: Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers current
+    five-test CG proof/receipt qualification to existing IR705/IR17 owners. Actual
+    IR17 handoff7d0df838-11c4-4027-a7d7-ae368a8e0549 retains the QSL937 owner-key
+    API blocker. Native ordering checks supply no current consumer verdict or receipt.
+- fnd: FND-003
+  outcome: deferred
+  reason: Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers the unchanged
+    local FR371AC6 trace-binding gap to existing IR705/IR17 qualification owners.
+    Actual IR7056ce5acee-ac3c-47e2-9f09-c17376e80e14 records original healthy plus
+    canonical bound/arithmetic controls genuinely passed at16GiB; this disposition
+    does not call those controls unexecuted or OOM-only. Their execution does not
+    create a local binder or satisfy separate current five-test/native-attested or
+    larger IR917 acceptance.
+- fnd: FND-004
+  outcome: deferred
+  reason: Current root decisionc17b5325-fdd9-42f9-af76-d15f435976b0 defers unchanged
+    Test-method/no_std binding reconciliation to existing IR895 Done requirement/verification
+    owner, actual handoffc41187f2-aae7-4f5a-a34f-c3f63b9b1208. Actual supported no_std
+    checks remain distinct from the absent Test-symbol binder; accessor implementation
+    is not reopened.
+```
+
++++
