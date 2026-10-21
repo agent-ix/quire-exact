@@ -590,3 +590,200 @@ fn native_admission_and_multistep_success_allocate_no_general_values() {
     assert_eq!(completed, Some((N::new(-1000), Outcome::Completed(true))));
     assert_eq!(N::new(i128::MIN).to_integer(), Integer::from(i128::MIN));
 }
+
+#[test]
+#[trace("FR-384-AC-3")]
+fn operation_derived_exact_and_one_less_limits_preserve_fresh_and_cumulative_prefixes() {
+    for kind in [Kind::Add, Kind::Subtract, Kind::Multiply, Kind::Negate] {
+        let (a, b) = (-23_i128, 7_i128);
+        let left_bits = BigInt::from(a).bits().max(1);
+        let right_bits = if kind == Kind::Negate {
+            0
+        } else {
+            BigInt::from(b).bits().max(1)
+        };
+        let operand_bits = left_bits.max(right_bits);
+        let arithmetic_bits = match kind {
+            Kind::Add | Kind::Subtract => operand_bits + 1,
+            Kind::Multiply => left_bits + right_bits,
+            Kind::Negate => left_bits,
+        };
+        let occurrences = if kind == Kind::Negate { 1 } else { 2 };
+        // Each semantic amount is derived from the independent BigInt size
+        // formula. Work thresholds include every point of the SECOND call;
+        // results include its exact cumulative retention boundary.
+        let mut boundaries = vec![];
+        for bits in [operand_bits, arithmetic_bits] {
+            boundaries.extend([
+                (LimitKind::IntegerBits, bits),
+                (LimitKind::IntegerBits, bits - 1),
+            ]);
+        }
+        boundaries.extend([
+            (LimitKind::ValueOccurrences, occurrences),
+            (LimitKind::ValueOccurrences, occurrences - 1),
+        ]);
+        for exact in [1_u64, 2, 3, 4, 5, 6] {
+            boundaries.extend([
+                (LimitKind::WorkUnits, exact),
+                (LimitKind::WorkUnits, exact - 1),
+            ]);
+        }
+        for exact in [1_u64, 2] {
+            boundaries.extend([
+                (LimitKind::ResultUnits, exact),
+                (LimitKind::ResultUnits, exact - 1),
+            ]);
+        }
+        for (limit_kind, amount) in boundaries {
+            let mut budget = limits();
+            set_limit(&mut budget, limit_kind, amount);
+            let mut actual = Meter::new(budget);
+            let mut old = Meter::new(budget);
+            let mut expected = Meter::new(budget);
+            for call in 1..=2 {
+                let want = formula_meter(kind, a, b, None, &mut expected);
+                assert_eq!(general(kind, a, b, None, &mut old), want);
+                let got = abstract_outcome(native(admitted(kind, a, b, None), &mut actual));
+                assert_eq!(got, want, "{kind:?}, {limit_kind:?}={amount}, call {call}");
+                same_meter(&actual, &expected);
+                same_meter(&actual, &old);
+                if limit_kind == LimitKind::IntegerBits
+                    && amount == operand_bits.max(arithmetic_bits)
+                {
+                    assert!(
+                        matches!(got, Outcome::Completed(_)),
+                        "exact semantic maximum completes"
+                    );
+                }
+                if limit_kind == LimitKind::WorkUnits && amount >= 3 && call == 1 {
+                    assert!(
+                        matches!(got, Outcome::Completed(_)),
+                        "first call establishes cumulative prefix"
+                    );
+                    assert_eq!(actual.consumed(LimitKind::WorkUnits), 3);
+                    assert_eq!(actual.consumed(LimitKind::ResultUnits), 1);
+                }
+                if limit_kind == LimitKind::WorkUnits && amount == 5 && call == 2 {
+                    let Outcome::Incomplete(ref record) = got else {
+                        panic!("second retention requires sixth work unit")
+                    };
+                    assert_eq!(
+                        *record,
+                        quire_exact::Incomplete {
+                            limit_kind: LimitKind::WorkUnits,
+                            limit: 5,
+                            consumed: 5,
+                            next_charge: Integer::one(),
+                            charge_point: ChargePoint::IntegerArithmeticResultRetain
+                        }
+                    );
+                }
+                if limit_kind == LimitKind::ResultUnits && amount == 1 && call == 2 {
+                    let Outcome::Incomplete(ref record) = got else {
+                        panic!("second result exceeds cumulative result limit")
+                    };
+                    assert_eq!(
+                        *record,
+                        quire_exact::Incomplete {
+                            limit_kind: LimitKind::ResultUnits,
+                            limit: 1,
+                            consumed: 1,
+                            next_charge: Integer::one(),
+                            charge_point: ChargePoint::IntegerArithmeticResultRetain
+                        }
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[trace("FR-384-AC-3")]
+fn ordering_cancellation_precedes_pending_injection_on_fresh_and_charged_meters() {
+    for operator in [
+        OrderingOperator::Less,
+        OrderingOperator::LessOrEqual,
+        OrderingOperator::Greater,
+        OrderingOperator::GreaterOrEqual,
+    ] {
+        for charged in [false, true] {
+            let cancel = Cancel::new();
+            let mut actual = Meter::new(limits()).with_cancel(cancel.clone());
+            let mut general_meter = Meter::new(limits()).with_cancel(cancel.clone());
+            if charged {
+                assert_eq!(
+                    evaluate_native_integer_ordering(operator, N::new(-23), N::new(7), &mut actual),
+                    order_numbers(
+                        operator,
+                        OrderedOperands::Integers(&Integer::from(-23_i128), &Integer::from(7_i128)),
+                        &mut general_meter
+                    )
+                );
+                assert_eq!(actual.admission_count(), 3);
+            }
+            same_meter(&actual, &general_meter);
+            let prefix = actual.admission_count();
+            let work = actual.consumed(LimitKind::WorkUnits);
+            let denial = InjectedDenial {
+                point: ChargePoint::OrderingOperands,
+                occurrence: core::num::NonZeroU64::new(1).unwrap(),
+            };
+            actual = actual.with_injected_denial(denial);
+            general_meter = general_meter.with_injected_denial(denial);
+            cancel.cancel(CancelCause::Deadline);
+            let expected = Outcome::Incomplete(quire_exact::Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: work,
+                consumed: work,
+                next_charge: Integer::one(),
+                charge_point: ChargePoint::OrderingOperands,
+            });
+            let cancelled =
+                evaluate_native_integer_ordering(operator, N::new(-23), N::new(7), &mut actual);
+            assert_eq!(cancelled, expected);
+            assert_eq!(
+                cancelled,
+                order_numbers(
+                    operator,
+                    OrderedOperands::Integers(&Integer::from(-23_i128), &Integer::from(7_i128)),
+                    &mut general_meter
+                )
+            );
+            assert_eq!(cancel.tripped(), Some(CancelCause::Deadline));
+            assert_eq!(actual.admission_count(), prefix);
+            same_meter(&actual, &general_meter);
+            // Replacing the cancellation handle exposes the pending injection.
+            // If cancellation consumed it, this call would complete instead.
+            actual = actual.with_cancel(Cancel::new());
+            general_meter = general_meter.with_cancel(Cancel::new());
+            let injected =
+                evaluate_native_integer_ordering(operator, N::new(-23), N::new(7), &mut actual);
+            assert_eq!(injected, expected);
+            assert_eq!(
+                injected,
+                order_numbers(
+                    operator,
+                    OrderedOperands::Integers(&Integer::from(-23_i128), &Integer::from(7_i128)),
+                    &mut general_meter
+                )
+            );
+            assert_eq!(actual.admission_count(), prefix);
+            same_meter(&actual, &general_meter);
+            let completed =
+                evaluate_native_integer_ordering(operator, N::new(-23), N::new(7), &mut actual);
+            assert!(matches!(completed, Outcome::Completed(_)));
+            assert_eq!(
+                completed,
+                order_numbers(
+                    operator,
+                    OrderedOperands::Integers(&Integer::from(-23_i128), &Integer::from(7_i128)),
+                    &mut general_meter
+                )
+            );
+            assert_eq!(actual.admission_count(), prefix + 3);
+            same_meter(&actual, &general_meter);
+        }
+    }
+}
