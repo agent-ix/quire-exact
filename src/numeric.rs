@@ -196,11 +196,19 @@ fn cross_bits(left: &Rational, right: &Rational) -> Integer {
 fn integer_arithmetic_bits(operation: IntegerArithmetic<'_>) -> Integer {
     match operation {
         IntegerArithmetic::Add(left, right) | IntegerArithmetic::Subtract(left, right) => {
-            bits(left).max(bits(right)).add(&Integer::one())
+            integer_bit_sum(left.magnitude_bits().max(right.magnitude_bits()), 1)
         }
-        IntegerArithmetic::Multiply(left, right) => bits(left).add(&bits(right)),
+        IntegerArithmetic::Multiply(left, right) => {
+            integer_bit_sum(left.magnitude_bits(), right.magnitude_bits())
+        }
         IntegerArithmetic::Negate(operand) => bits(operand),
     }
+}
+
+// Two u64 bit counts sum to at most 2^65 - 2, exactly representable in i128.
+// Widen before addition so amounts above u64::MAX remain exact Meter requests.
+fn integer_bit_sum(left: u64, right: u64) -> Integer {
+    Integer::from(i128::from(left) + i128::from(right))
 }
 
 /// The `integer_bits` amount of `rational-arithmetic.arithmetic` for `a/b`
@@ -431,6 +439,8 @@ pub fn retain_boolean(
 #[cfg(test)]
 mod tests {
 
+    use ix_trace_rs::trace;
+
     use super::*;
     use crate::accounting::ScalarLimits;
 
@@ -447,6 +457,51 @@ mod tests {
             work_units: u64::MAX,
             result_units: u64::MAX,
         })
+    }
+
+    #[test]
+    #[trace("FR-371-AC-3")]
+    fn integer_bit_counts_preserve_exact_amounts_above_the_meter_limit() {
+        use core::str::FromStr;
+
+        use num_bigint::BigInt;
+
+        // Exercise metadata boundaries without constructing impossibly large
+        // operands. Independent decimal amounts also detect u64 saturation.
+        for (left, right, expected) in [
+            (0, 0, "0"),
+            (u64::MAX - 1, 1, "18446744073709551615"),
+            (u64::MAX, 1, "18446744073709551616"),
+            (1, u64::MAX, "18446744073709551616"),
+            (u64::MAX, u64::MAX, "36893488147419103230"),
+        ] {
+            let amount = integer_bit_sum(left, right);
+            assert_eq!(amount.as_big(), &BigInt::from_str(expected).unwrap());
+            assert_eq!(amount.as_big(), &(BigInt::from(left) + BigInt::from(right)));
+
+            let mut meter = generous_meter();
+            let result = meter.charge(
+                Charge::new(ChargePoint::IntegerArithmeticArithmetic)
+                    .exact_size(LimitKind::IntegerBits, amount.clone()),
+            );
+            if amount > Integer::from(u64::MAX) {
+                let refusal = result.unwrap_err();
+                assert_eq!(
+                    refusal.charge_point,
+                    ChargePoint::IntegerArithmeticArithmetic
+                );
+                assert_eq!(refusal.limit_kind, LimitKind::IntegerBits);
+                assert_eq!(refusal.limit, u64::MAX);
+                assert_eq!(refusal.consumed, 0);
+                assert_eq!(refusal.next_charge, amount);
+                assert_eq!(meter.consumed(LimitKind::IntegerBits), 0);
+                assert_eq!(meter.consumed(LimitKind::WorkUnits), 0);
+                assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+            } else {
+                assert_eq!(result, Ok(()));
+                assert_eq!(meter.consumed(LimitKind::IntegerBits), left + right);
+            }
+        }
     }
 
     /// `2 + 3` completes to `5` and charges the metered result.
