@@ -88,7 +88,7 @@ def mutate_all_loop(root):
     """Wrap the actual request validation in a ten-kind production traversal."""
     path = root / "src/accounting.rs"
     source = path.read_text()
-    start_marker = "        for (kind, amount) in charge.sizes.iter() {\n"
+    start_marker = "        for (kind, amount) in requests {\n"
     end_marker = "        if let Some((kind, amount)) = first_fail {\n"
     if source.count(start_marker) != 1 or source.count(end_marker) != 1:
         raise GateError("production request loop changed; review the ALL-loop mutation")
@@ -99,9 +99,9 @@ def mutate_all_loop(root):
         raise GateError("cannot locate the production request-loop boundary")
     nested = "".join("    " + line if line.strip() else line for line in original.splitlines(True))
     nested = nested.replace(
-        "            for (kind, amount) in charge.sizes.iter() {\n",
-        "            for (kind, amount) in charge.sizes.iter() {\n"
-        "                if *kind != requested_kind {\n"
+        "            for (kind, amount) in requests {\n",
+        "            for (kind, amount) in requests.clone() {\n"
+        "                if kind != requested_kind {\n"
         "                    continue;\n"
         "                }\n",
         1,
@@ -139,15 +139,21 @@ def classify(log, returncode, mutant_line=None):
         verdict = "Verified"
         marker = "VERIFICATION:- SUCCESSFUL"
     else:
-        if returncode != 1 or statuses - {"SUCCESS", "UNREACHABLE", "UNDETERMINED", "FAILURE"}:
+        if returncode != 1 or statuses - {"SUCCESS", "UNREACHABLE", "FAILURE"}:
             raise GateError("ALL-loop control was inconclusive")
         if len(failures) != 1:
             raise GateError("ALL-loop control must fail exactly one assertion")
         _, name, _, description, location = failures[0]
-        if (name != "accounting::Meter::charge.unwind.1"
+        function = name.removesuffix(".unwind.1")
+        shared = "accounting::Meter::charge_fields"
+        # Bind the exact production function/loop/line and its same named
+        # monomorphization in both property and source location.
+        if (not name.endswith(".unwind.1")
+                or not (function == shared or
+                        (function.startswith(shared + "::<") and function.endswith(">")))
                 or description != "unwinding assertion loop 1"
                 or not location.startswith(f"src/accounting.rs:{mutant_line}:")
-                or not location.endswith(" in function accounting::Meter::charge")):
+                or not location.endswith(" in function " + function)):
             raise GateError("control did not fail at the mutated production ALL loop")
         expected = "Complete - 0 successfully verified harnesses, 1 failures, 1 total."
         verdict = "ExpectedProductionUnwindFailure"

@@ -1,0 +1,29 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-exact visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15257 round=1 model=unavailable run=1442b6b7-5520-4513-bf8b-af556ff328ba -->
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified against actual fix546eadb4; exact after_excerpt below. |
+| FND-002 | fixed | Verified against actual fix546eadb4; exact after_excerpt below. |
+
+Separate same-reviewer disposition round1 at clean frozen fix546eadb4a5cd540c8bfc1f3efd9c9e2e47cdc413. Original Findings and review bytes remain unchanged as a prefix. The fix removes only UNDETERMINED from the mutant companion-status allow-list, adds one resolved-vs-unresolved adverse parser control, and removes only the false FR358AC13 tag. Exact expected failure/function/file/line/loop checks remain unchanged. No new finding.
+
+Independently checked preserved initial-review hashes, exact source diff, archived old-control classifier byte-equal toe1411c6 and its new test byte-equal to fixed test source. Supplied negative execution genuinely fails the old classifier (GateError not raised), while fixed four VerdictTests pass. Focused fmt/fmt-check/lint(three lanes), accounting26/28 pass; actual16GiB/swap0/QSPECfd7, peak397017088bytes, allmemoryevents0, hierarchy gone/TENguards empty, targetretained. These are inspected receipts, not reviewer execution. Supplied matrix compared narrowly: exactly wrongAC13 binding removed (281→280), no added binding or189criterion/status change; no full matrix repeated. No reviewer heavy/native/backend/proof/aggregate work.
+
+Actual current root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 and existing owner handoffs were read back. Code/Rust latest disposition PASS, with both findings FIXED. Full gap remains FAIL for four inherited local gaps, explicitly DEFERRED; introduced trace FND005 FIXED. Persistent Meter baseline, actual ALL/refusal-order controls and backend property mapping remain PENDING and required at reviewed head, plus final aggregate and exact artifact custody before merge. No IR917 fit or acceptance inferred.
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "        if returncode != 1 or statuses - {\"SUCCESS\", \"UNREACHABLE\"\
+    , \"FAILURE\"}:\n            raise GateError(\"ALL-loop control was inconclusive\"\
+    )"
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: "    #[trace(\"FR-359-AC-8\")]\n    #[test]\n    fn common_and_promoted_builder_histories_have_identical_observations()\
+    \ {"
+```
+
++++

@@ -1,0 +1,54 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-exact visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15258 round=1 model=unavailable run=1442b6b7-5520-4513-bf8b-af556ff328ba -->
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | deferred | Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers unchanged FR359AC9 local ignored-only binder reconciliation to existing IR810; actual owner handoff5b08d0b8-40ba-4497-978c-476e8119236a preserves delivered prior gate. The REQUIRED real current-head persistent Meter baseline/ALL/refusal-order controls before this merge are not deferred or inferred from that prior delivery. |
+| FND-002 | deferred | Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers unchanged FR359AC10 current five genuine CG consumer proofs/receipt to open IR17/IR705; actual IR17 owner handoff7d0df838-11c4-4027-a7d7-ae368a8e0549 retains QSL937 blocker. New common/native tests cannot substitute. |
+| FND-003 | deferred | Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers FR371AC6 local evidence binding and current TC027 receipt to open IR705. Original healthy/bound/arithmetic16GiB results atf28d, actual IR7056ce5acee-ac3c-47e2-9f09-c17376e80e14, remain successful historical evidence; they are not called unexecuted/OOM-only or new current-driver acceptance. |
+| FND-004 | deferred | Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers unchanged FR383AC4 no_std verification-method/local Test-binder reconciliation to existing IR895, actual handoffc41187f2-aae7-4f5a-a34f-c3f63b9b1208. Delivered accessor/no_std behavior is not reopened; real no_std checks do not manufacture a Test-symbol binder. |
+| FND-005 | fixed | Verified against actual fix546eadb4; exact after_excerpt below. |
+
+Separate same-reviewer disposition round1 at clean frozen fix546eadb4a5cd540c8bfc1f3efd9c9e2e47cdc413. Original Findings and review bytes remain unchanged as a prefix. The fix removes only UNDETERMINED from the mutant companion-status allow-list, adds one resolved-vs-unresolved adverse parser control, and removes only the false FR358AC13 tag. Exact expected failure/function/file/line/loop checks remain unchanged. No new finding.
+
+Independently checked preserved initial-review hashes, exact source diff, archived old-control classifier byte-equal toe1411c6 and its new test byte-equal to fixed test source. Supplied negative execution genuinely fails the old classifier (GateError not raised), while fixed four VerdictTests pass. Focused fmt/fmt-check/lint(three lanes), accounting26/28 pass; actual16GiB/swap0/QSPECfd7, peak397017088bytes, allmemoryevents0, hierarchy gone/TENguards empty, targetretained. These are inspected receipts, not reviewer execution. Supplied matrix compared narrowly: exactly wrongAC13 binding removed (281→280), no added binding or189criterion/status change; no full matrix repeated. No reviewer heavy/native/backend/proof/aggregate work.
+
+Actual current root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 and existing owner handoffs were read back. Code/Rust latest disposition PASS, with both findings FIXED. Full gap remains FAIL for four inherited local gaps, explicitly DEFERRED; introduced trace FND005 FIXED. Persistent Meter baseline, actual ALL/refusal-order controls and backend property mapping remain PENDING and required at reviewed head, plus final aggregate and exact artifact custody before merge. No IR917 fit or acceptance inferred.
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers unchanged
+    FR359AC9 local ignored-only binder reconciliation to existing IR810; actual owner
+    handoff5b08d0b8-40ba-4497-978c-476e8119236a preserves delivered prior gate. The
+    REQUIRED real current-head persistent Meter baseline/ALL/refusal-order controls
+    before this merge are not deferred or inferred from that prior delivery.
+- fnd: FND-002
+  outcome: deferred
+  reason: Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers unchanged
+    FR359AC10 current five genuine CG consumer proofs/receipt to open IR17/IR705;
+    actual IR17 owner handoff7d0df838-11c4-4027-a7d7-ae368a8e0549 retains QSL937 blocker.
+    New common/native tests cannot substitute.
+- fnd: FND-003
+  outcome: deferred
+  reason: Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers FR371AC6
+    local evidence binding and current TC027 receipt to open IR705. Original healthy/bound/arithmetic16GiB
+    results atf28d, actual IR7056ce5acee-ac3c-47e2-9f09-c17376e80e14, remain successful
+    historical evidence; they are not called unexecuted/OOM-only or new current-driver
+    acceptance.
+- fnd: FND-004
+  outcome: deferred
+  reason: Current PR76 root decisione437a3cc-7298-4e8e-b12e-75971dd8c2c2 defers unchanged
+    FR383AC4 no_std verification-method/local Test-binder reconciliation to existing
+    IR895, actual handoffc41187f2-aae7-4f5a-a34f-c3f63b9b1208. Delivered accessor/no_std
+    behavior is not reopened; real no_std checks do not manufacture a Test-symbol
+    binder.
+- fnd: FND-005
+  outcome: fixed
+  after_excerpt: "    #[trace(\"FR-359-AC-8\")]\n    #[test]\n    fn common_and_promoted_builder_histories_have_identical_observations()\
+    \ {"
+```
+
++++
