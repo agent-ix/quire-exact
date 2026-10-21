@@ -1,0 +1,52 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-exact visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15239 round=1 model=gpt-6.1-sol run=4b119908-a416-4dda-a539-d3df60a80f87 -->
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | deferred | Prospective IR-705 implementation; evidence remains required. |
+| FND-002 | deferred | Prospective IR-705 implementation; evidence remains required. |
+| FND-003 | deferred | Prospective IR-705 implementation; evidence remains required. |
+| FND-004 | deferred | Prospective IR-705 implementation; evidence remains required. |
+| FND-005 | deferred | Prospective IR-705 implementation; evidence remains required. |
+
++++ [reviewer data]
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Deferred to IR-705 implementation and genuine consumer qualification, owned
+    by the Kani code lead in the explicit spec-first sequence. This prospective Markdown-only
+    PR supplies no native implementation; no gap is waived, no full-capacity proof
+    or healthy profile is credited, and IR-705 remains open. Inherited rows retain
+    their original obligations.
+- fnd: FND-002
+  outcome: deferred
+  reason: Deferred to IR-705 implementation and genuine consumer qualification, owned
+    by the Kani code lead in the explicit spec-first sequence. This prospective Markdown-only
+    PR supplies no native implementation; no gap is waived, no full-capacity proof
+    or healthy profile is credited, and IR-705 remains open. Inherited rows retain
+    their original obligations.
+- fnd: FND-003
+  outcome: deferred
+  reason: Deferred to IR-705 implementation and genuine consumer qualification, owned
+    by the Kani code lead in the explicit spec-first sequence. This prospective Markdown-only
+    PR supplies no native implementation; no gap is waived, no full-capacity proof
+    or healthy profile is credited, and IR-705 remains open. Inherited rows retain
+    their original obligations.
+- fnd: FND-004
+  outcome: deferred
+  reason: Deferred to IR-705 implementation and genuine consumer qualification, owned
+    by the Kani code lead in the explicit spec-first sequence. This prospective Markdown-only
+    PR supplies no native implementation; no gap is waived, no full-capacity proof
+    or healthy profile is credited, and IR-705 remains open. Inherited rows retain
+    their original obligations.
+- fnd: FND-005
+  outcome: deferred
+  reason: Deferred to IR-705 implementation and genuine consumer qualification, owned
+    by the Kani code lead in the explicit spec-first sequence. This prospective Markdown-only
+    PR supplies no native implementation; no gap is waived, no full-capacity proof
+    or healthy profile is credited, and IR-705 remains open. Inherited rows retain
+    their original obligations.
+```
+
++++
