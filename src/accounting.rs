@@ -14,6 +14,7 @@
 
 use crate::cancel::Cancel;
 use crate::integer::Integer;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 use core::num::NonZeroU64;
@@ -484,37 +485,80 @@ pub struct InjectedDenial {
 pub struct Charge {
     point: ChargePoint,
     sizes: InlineSizes,
-    work_units: Integer,
-    result_units: Integer,
+    work_units: ChargeAmount,
+    result_units: ChargeAmount,
 }
 
-/// Keeps the common single-size charge inline and stores further requests in
-/// insertion order. Meter validation visits these requests once, preserving
-/// stable duplicate ordering when a kind occurs more than once.
+/// Amounts admissible under a `u64` limit stay in machine width. An exact
+/// amount outside that domain is retained out of line only for refusal.
+#[derive(Clone, Eq, PartialEq)]
+enum ChargeAmount {
+    Units(u64),
+    Exact(Box<Integer>),
+}
+
+impl ChargeAmount {
+    fn exact(amount: Integer) -> Self {
+        match amount.to_u64() {
+            Some(units) => Self::Units(units),
+            None => Self::Exact(Box::new(amount)),
+        }
+    }
+
+    fn units(&self) -> Option<u64> {
+        match self {
+            Self::Units(units) => Some(*units),
+            Self::Exact(_) => None,
+        }
+    }
+
+    fn integer(&self) -> Integer {
+        match self {
+            Self::Units(units) => Integer::from(*units),
+            Self::Exact(exact) => exact.as_ref().clone(),
+        }
+    }
+}
+
+impl fmt::Debug for ChargeAmount {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.integer(), formatter)
+    }
+}
+
+/// The two common requests have named inline slots. Additional requests spill
+/// without a count limit and retain insertion order.
 #[derive(Clone)]
 struct InlineSizes {
-    first: Option<(LimitKind, Integer)>,
-    overflow: Vec<(LimitKind, Integer)>,
+    first: Option<(LimitKind, ChargeAmount)>,
+    second: Option<(LimitKind, ChargeAmount)>,
+    overflow: Vec<(LimitKind, ChargeAmount)>,
 }
 
 impl InlineSizes {
     fn new() -> Self {
         Self {
             first: None,
+            second: None,
             overflow: Vec::new(),
         }
     }
 
-    fn push(&mut self, kind: LimitKind, amount: Integer) {
-        if self.first.is_some() {
-            self.overflow.push((kind, amount));
-        } else {
+    fn push(&mut self, kind: LimitKind, amount: ChargeAmount) {
+        if self.first.is_none() {
             self.first = Some((kind, amount));
+        } else if self.second.is_none() {
+            self.second = Some((kind, amount));
+        } else {
+            self.overflow.push((kind, amount));
         }
     }
 
-    fn iter(&self) -> impl Iterator<Item = &(LimitKind, Integer)> {
-        self.first.iter().chain(self.overflow.iter())
+    fn iter(&self) -> impl Iterator<Item = &(LimitKind, ChargeAmount)> {
+        self.first
+            .iter()
+            .chain(self.second.iter())
+            .chain(self.overflow.iter())
     }
 }
 
@@ -538,36 +582,38 @@ impl Charge {
         Self {
             point,
             sizes: InlineSizes::new(),
-            work_units: Integer::one(),
-            result_units: Integer::zero(),
+            work_units: ChargeAmount::Units(1),
+            result_units: ChargeAmount::Units(0),
         }
     }
 
     /// A semantic-size charge against `kind`.
-    pub fn size(self, kind: LimitKind, amount: u64) -> Self {
-        self.exact_size(kind, Integer::from(amount))
+    pub fn size(mut self, kind: LimitKind, amount: u64) -> Self {
+        self.sizes.push(kind, ChargeAmount::Units(amount));
+        self
     }
 
     /// A semantic-size amount that may exceed `u64::MAX`.
     pub fn exact_size(mut self, kind: LimitKind, amount: Integer) -> Self {
-        self.sizes.push(kind, amount);
+        self.sizes.push(kind, ChargeAmount::exact(amount));
         self
     }
 
     /// A `work_units` addition other than the default one.
     pub fn work(mut self, amount: Integer) -> Self {
-        self.work_units = amount;
+        self.work_units = ChargeAmount::exact(amount);
         self
     }
 
     /// A `result_units` addition.
-    pub fn results(self, amount: u64) -> Self {
-        self.exact_results(Integer::from(amount))
+    pub fn results(mut self, amount: u64) -> Self {
+        self.result_units = ChargeAmount::Units(amount);
+        self
     }
 
     /// A `result_units` addition that may exceed `u64::MAX`.
     pub fn exact_results(mut self, amount: Integer) -> Self {
-        self.result_units = amount;
+        self.result_units = ChargeAmount::exact(amount);
         self
     }
 }
@@ -765,7 +811,7 @@ impl Meter {
     fn check_injected(
         &mut self,
         point: ChargePoint,
-        work_units: Integer,
+        work_units: &ChargeAmount,
     ) -> Result<(), Incomplete> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {
             let consumed = self.consumed(LimitKind::WorkUnits);
@@ -773,7 +819,7 @@ impl Meter {
                 limit_kind: LimitKind::WorkUnits,
                 limit: consumed,
                 consumed,
-                next_charge: work_units,
+                next_charge: work_units.integer(),
                 charge_point: point,
             });
         }
@@ -789,7 +835,7 @@ impl Meter {
                     limit_kind: LimitKind::WorkUnits,
                     limit: consumed,
                     consumed,
-                    next_charge: work_units,
+                    next_charge: work_units.integer(),
                     charge_point: point,
                 })
             }
@@ -805,17 +851,17 @@ impl Meter {
     /// cross-crate caller for that purpose.
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
         let point = charge.point;
-        self.check_injected(point, charge.work_units.clone())?;
+        self.check_injected(point, &charge.work_units)?;
         // Keep validation and per-admission maxima local until every counter
         // is known to fit. An earlier field wins even when requested later;
         // an equal field keeps its first failing request.
         let mut sizes = [None; LimitKind::COUNT];
-        let mut first_fail: Option<(LimitKind, Integer)> = None;
+        let mut first_fail: Option<(LimitKind, &ChargeAmount)> = None;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
         for (kind, amount) in charge.sizes.iter() {
             let valid = amount
-                .to_u64()
+                .units()
                 .filter(|amount| *amount <= kind.limit(&self.counters.limits));
             if let Some(amount) = valid {
                 let slot = &mut sizes[kind.index()];
@@ -826,21 +872,21 @@ impl Meter {
                 .as_ref()
                 .is_none_or(|(first_kind, _)| kind.index() < first_kind.index())
             {
-                first_fail = Some((*kind, amount.clone()));
+                first_fail = Some((*kind, amount));
             }
         }
         if let Some((kind, amount)) = first_fail {
-            return Err(self.incomplete(kind, amount, point));
+            return Err(self.incomplete(kind, amount.integer(), point));
         }
-        let cumulative = |kind: LimitKind, amount: Integer| {
+        let cumulative = |kind: LimitKind, amount: &ChargeAmount| {
             amount
-                .to_u64()
+                .units()
                 .and_then(|addition| self.consumed(kind).checked_add(addition))
                 .filter(|total| *total <= kind.limit(&self.counters.limits))
-                .ok_or_else(|| self.incomplete(kind, amount, point))
+                .ok_or_else(|| self.incomplete(kind, amount.integer(), point))
         };
-        let work = cumulative(LimitKind::WorkUnits, charge.work_units)?;
-        let results = cumulative(LimitKind::ResultUnits, charge.result_units)?;
+        let work = cumulative(LimitKind::WorkUnits, &charge.work_units)?;
+        let results = cumulative(LimitKind::ResultUnits, &charge.result_units)?;
         // Straight-line writes have no trip count independent of requests. A
         // size request naming a cumulative counter is validated above and
         // then superseded by that counter's own total below.
@@ -925,7 +971,7 @@ impl Meter {
     pub fn charge_plan(&mut self, pairs: &Integer) -> Result<(), Incomplete> {
         let point = ChargePoint::EqualityPlan;
         let reservation = pairs.add(&Integer::from(2_u64));
-        self.check_injected(point, reservation.clone())?;
+        self.check_injected(point, &ChargeAmount::exact(reservation.clone()))?;
         let kind = LimitKind::ValueOccurrences;
         let size = pairs
             .to_u64()
@@ -1133,8 +1179,9 @@ mod tests {
         assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
     }
 
+    #[ix_trace_rs::trace("FR-359-AC-8")]
     #[test]
-    fn charge_size_requests_keep_the_first_inline_and_overflow_in_order() {
+    fn charge_size_requests_keep_two_inline_and_overflow_in_order() {
         let first = Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 1);
         assert_eq!(
             first.sizes.first.as_ref().map(|(kind, _)| *kind),
@@ -1143,17 +1190,16 @@ mod tests {
         assert!(first.sizes.overflow.is_empty());
 
         let two = first.clone().size(LimitKind::DecimalDigits, 2);
-        assert_eq!(two.sizes.overflow.len(), 1);
+        assert!(two.sizes.overflow.is_empty());
         assert_eq!(
-            two.sizes.overflow[0].0,
-            LimitKind::DecimalDigits,
-            "the second request is the first overflow entry"
+            two.sizes.second.as_ref().map(|(kind, _)| *kind),
+            Some(LimitKind::DecimalDigits)
         );
 
         let four = two
             .size(LimitKind::ScaleExpansion, 3)
             .size(LimitKind::TextInputBytes, 4);
-        assert_eq!(four.sizes.overflow.len(), 3);
+        assert_eq!(four.sizes.overflow.len(), 2);
         assert_eq!(
             four.sizes.iter().map(|(kind, _)| *kind).collect::<Vec<_>>(),
             [
@@ -1163,6 +1209,35 @@ mod tests {
                 LimitKind::TextInputBytes,
             ]
         );
+    }
+
+    #[ix_trace_rs::trace("FR-359-AC-6", "FR-359-AC-8")]
+    #[test]
+    fn exceptional_exact_sizes_preserve_the_first_failure_and_state() {
+        let point = ChargePoint::FunctionCall;
+        let over_u64 = Integer::from(u64::MAX).add(&Integer::one());
+        let over_i128 = Integer::from(i128::MAX).add(&Integer::one());
+        for amount in [Integer::from(-1_i64), over_u64, over_i128] {
+            let mut meter = Meter::new(unlimited());
+            meter
+                .charge(Charge::new(point).size(LimitKind::IntegerBits, 8))
+                .unwrap();
+            let before = meter.clone();
+            let refusal = meter
+                .charge(
+                    Charge::new(point)
+                        .exact_size(LimitKind::ValueOccurrences, amount.clone())
+                        .exact_size(LimitKind::IntegerBits, amount.clone())
+                        .exact_size(LimitKind::IntegerBits, Integer::from(-2_i64)),
+                )
+                .unwrap_err();
+            assert_eq!(refusal.limit_kind, LimitKind::IntegerBits);
+            assert_eq!(refusal.limit, u64::MAX);
+            assert_eq!(refusal.consumed, 8);
+            assert_eq!(refusal.next_charge, amount);
+            assert_eq!(refusal.charge_point, point);
+            assert_unchanged(&before, &meter);
+        }
     }
 
     /// Trace: FR-359-AC-8

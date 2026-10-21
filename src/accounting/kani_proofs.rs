@@ -15,39 +15,6 @@ type Request = (LimitKind, u64);
 /// The most requests one charge in the checked schedules carries.
 type Requests = [Option<Request>; 2];
 
-/// Position of `kind` in `ScalarLimits` member order, written independently of
-/// the meter's own indexing.
-fn slot(kind: LimitKind) -> usize {
-    match kind {
-        LimitKind::IntegerBits => 0,
-        LimitKind::DecimalDigits => 1,
-        LimitKind::ScaleExpansion => 2,
-        LimitKind::TextInputBytes => 3,
-        LimitKind::TextScalars => 4,
-        LimitKind::NormalizedScalars => 5,
-        LimitKind::UnitEdges => 6,
-        LimitKind::ValueOccurrences => 7,
-        LimitKind::WorkUnits => 8,
-        LimitKind::ResultUnits => 9,
-    }
-}
-
-/// The limit of `kind`, read straight from the named field.
-fn limit_of(limits: &ScalarLimits, kind: LimitKind) -> u64 {
-    match kind {
-        LimitKind::IntegerBits => limits.integer_bits,
-        LimitKind::DecimalDigits => limits.decimal_digits,
-        LimitKind::ScaleExpansion => limits.scale_expansion,
-        LimitKind::TextInputBytes => limits.text_input_bytes,
-        LimitKind::TextScalars => limits.text_scalars,
-        LimitKind::NormalizedScalars => limits.normalized_scalars,
-        LimitKind::UnitEdges => limits.unit_edges,
-        LimitKind::ValueOccurrences => limits.value_occurrences,
-        LimitKind::WorkUnits => limits.work_units,
-        LimitKind::ResultUnits => limits.result_units,
-    }
-}
-
 /// The model's expected refusal. Every amount in the checked schedules is a
 /// `u64`, so the amount is compared through [`Integer::to_u64`] rather than
 /// by building and comparing a second big integer.
@@ -73,12 +40,10 @@ impl Model {
     }
 
     /// The first-inserted request of `kind` that exceeds its limit.
-    fn size_short(limits: &ScalarLimits, requests: &Requests, kind: LimitKind) -> Option<u64> {
+    fn size_short(limit: u64, requests: &Requests, kind: LimitKind) -> Option<u64> {
         let over = |request: Option<Request>| {
             request
-                .filter(|(requested, amount)| {
-                    *requested == kind && *amount > limit_of(limits, kind)
-                })
+                .filter(|(requested, amount)| *requested == kind && *amount > limit)
                 .map(|(_, amount)| amount)
         };
         over(requests[0]).or(over(requests[1]))
@@ -93,36 +58,60 @@ impl Model {
         requests: &Requests,
         results: u64,
     ) -> Result<(), Refusal> {
-        let size = |kind| Self::size_short(limits, requests, kind).map(|amount| (kind, amount));
-        let cumulative = |kind: LimitKind, amount: u64| {
-            // Overflow of the exact sum is itself a refusal.
-            let fits = self.consumed[slot(kind)]
-                .checked_add(amount)
-                .is_some_and(|total| total <= limit_of(limits, kind));
-            (!fits).then_some((kind, amount))
-        };
-        let short = size(LimitKind::IntegerBits)
-            .or_else(|| size(LimitKind::DecimalDigits))
-            .or_else(|| size(LimitKind::ScaleExpansion))
-            .or_else(|| size(LimitKind::TextInputBytes))
-            .or_else(|| size(LimitKind::TextScalars))
-            .or_else(|| size(LimitKind::NormalizedScalars))
-            .or_else(|| size(LimitKind::UnitEdges))
-            .or_else(|| size(LimitKind::ValueOccurrences))
-            .or_else(|| cumulative(LimitKind::WorkUnits, 1))
-            .or_else(|| cumulative(LimitKind::ResultUnits, results));
-        if let Some((kind, amount)) = short {
-            return Err(Refusal {
-                kind,
-                limit: limit_of(limits, kind),
-                consumed: self.consumed[slot(kind)],
-                amount,
-                point,
-            });
+        // Each branch names the field and counter directly. The oracle does
+        // not reconstruct a field by dispatching a merged symbolic kind.
+        macro_rules! size {
+            ($kind:ident, $field:ident, $index:literal) => {
+                if let Some(amount) = Self::size_short(limits.$field, requests, LimitKind::$kind) {
+                    return Err(Refusal {
+                        kind: LimitKind::$kind,
+                        limit: limits.$field,
+                        consumed: self.consumed[$index],
+                        amount,
+                        point,
+                    });
+                }
+            };
         }
+        size!(IntegerBits, integer_bits, 0);
+        size!(DecimalDigits, decimal_digits, 1);
+        size!(ScaleExpansion, scale_expansion, 2);
+        size!(TextInputBytes, text_input_bytes, 3);
+        size!(TextScalars, text_scalars, 4);
+        size!(NormalizedScalars, normalized_scalars, 5);
+        size!(UnitEdges, unit_edges, 6);
+        size!(ValueOccurrences, value_occurrences, 7);
+        macro_rules! cumulative {
+            ($kind:ident, $field:ident, $index:literal, $amount:expr) => {
+                if !self.consumed[$index]
+                    .checked_add($amount)
+                    .is_some_and(|total| total <= limits.$field)
+                {
+                    return Err(Refusal {
+                        kind: LimitKind::$kind,
+                        limit: limits.$field,
+                        consumed: self.consumed[$index],
+                        amount: $amount,
+                        point,
+                    });
+                }
+            };
+        }
+        cumulative!(WorkUnits, work_units, 8, 1);
+        cumulative!(ResultUnits, result_units, 9, results);
         for (kind, amount) in requests.iter().flatten() {
-            let current = self.consumed[slot(*kind)];
-            self.consumed[slot(*kind)] = if *amount > current { *amount } else { current };
+            let current = match kind {
+                LimitKind::IntegerBits => &mut self.consumed[0],
+                LimitKind::DecimalDigits => &mut self.consumed[1],
+                LimitKind::ScaleExpansion => &mut self.consumed[2],
+                LimitKind::TextInputBytes => &mut self.consumed[3],
+                LimitKind::TextScalars => &mut self.consumed[4],
+                LimitKind::NormalizedScalars => &mut self.consumed[5],
+                LimitKind::UnitEdges => &mut self.consumed[6],
+                LimitKind::ValueOccurrences => &mut self.consumed[7],
+                LimitKind::WorkUnits | LimitKind::ResultUnits => continue,
+            };
+            *current = (*current).max(*amount);
         }
         self.consumed[8] += 1;
         self.consumed[9] += results;
@@ -187,12 +176,12 @@ fn step(
     actual.is_ok()
 }
 
-/// The magnitude bit length of `value`, zero for zero.
+/// The magnitude bit length of `value`, one for zero as specified by FR-362.
 fn bits(value: i64) -> u64 {
-    u64::from(64 - value.unsigned_abs().leading_zeros())
+    u64::from((64 - value.unsigned_abs().leading_zeros()).max(1))
 }
 
-// FR-359-AC-9 is PLANNED on IR-844; this harness exhausts memory at 40 GiB.
+// FR-359-AC-9 remains unqualified until the healthy proof and both controls pass.
 #[kani::proof]
 fn meter_integer_arithmetic_schedule_matches_reference() {
     let left: i64 = kani::any();
