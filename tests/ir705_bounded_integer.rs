@@ -2,6 +2,8 @@
 //! Integer representation refinement observations (FR-371).
 
 use core::num::{NonZeroU32, NonZeroU64};
+#[cfg(not(feature = "test-support"))]
+use ix_trace_rs::trace;
 use num_bigint::BigInt;
 use std::{str::FromStr, string::ToString};
 
@@ -548,7 +550,7 @@ fn assert_points(meter: &Meter, expected: &[ChargePoint]) {
 #[cfg(not(feature = "test-support"))]
 fn assert_points(_meter: &Meter, _expected: &[ChargePoint]) {}
 
-/// Trace: FR-371-AC-4
+#[trace("FR-371-AC-4")]
 #[cfg(not(feature = "test-support"))]
 #[test]
 fn native_public_metered_call_matches_accounting_only_allocation_observation() {
@@ -588,9 +590,9 @@ fn native_public_metered_call_matches_accounting_only_allocation_observation() {
             .unwrap();
     });
 
-    assert!(
-        public_allocations.bytes_total > 0,
-        "metered size-vector allocation is expected"
+    assert_eq!(
+        baseline_allocations.bytes_total, 0,
+        "the two-request arithmetic charge schedule stays inline"
     );
     assert_eq!(
         public_allocations.bytes_total,
