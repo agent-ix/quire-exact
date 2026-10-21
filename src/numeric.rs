@@ -182,25 +182,31 @@ fn cross_bits(left: &Rational, right: &Rational) -> Integer {
     bits(left.numerator()).add(&bits(right.denominator()))
 }
 
-/// The `integer_bits` amount of `integer-arithmetic.arithmetic`:
+/// The `integer-arithmetic.arithmetic` charge, derived from operand sizes:
 /// `bits(a)+bits(b)` for `*`, `max(bits(a),bits(b))+1` for `+` and `-`, and
 /// `bits(a)` for unary `-`.
-fn integer_arithmetic_bits(operation: IntegerArithmetic<'_>) -> Integer {
-    match operation {
+fn integer_arithmetic_charge(operation: IntegerArithmetic<'_>) -> Charge {
+    let (left, right) = match operation {
         IntegerArithmetic::Add(left, right) | IntegerArithmetic::Subtract(left, right) => {
-            integer_bit_sum(left.magnitude_bits().max(right.magnitude_bits()), 1)
+            (left.magnitude_bits().max(right.magnitude_bits()), 1)
         }
         IntegerArithmetic::Multiply(left, right) => {
-            integer_bit_sum(left.magnitude_bits(), right.magnitude_bits())
+            (left.magnitude_bits(), right.magnitude_bits())
         }
-        IntegerArithmetic::Negate(operand) => bits(operand),
-    }
+        IntegerArithmetic::Negate(operand) => (operand.magnitude_bits(), 0),
+    };
+    integer_bit_sum_charge(left, right)
 }
 
 // Two u64 bit counts sum to at most 2^65 - 2, exactly representable in i128.
-// Widen before addition so amounts above u64::MAX remain exact Meter requests.
-fn integer_bit_sum(left: u64, right: u64) -> Integer {
-    Integer::from(i128::from(left) + i128::from(right))
+// Widen before addition; oversized amounts remain exact requests to the Meter.
+fn integer_bit_sum_charge(left: u64, right: u64) -> Charge {
+    let amount = i128::from(left) + i128::from(right);
+    let charge = Charge::new(ChargePoint::IntegerArithmeticArithmetic);
+    match u64::try_from(amount) {
+        Ok(amount) => charge.size(LimitKind::IntegerBits, amount),
+        Err(_) => charge.exact_size(LimitKind::IntegerBits, Integer::from(amount)),
+    }
 }
 
 /// The `integer_bits` amount of `rational-arithmetic.arithmetic` for `a/b`
@@ -270,10 +276,7 @@ fn integer_arithmetic(
             .size(LimitKind::IntegerBits, bits)
             .size(LimitKind::ValueOccurrences, count),
     )?;
-    meter.charge(
-        Charge::new(ChargePoint::IntegerArithmeticArithmetic)
-            .exact_size(LimitKind::IntegerBits, integer_arithmetic_bits(operation)),
-    )?;
+    meter.charge(integer_arithmetic_charge(operation))?;
     let result = match operation {
         IntegerArithmetic::Add(left, right) => left.add(right),
         IntegerArithmetic::Subtract(left, right) => left.sub(right),
@@ -458,41 +461,112 @@ mod tests {
 
         use num_bigint::BigInt;
 
-        // Exercise metadata boundaries without constructing impossibly large
-        // operands. Independent decimal amounts also detect u64 saturation.
+        // Counts exercise the production charge builder without inventing
+        // giant public operands. Decimal and BigInt oracles detect truncation.
         for (left, right, expected) in [
             (0, 0, "0"),
+            (4, 1, "5"),
+            (u64::MAX, 0, "18446744073709551615"),
             (u64::MAX - 1, 1, "18446744073709551615"),
             (u64::MAX, 1, "18446744073709551616"),
             (1, u64::MAX, "18446744073709551616"),
             (u64::MAX, u64::MAX, "36893488147419103230"),
         ] {
-            let amount = integer_bit_sum(left, right);
-            assert_eq!(amount.as_big(), &BigInt::from_str(expected).unwrap());
-            assert_eq!(amount.as_big(), &(BigInt::from(left) + BigInt::from(right)));
-
+            let oracle = BigInt::from_str(expected).unwrap();
+            assert_eq!(oracle, BigInt::from(left) + BigInt::from(right));
             let mut meter = generous_meter();
-            let result = meter.charge(
-                Charge::new(ChargePoint::IntegerArithmeticArithmetic)
-                    .exact_size(LimitKind::IntegerBits, amount.clone()),
-            );
-            if amount > Integer::from(u64::MAX) {
-                let refusal = result.unwrap_err();
-                assert_eq!(
-                    refusal.charge_point,
-                    ChargePoint::IntegerArithmeticArithmetic
-                );
-                assert_eq!(refusal.limit_kind, LimitKind::IntegerBits);
-                assert_eq!(refusal.limit, u64::MAX);
-                assert_eq!(refusal.consumed, 0);
-                assert_eq!(refusal.next_charge, amount);
-                assert_eq!(meter.consumed(LimitKind::IntegerBits), 0);
-                assert_eq!(meter.consumed(LimitKind::WorkUnits), 0);
-                assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
-            } else {
-                assert_eq!(result, Ok(()));
-                assert_eq!(meter.consumed(LimitKind::IntegerBits), left + right);
+            admit_integer_operand_prefix(&mut meter);
+            let result = meter.charge(integer_bit_sum_charge(left, right));
+            match u64::from_str(expected) {
+                Ok(amount) => {
+                    assert_eq!(result, Ok(()));
+                    assert_integer_charge_prefix(&meter, amount.max(3), 2);
+                    #[cfg(feature = "test-support")]
+                    assert_eq!(meter.admitted_charges()[1].integer_bits, Some(amount));
+                    if amount > 3 {
+                        let mut limits = generous_meter().limits().clone();
+                        limits.integer_bits = amount - 1;
+                        let mut short = Meter::new(limits);
+                        admit_integer_operand_prefix(&mut short);
+                        let refusal = short.charge(integer_bit_sum_charge(left, right)).unwrap_err();
+                        assert_eq!(refusal, crate::accounting::Incomplete {
+                            charge_point: ChargePoint::IntegerArithmeticArithmetic,
+                            limit_kind: LimitKind::IntegerBits,
+                            limit: amount - 1,
+                            consumed: 3,
+                            next_charge: Integer::from_big(oracle.clone()),
+                        });
+                        assert_integer_charge_prefix(&short, 3, 1);
+                    }
+                }
+                Err(_) => {
+                    assert_eq!(result.unwrap_err(), crate::accounting::Incomplete {
+                        charge_point: ChargePoint::IntegerArithmeticArithmetic,
+                        limit_kind: LimitKind::IntegerBits,
+                        limit: u64::MAX,
+                        consumed: 3,
+                        next_charge: Integer::from_big(oracle),
+                    });
+                    assert_integer_charge_prefix(&meter, 3, 1);
+                }
             }
+        }
+    }
+
+    fn admit_integer_operand_prefix(meter: &mut Meter) {
+        meter.charge(Charge::new(ChargePoint::IntegerArithmeticOperands)
+            .size(LimitKind::IntegerBits, 3)
+            .size(LimitKind::ValueOccurrences, 2)).unwrap();
+    }
+
+    fn assert_integer_charge_prefix(meter: &Meter, bits: u64, work: u64) {
+        for kind in LimitKind::ALL {
+            let expected = match kind {
+                LimitKind::IntegerBits => bits,
+                LimitKind::ValueOccurrences => 2,
+                LimitKind::WorkUnits => work,
+                _ => 0,
+            };
+            assert_eq!(meter.consumed(kind), expected, "{kind:?}");
+        }
+        assert_eq!(meter.admission_count(), work);
+        #[cfg(feature = "test-support")]
+        {
+            let expected = [ChargePoint::IntegerArithmeticOperands,
+                ChargePoint::IntegerArithmeticArithmetic];
+            assert_eq!(meter.admitted_charges().iter().map(|charge| charge.point)
+                .collect::<alloc::vec::Vec<_>>(), expected[..work as usize]);
+        }
+    }
+
+    #[test]
+    #[trace("FR-371-AC-3")]
+    fn arithmetic_metadata_keeps_oversized_requests_behind_cancellation_and_injection() {
+        use core::num::NonZeroU64;
+
+        use crate::{Cancel, CancelCause, InjectedDenial};
+
+        for cancel_first in [false, true] {
+            let cancel = Cancel::new();
+            let mut meter = generous_meter().with_cancel(cancel.clone());
+            admit_integer_operand_prefix(&mut meter);
+            if cancel_first {
+                cancel.cancel(CancelCause::Requested);
+            } else {
+                meter = meter.with_injected_denial(InjectedDenial {
+                    point: ChargePoint::IntegerArithmeticArithmetic,
+                    occurrence: NonZeroU64::new(1).unwrap(),
+                });
+            }
+            let refusal = meter.charge(integer_bit_sum_charge(u64::MAX, 1)).unwrap_err();
+            assert_eq!(refusal, crate::accounting::Incomplete {
+                charge_point: ChargePoint::IntegerArithmeticArithmetic,
+                limit_kind: LimitKind::WorkUnits,
+                limit: 1,
+                consumed: 1,
+                next_charge: Integer::one(),
+            });
+            assert_integer_charge_prefix(&meter, 3, 1);
         }
     }
 
