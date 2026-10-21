@@ -228,7 +228,14 @@ fn mixed_inline_operations_and_materialized_source_clones_allocate_nothing() {
             let _ = right.as_big();
             let mut observed = None;
             let allocations = allocation_counter::measure(|| {
-                observed = Some((left.add(&right), left.sub(&right), left.mul(&right), left.neg(), left.clone(), right.clone()));
+                observed = Some((
+                    left.add(&right),
+                    left.sub(&right),
+                    left.mul(&right),
+                    left.neg(),
+                    left.clone(),
+                    right.clone(),
+                ));
             });
             assert_eq!(allocations.count_total, 0);
             assert_eq!(allocations.bytes_total, 0);

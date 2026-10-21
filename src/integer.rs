@@ -392,8 +392,10 @@ impl Integer {
 
     /// `self + other`. Exact; unbounded `Integer` addition never overflows.
     pub fn add(&self, other: &Self) -> Self {
-        if let (IntegerRepr::Small64 { value: left, .. }, IntegerRepr::Small64 { value: right, .. }) =
-            (&self.0, &other.0)
+        if let (
+            IntegerRepr::Small64 { value: left, .. },
+            IntegerRepr::Small64 { value: right, .. },
+        ) = (&self.0, &other.0)
         {
             return Self::small128(i128::from(*left) + i128::from(*right));
         }
@@ -413,8 +415,10 @@ impl Integer {
     /// `self - other`. Exact; unbounded `Integer` subtraction never
     /// overflows.
     pub fn sub(&self, other: &Self) -> Self {
-        if let (IntegerRepr::Small64 { value: left, .. }, IntegerRepr::Small64 { value: right, .. }) =
-            (&self.0, &other.0)
+        if let (
+            IntegerRepr::Small64 { value: left, .. },
+            IntegerRepr::Small64 { value: right, .. },
+        ) = (&self.0, &other.0)
         {
             return Self::small128(i128::from(*left) - i128::from(*right));
         }
@@ -434,8 +438,10 @@ impl Integer {
     /// `self × other`. Exact; unbounded `Integer` multiplication never
     /// overflows.
     pub fn mul(&self, other: &Self) -> Self {
-        if let (IntegerRepr::Small64 { value: left, .. }, IntegerRepr::Small64 { value: right, .. }) =
-            (&self.0, &other.0)
+        if let (
+            IntegerRepr::Small64 { value: left, .. },
+            IntegerRepr::Small64 { value: right, .. },
+        ) = (&self.0, &other.0)
         {
             return Self::small128(i128::from(*left) * i128::from(*right));
         }
@@ -838,12 +844,26 @@ mod tests {
     fn constructor_routes_preserve_the_selected_storage_class() {
         for value in [i64::MIN, -1, 0, 1, i64::MAX] {
             let integer = Integer::from(value);
-            assert!(matches!(&integer.0, IntegerRepr::Small64 { value: stored, .. } if *stored == value));
+            assert!(
+                matches!(&integer.0, IntegerRepr::Small64 { value: stored, .. } if *stored == value)
+            );
             assert_empty_inline_cache(&integer);
             assert_eq!(integer.as_big(), &BigInt::from(value));
         }
-        for value in [i128::MIN, i128::from(i64::MIN) - 1, -1, 0, 1, i128::from(i64::MAX) + 1, i128::MAX] {
-            for integer in [Integer::from(value), Integer::from_big(BigInt::from(value)), Integer::from_str(&value.to_string()).unwrap()] {
+        for value in [
+            i128::MIN,
+            i128::from(i64::MIN) - 1,
+            -1,
+            0,
+            1,
+            i128::from(i64::MAX) + 1,
+            i128::MAX,
+        ] {
+            for integer in [
+                Integer::from(value),
+                Integer::from_big(BigInt::from(value)),
+                Integer::from_str(&value.to_string()).unwrap(),
+            ] {
                 assert_small128(&integer);
                 assert_empty_inline_cache(&integer);
                 assert_eq!(integer.as_big(), &BigInt::from(value));
@@ -867,12 +887,22 @@ mod tests {
             }
             assert_eq!(integer.as_big(), &BigInt::from(value));
         }
-        for (integer, expected) in [(Integer::zero(), 0), (Integer::one(), 1), (Integer::default(), 0)] {
+        for (integer, expected) in [
+            (Integer::zero(), 0),
+            (Integer::one(), 1),
+            (Integer::default(), 0),
+        ] {
             assert!(matches!(&integer.0, IntegerRepr::Small64 { value, .. } if *value == expected));
             assert_empty_inline_cache(&integer);
         }
-        for value in [BigInt::from(1_u8) << 200_u32, -(BigInt::from(1_u8) << 200_u32)] {
-            for integer in [Integer::from_big(value.clone()), Integer::from_str(&value.to_string()).unwrap()] {
+        for value in [
+            BigInt::from(1_u8) << 200_u32,
+            -(BigInt::from(1_u8) << 200_u32),
+        ] {
+            for integer in [
+                Integer::from_big(value.clone()),
+                Integer::from_str(&value.to_string()).unwrap(),
+            ] {
                 assert!(matches!(&integer.0, IntegerRepr::Large(_)));
                 assert_eq!(integer.as_big(), &value);
                 let cloned = integer.clone();
@@ -906,7 +936,15 @@ mod tests {
         for outside in [i128::from(i64::MIN) - 1, i128::from(i64::MAX) + 1] {
             let wide = Integer::from(outside);
             let narrow = Integer::from(1_i64);
-            for actual in [wide.add(&narrow), narrow.add(&wide), wide.sub(&narrow), narrow.sub(&wide), wide.mul(&narrow), narrow.mul(&wide), wide.neg()] {
+            for actual in [
+                wide.add(&narrow),
+                narrow.add(&wide),
+                wide.sub(&narrow),
+                narrow.sub(&wide),
+                wide.mul(&narrow),
+                narrow.mul(&wide),
+                wide.neg(),
+            ] {
                 assert_small128(&actual);
             }
         }
@@ -917,10 +955,19 @@ mod tests {
         let min = Integer::from(i128::MIN);
         let max = Integer::from(i128::MAX);
         for (actual, expected) in [
-            (max.add(&Integer::one()), "170141183460469231731687303715884105728"),
-            (min.sub(&Integer::one()), "-170141183460469231731687303715884105729"),
+            (
+                max.add(&Integer::one()),
+                "170141183460469231731687303715884105728",
+            ),
+            (
+                min.sub(&Integer::one()),
+                "-170141183460469231731687303715884105729",
+            ),
             (min.neg(), "170141183460469231731687303715884105728"),
-            (min.mul(&Integer::from(-1_i64)), "170141183460469231731687303715884105728"),
+            (
+                min.mul(&Integer::from(-1_i64)),
+                "170141183460469231731687303715884105728",
+            ),
         ] {
             assert!(matches!(&actual.0, IntegerRepr::Large(_)));
             assert_eq!(actual.to_string(), expected);
@@ -941,26 +988,36 @@ mod tests {
             assert_empty_inline_cache(&original);
             let start = std::sync::Barrier::new(4);
             std::thread::scope(|scope| {
-                let workers = (0..4).map(|_| {
-                    let original = &original;
-                    let start = &start;
-                    scope.spawn(move || {
-                        start.wait();
-                        let borrowed = original.as_big();
-                        assert_eq!(borrowed, &BigInt::from(42_i64));
-                        borrowed as *const BigInt as usize
+                let workers = (0..4)
+                    .map(|_| {
+                        let original = &original;
+                        let start = &start;
+                        scope.spawn(move || {
+                            start.wait();
+                            let borrowed = original.as_big();
+                            assert_eq!(borrowed, &BigInt::from(42_i64));
+                            borrowed as *const BigInt as usize
+                        })
                     })
-                }).collect::<alloc::vec::Vec<_>>();
-                let addresses = workers.into_iter().map(|worker| worker.join().unwrap()).collect::<alloc::vec::Vec<_>>();
+                    .collect::<alloc::vec::Vec<_>>();
+                let addresses = workers
+                    .into_iter()
+                    .map(|worker| worker.join().unwrap())
+                    .collect::<alloc::vec::Vec<_>>();
                 assert!(addresses.iter().all(|address| *address == addresses[0]));
             });
             let borrowed = original.as_big();
             let mut cloned = None;
-            let allocations = allocation_counter::measure(|| { cloned = Some(original.clone()); });
+            let allocations = allocation_counter::measure(|| {
+                cloned = Some(original.clone());
+            });
             assert_eq!(allocations.count_total, 0);
             assert_eq!(allocations.bytes_total, 0);
             let cloned = cloned.unwrap();
-            assert_eq!(core::mem::discriminant(&cloned.0), core::mem::discriminant(&original.0));
+            assert_eq!(
+                core::mem::discriminant(&cloned.0),
+                core::mem::discriminant(&original.0)
+            );
             assert_empty_inline_cache(&cloned);
             assert_eq!(cloned.as_big(), borrowed);
             drop(cloned);
