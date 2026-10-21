@@ -655,14 +655,6 @@ struct InlineSizes {
 }
 
 impl InlineSizes {
-    fn new() -> Self {
-        Self {
-            first: None,
-            second: None,
-            overflow: Vec::new(),
-        }
-    }
-
     fn push(&mut self, kind: LimitKind, amount: ChargeAmount) {
         if self.first.is_none() {
             self.first = Some((kind, amount));
