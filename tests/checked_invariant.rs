@@ -6,6 +6,7 @@ use quire_exact::{CheckedInvariantCause, IllTypedCause, Refusal};
 // Independently authored exhaustive expectations, rather than a production list.
 fn expected_name(cause: CheckedInvariantCause) -> &'static str {
     match cause {
+        CheckedInvariantCause::NativeIntegerCapacityBreach => "native-integer-capacity",
         CheckedInvariantCause::CollectionElementNotAdmitted => "collection-element",
         CheckedInvariantCause::DeferredResultNotAdmitted => "deferred-result",
         CheckedInvariantCause::CanonicalKeyUnavailable => "canonical-key",
@@ -49,6 +50,10 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
     refusal_traits::<Refusal>();
 
     let cases = [
+        (
+            CheckedInvariantCause::NativeIntegerCapacityBreach,
+            "native-integer-capacity",
+        ),
         (
             CheckedInvariantCause::CollectionElementNotAdmitted,
             "collection-element",

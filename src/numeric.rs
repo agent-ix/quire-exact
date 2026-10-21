@@ -198,7 +198,7 @@ fn integer_arithmetic_charge(operation: IntegerArithmetic<'_>) -> Charge {
 
 // Two u64 bit counts sum to at most 2^65 - 2, exactly representable in i128.
 // Widen before addition; oversized amounts remain exact requests to the Meter.
-pub(crate) fn integer_bit_sum_charge(left: u64, right: u64) -> Charge {
+fn integer_bit_sum_charge(left: u64, right: u64) -> Charge {
     let amount = i128::from(left) + i128::from(right);
     let charge = Charge::new(ChargePoint::IntegerArithmeticArithmetic);
     match u64::try_from(amount) {
