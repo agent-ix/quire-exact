@@ -481,12 +481,93 @@ pub struct InjectedDenial {
 ///
 /// **`pub`** so a caller outside this crate can read it, together with
 /// [`Meter::charge`]/[`Meter::charge_plan`] and [`length_amount`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct Charge {
     point: ChargePoint,
+    storage: ChargeStorage,
+}
+
+#[derive(Clone)]
+enum ChargeStorage {
+    Common(CommonCharge),
+    General(GeneralCharge),
+}
+
+// The common admission payload owns no exact integer, allocation or drop glue.
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct CommonCharge {
+    sizes: [Option<(LimitKind, u64)>; 2],
+    work_units: u64,
+    result_units: u64,
+}
+
+impl CommonCharge {
+    fn new() -> Self {
+        Self { sizes: [None; 2], work_units: 1, result_units: 0 }
+    }
+
+    fn into_general(self) -> GeneralCharge {
+        let mut sizes = InlineSizes::new();
+        for (kind, amount) in self.sizes.into_iter().flatten() {
+            sizes.push(kind, ChargeAmount::Units(amount));
+        }
+        GeneralCharge {
+            sizes,
+            work_units: ChargeAmount::Units(self.work_units),
+            result_units: ChargeAmount::Units(self.result_units),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+struct GeneralCharge {
     sizes: InlineSizes,
     work_units: ChargeAmount,
     result_units: ChargeAmount,
+}
+
+impl PartialEq for Charge {
+    fn eq(&self, other: &Self) -> bool {
+        self.point == other.point && match (&self.storage, &other.storage) {
+            (ChargeStorage::Common(left), ChargeStorage::Common(right)) => left == right,
+            (ChargeStorage::Common(left), ChargeStorage::General(right)) => &left.into_general() == right,
+            (ChargeStorage::General(left), ChargeStorage::Common(right)) => left == &right.into_general(),
+            (ChargeStorage::General(left), ChargeStorage::General(right)) => left == right,
+        }
+    }
+}
+impl Eq for Charge {}
+
+impl fmt::Debug for Charge {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let fields = |value: &GeneralCharge, formatter: &mut fmt::Formatter<'_>| {
+            formatter.debug_struct("Charge")
+                .field("point", &self.point)
+                .field("sizes", &value.sizes)
+                .field("work_units", &value.work_units)
+                .field("result_units", &value.result_units).finish()
+        };
+        match &self.storage {
+            ChargeStorage::Common(value) => fields(&value.into_general(), formatter),
+            ChargeStorage::General(value) => fields(value, formatter),
+        }
+    }
+}
+
+// Admission is shared, but its common instantiation receives only u64 values.
+trait MeterAmount: Copy {
+    fn units(self) -> Option<u64>;
+    fn integer(self) -> Integer;
+}
+
+impl MeterAmount for u64 {
+    fn units(self) -> Option<u64> { Some(self) }
+    fn integer(self) -> Integer { Integer::from(self) }
+}
+
+impl MeterAmount for &ChargeAmount {
+    fn units(self) -> Option<u64> { ChargeAmount::units(self) }
+    fn integer(self) -> Integer { ChargeAmount::integer(self) }
 }
 
 /// Amounts admissible under a `u64` limit stay in machine width. An exact
@@ -579,42 +660,94 @@ impl Charge {
     /// A charge at `point` with no size yet, a default one work unit, and
     /// no result units.
     pub fn new(point: ChargePoint) -> Self {
-        Self {
-            point,
-            sizes: InlineSizes::new(),
-            work_units: ChargeAmount::Units(1),
-            result_units: ChargeAmount::Units(0),
+        Self { point, storage: ChargeStorage::Common(CommonCharge::new()) }
+    }
+
+    fn push_units(mut self, kind: LimitKind, amount: u64) -> Self {
+        self.storage = match self.storage {
+            ChargeStorage::Common(mut common) => {
+                if let Some(slot) = common.sizes.iter_mut().find(|slot| slot.is_none()) {
+                    *slot = Some((kind, amount));
+                    ChargeStorage::Common(common)
+                } else {
+                    let mut general = common.into_general();
+                    general.sizes.push(kind, ChargeAmount::Units(amount));
+                    ChargeStorage::General(general)
+                }
+            }
+            ChargeStorage::General(mut general) => {
+                general.sizes.push(kind, ChargeAmount::Units(amount));
+                ChargeStorage::General(general)
+            }
+        };
+        self
+    }
+
+    fn into_general(self) -> GeneralCharge {
+        match self.storage {
+            ChargeStorage::Common(common) => common.into_general(),
+            ChargeStorage::General(general) => general,
         }
     }
 
-    /// A semantic-size charge against `kind`.
-    pub fn size(mut self, kind: LimitKind, amount: u64) -> Self {
-        self.sizes.push(kind, ChargeAmount::Units(amount));
+    fn set_units(mut self, amount: u64, result: bool) -> Self {
+        match &mut self.storage {
+            ChargeStorage::Common(common) => {
+                if result { common.result_units = amount; } else { common.work_units = amount; }
+            }
+            ChargeStorage::General(general) => {
+                if result { general.result_units = ChargeAmount::Units(amount); }
+                else { general.work_units = ChargeAmount::Units(amount); }
+            }
+        }
         self
+    }
+
+    fn set_exact(self, amount: Integer, result: bool) -> Self {
+        let point = self.point;
+        let mut general = self.into_general();
+        let exact = ChargeAmount::Exact(Box::new(amount));
+        if result { general.result_units = exact; } else { general.work_units = exact; }
+        Self { point, storage: ChargeStorage::General(general) }
+    }
+
+    /// A semantic-size charge against `kind`.
+    pub fn size(self, kind: LimitKind, amount: u64) -> Self {
+        self.push_units(kind, amount)
     }
 
     /// A semantic-size amount that may exceed `u64::MAX`.
-    pub fn exact_size(mut self, kind: LimitKind, amount: Integer) -> Self {
-        self.sizes.push(kind, ChargeAmount::exact(amount));
-        self
+    pub fn exact_size(self, kind: LimitKind, amount: Integer) -> Self {
+        match amount.to_u64() {
+            Some(units) => self.push_units(kind, units),
+            None => {
+                let point = self.point;
+                let mut general = self.into_general();
+                general.sizes.push(kind, ChargeAmount::Exact(Box::new(amount)));
+                Self { point, storage: ChargeStorage::General(general) }
+            }
+        }
     }
 
     /// A `work_units` addition other than the default one.
-    pub fn work(mut self, amount: Integer) -> Self {
-        self.work_units = ChargeAmount::exact(amount);
-        self
+    pub fn work(self, amount: Integer) -> Self {
+        match amount.to_u64() {
+            Some(units) => self.set_units(units, false),
+            None => self.set_exact(amount, false),
+        }
     }
 
     /// A `result_units` addition.
-    pub fn results(mut self, amount: u64) -> Self {
-        self.result_units = ChargeAmount::Units(amount);
-        self
+    pub fn results(self, amount: u64) -> Self {
+        self.set_units(amount, true)
     }
 
     /// A `result_units` addition that may exceed `u64::MAX`.
-    pub fn exact_results(mut self, amount: Integer) -> Self {
-        self.result_units = ChargeAmount::exact(amount);
-        self
+    pub fn exact_results(self, amount: Integer) -> Self {
+        match amount.to_u64() {
+            Some(units) => self.set_units(units, true),
+            None => self.set_exact(amount, true),
+        }
     }
 }
 
@@ -808,10 +941,10 @@ impl Meter {
     /// already consumed, so `limit = consumed = w`: a cancelled handle,
     /// which the operation holding it reports as its
     /// cancellation, and the qualification seam's one exact named charge.
-    fn check_injected(
+    fn check_injected<A: MeterAmount>(
         &mut self,
         point: ChargePoint,
-        work_units: &ChargeAmount,
+        work_units: A,
     ) -> Result<(), Incomplete> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {
             let consumed = self.consumed(LimitKind::WorkUnits);
@@ -850,16 +983,34 @@ impl Meter {
     /// parameter through this method, its one real
     /// cross-crate caller for that purpose.
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
-        let point = charge.point;
-        self.check_injected(point, &charge.work_units)?;
+        match charge.storage {
+            ChargeStorage::Common(common) => self.charge_fields(
+                charge.point, common.sizes.into_iter().flatten(),
+                common.work_units, common.result_units,
+            ),
+            ChargeStorage::General(general) => self.charge_fields(
+                charge.point, general.sizes.iter().map(|(kind, amount)| (*kind, amount)),
+                &general.work_units, &general.result_units,
+            ),
+        }
+    }
+
+    fn charge_fields<A: MeterAmount>(
+        &mut self,
+        point: ChargePoint,
+        requests: impl Iterator<Item = (LimitKind, A)> + Clone,
+        work_units: A,
+        result_units: A,
+    ) -> Result<(), Incomplete> {
+        self.check_injected(point, work_units)?;
         // Keep validation and per-admission maxima local until every counter
         // is known to fit. An earlier field wins even when requested later;
         // an equal field keeps its first failing request.
         let mut sizes = [None; LimitKind::COUNT];
-        let mut first_fail: Option<(LimitKind, &ChargeAmount)> = None;
+        let mut first_fail: Option<(LimitKind, A)> = None;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
-        for (kind, amount) in charge.sizes.iter() {
+        for (kind, amount) in requests {
             let valid = amount
                 .units()
                 .filter(|amount| *amount <= kind.limit(&self.counters.limits));
@@ -867,26 +1018,26 @@ impl Meter {
                 let slot = &mut sizes[kind.index()];
                 *slot = Some(slot.map_or(amount, |previous: u64| previous.max(amount)));
                 #[cfg(feature = "test-support")]
-                record.observe(*kind, amount);
+                record.observe(kind, amount);
             } else if first_fail
                 .as_ref()
                 .is_none_or(|(first_kind, _)| kind.index() < first_kind.index())
             {
-                first_fail = Some((*kind, amount));
+                first_fail = Some((kind, amount));
             }
         }
         if let Some((kind, amount)) = first_fail {
             return Err(self.incomplete(kind, amount.integer(), point));
         }
-        let cumulative = |kind: LimitKind, amount: &ChargeAmount| {
+        let cumulative = |kind: LimitKind, amount: A| {
             amount
                 .units()
                 .and_then(|addition| self.consumed(kind).checked_add(addition))
                 .filter(|total| *total <= kind.limit(&self.counters.limits))
                 .ok_or_else(|| self.incomplete(kind, amount.integer(), point))
         };
-        let work = cumulative(LimitKind::WorkUnits, &charge.work_units)?;
-        let results = cumulative(LimitKind::ResultUnits, &charge.result_units)?;
+        let work = cumulative(LimitKind::WorkUnits, work_units)?;
+        let results = cumulative(LimitKind::ResultUnits, result_units)?;
         // Straight-line writes have no trip count independent of requests. A
         // size request naming a cumulative counter is validated above and
         // then superseded by that counter's own total below.
@@ -1005,6 +1156,8 @@ impl Meter {
 
 #[cfg(test)]
 mod tests {
+    use ix_trace_rs::trace;
+
     use super::*;
 
     fn assert_unchanged(before: &Meter, after: &Meter) {
@@ -1179,36 +1332,64 @@ mod tests {
         assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
     }
 
-    #[ix_trace_rs::trace("FR-359-AC-8")]
+    #[trace("FR-359-AC-8")]
     #[test]
     fn charge_size_requests_keep_two_inline_and_overflow_in_order() {
-        let first = Charge::new(ChargePoint::FunctionCall).size(LimitKind::IntegerBits, 1);
-        assert_eq!(
-            first.sizes.first.as_ref().map(|(kind, _)| *kind),
-            Some(LimitKind::IntegerBits)
-        );
-        assert!(first.sizes.overflow.is_empty());
-
+        fn require_copy<T: Copy>() {}
+        require_copy::<CommonCharge>();
+        assert!(!core::mem::needs_drop::<CommonCharge>());
+        let empty = Charge::new(ChargePoint::FunctionCall);
+        assert!(matches!(empty.storage, ChargeStorage::Common(_)));
+        let first = empty.size(LimitKind::IntegerBits, 1);
+        let ChargeStorage::Common(common) = first.storage else { panic!("first request must stay native"); };
+        assert_eq!(common.sizes, [Some((LimitKind::IntegerBits, 1)), None]);
         let two = first.clone().size(LimitKind::DecimalDigits, 2);
-        assert!(two.sizes.overflow.is_empty());
-        assert_eq!(
-            two.sizes.second.as_ref().map(|(kind, _)| *kind),
-            Some(LimitKind::DecimalDigits)
-        );
+        let ChargeStorage::Common(common) = two.storage else { panic!("second request must stay native"); };
+        assert_eq!(common.sizes, [Some((LimitKind::IntegerBits, 1)), Some((LimitKind::DecimalDigits, 2))]);
+        let four = two.size(LimitKind::ScaleExpansion, 3).size(LimitKind::TextInputBytes, 4);
+        let ChargeStorage::General(general) = four.storage else { panic!("third request must promote"); };
+        assert_eq!(general.sizes.overflow.len(), 2);
+        assert_eq!(general.sizes.iter().map(|(kind, _)| *kind).collect::<Vec<_>>(), [
+            LimitKind::IntegerBits, LimitKind::DecimalDigits, LimitKind::ScaleExpansion,
+            LimitKind::TextInputBytes,
+        ]);
+    }
 
-        let four = two
-            .size(LimitKind::ScaleExpansion, 3)
-            .size(LimitKind::TextInputBytes, 4);
-        assert_eq!(four.sizes.overflow.len(), 2);
-        assert_eq!(
-            four.sizes.iter().map(|(kind, _)| *kind).collect::<Vec<_>>(),
-            [
-                LimitKind::IntegerBits,
-                LimitKind::DecimalDigits,
-                LimitKind::ScaleExpansion,
-                LimitKind::TextInputBytes,
-            ]
-        );
+    #[trace("FR-359-AC-8", "FR-358-AC-13")]
+    #[test]
+    fn common_and_promoted_builder_histories_have_identical_observations() {
+        let point = ChargePoint::FunctionCall;
+        let native = Charge::new(point).size(LimitKind::IntegerBits, 7)
+            .size(LimitKind::IntegerBits, 0).results(2).work(Integer::from(3_u64));
+        let fitted = Charge::new(point).exact_size(LimitKind::IntegerBits, Integer::from(7_u64))
+            .exact_size(LimitKind::IntegerBits, Integer::zero())
+            .exact_results(Integer::from(2_u64)).work(Integer::from(3_u64));
+        assert!(matches!(fitted.storage, ChargeStorage::Common(_)));
+        for general in [
+            native.clone().work(Integer::from(-1_i64)).work(Integer::from(3_u64)),
+            native.clone().exact_results(Integer::from(u64::MAX).add(&Integer::one())).results(2),
+        ] {
+            assert!(matches!(general.storage, ChargeStorage::General(_)));
+            assert_eq!(native, general);
+            assert_eq!(general, native);
+            assert_eq!(alloc::format!("{native:?}"), alloc::format!("{general:?}"));
+            assert_eq!(native.clone(), fitted);
+            let mut a = Meter::new(unlimited());
+            let mut b = Meter::new(unlimited());
+            assert_eq!(a.charge(native.clone()), b.charge(general.clone()));
+            assert_eq!(a, b);
+            let mut limits = unlimited();
+            limits.integer_bits = 6;
+            let mut a = Meter::new(limits);
+            let mut b = Meter::new(limits);
+            let before = a.clone();
+            let denial = a.charge(native.clone()).unwrap_err();
+            assert_eq!(denial.next_charge, Integer::from(7_u64));
+            assert_eq!(denial.limit_kind, LimitKind::IntegerBits);
+            assert_eq!(b.charge(general), Err(denial));
+            assert_eq!(a, b);
+            assert_eq!(a, before);
+        }
     }
 
     #[ix_trace_rs::trace("FR-359-AC-6", "FR-359-AC-8")]
