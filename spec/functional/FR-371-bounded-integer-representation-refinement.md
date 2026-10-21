@@ -24,7 +24,9 @@ This requirement selects the tagged representation in [AD-003](../assurance/AD-0
 
 The native candidate range is the full signed `i128` range. This storage range is not a declared semantic domain. `Integer` remains arbitrary precision; `IntegerInterval` remains an independently declared inclusive mathematical domain. The representation SHALL distinguish `Small(i128, cache)` from `Large(BigInt)`. The abstraction function maps `Small(n, cache)` to mathematical integer n regardless of whether `cache` is empty or initialized, and maps `Large(value)` to the exact value of `value`. An initialized cache SHALL equal the abstraction of its `Small` tag. The tag and cache state SHALL contribute no separate semantic state.
 
-When a checked native add, subtract, multiply or negate fits, the kernel SHALL retain its exact mathematical result.
+When a native add, subtract, multiply or negate fits, the kernel SHALL retain its exact mathematical result.
+
+Within Small, operands exactly representable as signed i64 SHALL be widened to i128 before Add/Subtract/Multiply/Negate in the range-proven native arm described by [AD-003](../assurance/AD-003-bounded-integer-representation.md). This arm SHALL return the exact Small result without an i128-overflow-to-BigInt continuation at that operation. Failure of the representability check SHALL preserve the existing checked full-i128 and arbitrary-precision continuation. This internal dispatch SHALL impose no semantic domain restriction or public API change.
 
 When the exact result does not fit the native range, the kernel SHALL obtain the full result through genuine arbitrary-precision execution.
 
@@ -89,4 +91,4 @@ The representation may increase Integer/Value size. Avoiding BigInt work on this
 
 ## Status
 
-PROPOSED / UNIMPLEMENTED / UNRUN. All six criteria are prospective. No new executable Trace bindings, proof receipt or memory-improvement claim accompanies this Markdown proposal. The selected mechanism and its trade-offs are recorded in [AD-003](../assurance/AD-003-bounded-integer-representation.md); implementation and independent review remain outstanding. The original healthy exact-kernel qualification had an unavailable measured peak; an older distinct control's peak and a separate compiler-only panic cannot establish the cause or success of this proposal. No 16GiB Kani improvement is claimed unless the unchanged consumer controls pass.
+PARTIALLY IMPLEMENTED / QUALIFICATION OPEN. The published kernel already implements Small/Large, lazy borrowed BigInt and native arithmetic, including later parser and charge-metadata refinements. The additional range-proven width dispatch described in [AD-003](../assurance/AD-003-bounded-integer-representation.md) is proposed and awaits implementation and independent review. This Markdown update adds no executable Trace binding or proof receipt. The unchanged original healthy artifact exhausted memory at 16GiB; a separate 40GiB diagnostic also exhausted memory, with no proof verdict. All AC-6 controls and the remaining acceptance evidence stay required. Separately record the genuine IR-917 post-change 16GiB healthy/helper-mutant qualification; its fit is currently unmeasured and cannot replace AC-6. No 16GiB Kani improvement is claimed unless the unchanged consumer controls pass.
