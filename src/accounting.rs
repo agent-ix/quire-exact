@@ -503,7 +503,11 @@ struct CommonCharge {
 
 impl CommonCharge {
     fn new() -> Self {
-        Self { sizes: [None; 2], work_units: 1, result_units: 0 }
+        Self {
+            sizes: [None; 2],
+            work_units: 1,
+            result_units: 0,
+        }
     }
 
     fn into_general(self) -> GeneralCharge {
@@ -528,12 +532,17 @@ struct GeneralCharge {
 
 impl PartialEq for Charge {
     fn eq(&self, other: &Self) -> bool {
-        self.point == other.point && match (&self.storage, &other.storage) {
-            (ChargeStorage::Common(left), ChargeStorage::Common(right)) => left == right,
-            (ChargeStorage::Common(left), ChargeStorage::General(right)) => &left.into_general() == right,
-            (ChargeStorage::General(left), ChargeStorage::Common(right)) => left == &right.into_general(),
-            (ChargeStorage::General(left), ChargeStorage::General(right)) => left == right,
-        }
+        self.point == other.point
+            && match (&self.storage, &other.storage) {
+                (ChargeStorage::Common(left), ChargeStorage::Common(right)) => left == right,
+                (ChargeStorage::Common(left), ChargeStorage::General(right)) => {
+                    &left.into_general() == right
+                }
+                (ChargeStorage::General(left), ChargeStorage::Common(right)) => {
+                    left == &right.into_general()
+                }
+                (ChargeStorage::General(left), ChargeStorage::General(right)) => left == right,
+            }
     }
 }
 impl Eq for Charge {}
@@ -541,11 +550,13 @@ impl Eq for Charge {}
 impl fmt::Debug for Charge {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let fields = |value: &GeneralCharge, formatter: &mut fmt::Formatter<'_>| {
-            formatter.debug_struct("Charge")
+            formatter
+                .debug_struct("Charge")
                 .field("point", &self.point)
                 .field("sizes", &value.sizes)
                 .field("work_units", &value.work_units)
-                .field("result_units", &value.result_units).finish()
+                .field("result_units", &value.result_units)
+                .finish()
         };
         match &self.storage {
             ChargeStorage::Common(value) => fields(&value.into_general(), formatter),
@@ -561,13 +572,21 @@ trait MeterAmount: Copy {
 }
 
 impl MeterAmount for u64 {
-    fn units(self) -> Option<u64> { Some(self) }
-    fn integer(self) -> Integer { Integer::from(self) }
+    fn units(self) -> Option<u64> {
+        Some(self)
+    }
+    fn integer(self) -> Integer {
+        Integer::from(self)
+    }
 }
 
 impl MeterAmount for &ChargeAmount {
-    fn units(self) -> Option<u64> { ChargeAmount::units(self) }
-    fn integer(self) -> Integer { ChargeAmount::integer(self) }
+    fn units(self) -> Option<u64> {
+        ChargeAmount::units(self)
+    }
+    fn integer(self) -> Integer {
+        ChargeAmount::integer(self)
+    }
 }
 
 /// Amounts admissible under a `u64` limit stay in machine width. An exact
@@ -635,7 +654,7 @@ impl InlineSizes {
         }
     }
 
-    fn iter(&self) -> impl Iterator<Item = &(LimitKind, ChargeAmount)> {
+    fn iter(&self) -> impl Iterator<Item = &(LimitKind, ChargeAmount)> + Clone {
         self.first
             .iter()
             .chain(self.second.iter())
@@ -660,7 +679,10 @@ impl Charge {
     /// A charge at `point` with no size yet, a default one work unit, and
     /// no result units.
     pub fn new(point: ChargePoint) -> Self {
-        Self { point, storage: ChargeStorage::Common(CommonCharge::new()) }
+        Self {
+            point,
+            storage: ChargeStorage::Common(CommonCharge::new()),
+        }
     }
 
     fn push_units(mut self, kind: LimitKind, amount: u64) -> Self {
@@ -693,11 +715,18 @@ impl Charge {
     fn set_units(mut self, amount: u64, result: bool) -> Self {
         match &mut self.storage {
             ChargeStorage::Common(common) => {
-                if result { common.result_units = amount; } else { common.work_units = amount; }
+                if result {
+                    common.result_units = amount;
+                } else {
+                    common.work_units = amount;
+                }
             }
             ChargeStorage::General(general) => {
-                if result { general.result_units = ChargeAmount::Units(amount); }
-                else { general.work_units = ChargeAmount::Units(amount); }
+                if result {
+                    general.result_units = ChargeAmount::Units(amount);
+                } else {
+                    general.work_units = ChargeAmount::Units(amount);
+                }
             }
         }
         self
@@ -707,8 +736,15 @@ impl Charge {
         let point = self.point;
         let mut general = self.into_general();
         let exact = ChargeAmount::Exact(Box::new(amount));
-        if result { general.result_units = exact; } else { general.work_units = exact; }
-        Self { point, storage: ChargeStorage::General(general) }
+        if result {
+            general.result_units = exact;
+        } else {
+            general.work_units = exact;
+        }
+        Self {
+            point,
+            storage: ChargeStorage::General(general),
+        }
     }
 
     /// A semantic-size charge against `kind`.
@@ -723,8 +759,13 @@ impl Charge {
             None => {
                 let point = self.point;
                 let mut general = self.into_general();
-                general.sizes.push(kind, ChargeAmount::Exact(Box::new(amount)));
-                Self { point, storage: ChargeStorage::General(general) }
+                general
+                    .sizes
+                    .push(kind, ChargeAmount::Exact(Box::new(amount)));
+                Self {
+                    point,
+                    storage: ChargeStorage::General(general),
+                }
             }
         }
     }
@@ -985,12 +1026,16 @@ impl Meter {
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
         match charge.storage {
             ChargeStorage::Common(common) => self.charge_fields(
-                charge.point, common.sizes.into_iter().flatten(),
-                common.work_units, common.result_units,
+                charge.point,
+                common.sizes.into_iter().flatten(),
+                common.work_units,
+                common.result_units,
             ),
             ChargeStorage::General(general) => self.charge_fields(
-                charge.point, general.sizes.iter().map(|(kind, amount)| (*kind, amount)),
-                &general.work_units, &general.result_units,
+                charge.point,
+                general.sizes.iter().map(|(kind, amount)| (*kind, amount)),
+                &general.work_units,
+                &general.result_units,
             ),
         }
     }
@@ -1341,33 +1386,67 @@ mod tests {
         let empty = Charge::new(ChargePoint::FunctionCall);
         assert!(matches!(empty.storage, ChargeStorage::Common(_)));
         let first = empty.size(LimitKind::IntegerBits, 1);
-        let ChargeStorage::Common(common) = first.storage else { panic!("first request must stay native"); };
+        let ChargeStorage::Common(common) = first.storage else {
+            panic!("first request must stay native");
+        };
         assert_eq!(common.sizes, [Some((LimitKind::IntegerBits, 1)), None]);
         let two = first.clone().size(LimitKind::DecimalDigits, 2);
-        let ChargeStorage::Common(common) = two.storage else { panic!("second request must stay native"); };
-        assert_eq!(common.sizes, [Some((LimitKind::IntegerBits, 1)), Some((LimitKind::DecimalDigits, 2))]);
-        let four = two.size(LimitKind::ScaleExpansion, 3).size(LimitKind::TextInputBytes, 4);
-        let ChargeStorage::General(general) = four.storage else { panic!("third request must promote"); };
+        let ChargeStorage::Common(common) = two.storage else {
+            panic!("second request must stay native");
+        };
+        assert_eq!(
+            common.sizes,
+            [
+                Some((LimitKind::IntegerBits, 1)),
+                Some((LimitKind::DecimalDigits, 2))
+            ]
+        );
+        let four = two
+            .size(LimitKind::ScaleExpansion, 3)
+            .size(LimitKind::TextInputBytes, 4);
+        let ChargeStorage::General(general) = four.storage else {
+            panic!("third request must promote");
+        };
         assert_eq!(general.sizes.overflow.len(), 2);
-        assert_eq!(general.sizes.iter().map(|(kind, _)| *kind).collect::<Vec<_>>(), [
-            LimitKind::IntegerBits, LimitKind::DecimalDigits, LimitKind::ScaleExpansion,
-            LimitKind::TextInputBytes,
-        ]);
+        assert_eq!(
+            general
+                .sizes
+                .iter()
+                .map(|(kind, _)| *kind)
+                .collect::<Vec<_>>(),
+            [
+                LimitKind::IntegerBits,
+                LimitKind::DecimalDigits,
+                LimitKind::ScaleExpansion,
+                LimitKind::TextInputBytes,
+            ]
+        );
     }
 
     #[trace("FR-359-AC-8", "FR-358-AC-13")]
     #[test]
     fn common_and_promoted_builder_histories_have_identical_observations() {
         let point = ChargePoint::FunctionCall;
-        let native = Charge::new(point).size(LimitKind::IntegerBits, 7)
-            .size(LimitKind::IntegerBits, 0).results(2).work(Integer::from(3_u64));
-        let fitted = Charge::new(point).exact_size(LimitKind::IntegerBits, Integer::from(7_u64))
+        let native = Charge::new(point)
+            .size(LimitKind::IntegerBits, 7)
+            .size(LimitKind::IntegerBits, 0)
+            .results(2)
+            .work(Integer::from(3_u64));
+        let fitted = Charge::new(point)
+            .exact_size(LimitKind::IntegerBits, Integer::from(7_u64))
             .exact_size(LimitKind::IntegerBits, Integer::zero())
-            .exact_results(Integer::from(2_u64)).work(Integer::from(3_u64));
+            .exact_results(Integer::from(2_u64))
+            .work(Integer::from(3_u64));
         assert!(matches!(fitted.storage, ChargeStorage::Common(_)));
         for general in [
-            native.clone().work(Integer::from(-1_i64)).work(Integer::from(3_u64)),
-            native.clone().exact_results(Integer::from(u64::MAX).add(&Integer::one())).results(2),
+            native
+                .clone()
+                .work(Integer::from(-1_i64))
+                .work(Integer::from(3_u64)),
+            native
+                .clone()
+                .exact_results(Integer::from(u64::MAX).add(&Integer::one()))
+                .results(2),
         ] {
             assert!(matches!(general.storage, ChargeStorage::General(_)));
             assert_eq!(native, general);
