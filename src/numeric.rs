@@ -439,6 +439,8 @@ pub fn retain_boolean(
 #[cfg(test)]
 mod tests {
 
+    use ix_trace_rs::trace;
+
     use super::*;
     use crate::accounting::ScalarLimits;
 
@@ -458,7 +460,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-371-AC-3")]
+    #[trace("FR-371-AC-3")]
     fn integer_bit_counts_preserve_exact_amounts_above_the_meter_limit() {
         use core::str::FromStr;
 
