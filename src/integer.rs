@@ -31,9 +31,10 @@ use crate::accounting::length_amount;
 
 /// An exact, arbitrary-precision mathematical integer.
 ///
-/// Values that fit `i128` are stored inline. The first [`as_big`](Self::as_big)
+/// Values that fit `i128` are stored inline, with separate private i64 and
+/// i128 payloads. The first [`as_big`](Self::as_big)
 /// call lazily initializes one retained immutable `BigInt` image; clones of an
-/// inline value begin with an empty image cache. The safe
+/// inline value preserve its payload class and begin with an empty image cache. The safe
 /// `once_cell::race::OnceBox` may construct multiple candidates concurrently,
 /// retains one, and drops every losing candidate. Values outside `i128` retain
 /// their `BigInt` directly.
@@ -42,7 +43,11 @@ use crate::accounting::length_amount;
 pub struct Integer(IntegerRepr);
 
 enum IntegerRepr {
-    Small {
+    Small64 {
+        value: i64,
+        cache: once_cell::race::OnceBox<BigInt>,
+    },
+    Small128 {
         value: i128,
         cache: once_cell::race::OnceBox<BigInt>,
     },
@@ -50,8 +55,15 @@ enum IntegerRepr {
 }
 
 impl Integer {
-    fn small(value: i128) -> Self {
-        Self(IntegerRepr::Small {
+    fn small64(value: i64) -> Self {
+        Self(IntegerRepr::Small64 {
+            value,
+            cache: once_cell::race::OnceBox::new(),
+        })
+    }
+
+    fn small128(value: i128) -> Self {
+        Self(IntegerRepr::Small128 {
             value,
             cache: once_cell::race::OnceBox::new(),
         })
@@ -59,14 +71,15 @@ impl Integer {
 
     fn from_big_normalized(value: BigInt) -> Self {
         match i128::try_from(&value) {
-            Ok(value) => Self::small(value),
+            Ok(value) => Self::small128(value),
             Err(_) => Self(IntegerRepr::Large(value)),
         }
     }
 
     fn native(&self) -> Option<i128> {
         match &self.0 {
-            IntegerRepr::Small { value, .. } => Some(*value),
+            IntegerRepr::Small64 { value, .. } => Some(i128::from(*value)),
+            IntegerRepr::Small128 { value, .. } => Some(*value),
             IntegerRepr::Large(_) => None,
         }
     }
@@ -74,14 +87,15 @@ impl Integer {
 
 impl Default for Integer {
     fn default() -> Self {
-        Self::small(0)
+        Self::small64(0)
     }
 }
 
 impl Clone for Integer {
     fn clone(&self) -> Self {
         match &self.0 {
-            IntegerRepr::Small { value, .. } => Self::small(*value),
+            IntegerRepr::Small64 { value, .. } => Self::small64(*value),
+            IntegerRepr::Small128 { value, .. } => Self::small128(*value),
             IntegerRepr::Large(value) => Self(IntegerRepr::Large(value.clone())),
         }
     }
@@ -270,12 +284,12 @@ impl<'a> NonZeroInteger<'a> {
 impl Integer {
     /// The integer zero.
     pub fn zero() -> Self {
-        Self::small(0)
+        Self::small64(0)
     }
 
     /// The integer one.
     pub fn one() -> Self {
-        Self::small(1)
+        Self::small64(1)
     }
 
     /// Whether this integer is zero.
@@ -318,20 +332,19 @@ impl Integer {
     }
 
     pub(crate) fn magnitude_limbs(&self) -> MagnitudeLimbs<'_> {
-        match &self.0 {
-            IntegerRepr::Small { value, .. } => {
-                let magnitude = value.unsigned_abs();
-                let bits = 128 - magnitude.leading_zeros();
-                let remaining = u8::try_from(bits.div_ceil(32)).unwrap_or(0);
-                MagnitudeLimbs(MagnitudeLimbsSource::Small {
-                    magnitude,
-                    remaining,
-                })
-            }
+        let magnitude = match &self.0 {
+            IntegerRepr::Small64 { value, .. } => i128::from(*value).unsigned_abs(),
+            IntegerRepr::Small128 { value, .. } => value.unsigned_abs(),
             IntegerRepr::Large(value) => {
-                MagnitudeLimbs(MagnitudeLimbsSource::Large(value.iter_u32_digits()))
+                return MagnitudeLimbs(MagnitudeLimbsSource::Large(value.iter_u32_digits()));
             }
-        }
+        };
+        let bits = 128 - magnitude.leading_zeros();
+        let remaining = u8::try_from(bits.div_ceil(32)).unwrap_or(0);
+        MagnitudeLimbs(MagnitudeLimbsSource::Small {
+            magnitude,
+            remaining,
+        })
     }
 
     /// The magnitude `|self|`.
@@ -339,7 +352,7 @@ impl Integer {
         match self.native() {
             Some(value) => value
                 .checked_abs()
-                .map(Self::small)
+                .map(Self::small128)
                 .unwrap_or_else(|| Self::from_big_normalized(self.as_big().abs())),
             None => Self::from_big_normalized(self.as_big().abs()),
         }
@@ -379,13 +392,20 @@ impl Integer {
 
     /// `self + other`. Exact; unbounded `Integer` addition never overflows.
     pub fn add(&self, other: &Self) -> Self {
+        if let (
+            IntegerRepr::Small64 { value: left, .. },
+            IntegerRepr::Small64 { value: right, .. },
+        ) = (&self.0, &other.0)
+        {
+            return Self::small128(i128::from(*left) + i128::from(*right));
+        }
         match (self.native(), other.native()) {
             (Some(left), Some(right)) => {
                 if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
-                    return Self::small(i128::from(left) + i128::from(right));
+                    return Self::small128(i128::from(left) + i128::from(right));
                 }
                 left.checked_add(right)
-                    .map(Self::small)
+                    .map(Self::small128)
                     .unwrap_or_else(|| Self::from_big_normalized(self.as_big() + other.as_big()))
             }
             _ => Self::from_big_normalized(self.as_big() + other.as_big()),
@@ -395,13 +415,20 @@ impl Integer {
     /// `self - other`. Exact; unbounded `Integer` subtraction never
     /// overflows.
     pub fn sub(&self, other: &Self) -> Self {
+        if let (
+            IntegerRepr::Small64 { value: left, .. },
+            IntegerRepr::Small64 { value: right, .. },
+        ) = (&self.0, &other.0)
+        {
+            return Self::small128(i128::from(*left) - i128::from(*right));
+        }
         match (self.native(), other.native()) {
             (Some(left), Some(right)) => {
                 if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
-                    return Self::small(i128::from(left) - i128::from(right));
+                    return Self::small128(i128::from(left) - i128::from(right));
                 }
                 left.checked_sub(right)
-                    .map(Self::small)
+                    .map(Self::small128)
                     .unwrap_or_else(|| Self::from_big_normalized(self.as_big() - other.as_big()))
             }
             _ => Self::from_big_normalized(self.as_big() - other.as_big()),
@@ -411,13 +438,20 @@ impl Integer {
     /// `self × other`. Exact; unbounded `Integer` multiplication never
     /// overflows.
     pub fn mul(&self, other: &Self) -> Self {
+        if let (
+            IntegerRepr::Small64 { value: left, .. },
+            IntegerRepr::Small64 { value: right, .. },
+        ) = (&self.0, &other.0)
+        {
+            return Self::small128(i128::from(*left) * i128::from(*right));
+        }
         match (self.native(), other.native()) {
             (Some(left), Some(right)) => {
                 if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
-                    return Self::small(i128::from(left) * i128::from(right));
+                    return Self::small128(i128::from(left) * i128::from(right));
                 }
                 left.checked_mul(right)
-                    .map(Self::small)
+                    .map(Self::small128)
                     .unwrap_or_else(|| Self::from_big_normalized(self.as_big() * other.as_big()))
             }
             _ => Self::from_big_normalized(self.as_big() * other.as_big()),
@@ -426,14 +460,17 @@ impl Integer {
 
     /// `-self`.
     pub fn neg(&self) -> Self {
+        if let IntegerRepr::Small64 { value, .. } = &self.0 {
+            return Self::small128(-i128::from(*value));
+        }
         match self.native() {
             Some(value) => {
                 if let Ok(value) = i64::try_from(value) {
-                    return Self::small(-i128::from(value));
+                    return Self::small128(-i128::from(value));
                 }
                 value
                     .checked_neg()
-                    .map(Self::small)
+                    .map(Self::small128)
                     .unwrap_or_else(|| Self::from_big_normalized(-self.as_big()))
             }
             None => Self::from_big_normalized(-self.as_big()),
@@ -578,20 +615,20 @@ fn bracket(
 
 impl From<i64> for Integer {
     fn from(value: i64) -> Self {
-        Self::small(i128::from(value))
+        Self::small64(value)
     }
 }
 
 impl From<i128> for Integer {
     fn from(value: i128) -> Self {
-        Self::small(value)
+        Self::small128(value)
     }
 }
 
 impl From<usize> for Integer {
     fn from(value: usize) -> Self {
         match i128::try_from(value) {
-            Ok(value) => Self::small(value),
+            Ok(value) => Self::small128(value),
             Err(_) => Self::from_big_normalized(BigInt::from(value)),
         }
     }
@@ -599,7 +636,7 @@ impl From<usize> for Integer {
 
 impl From<u64> for Integer {
     fn from(value: u64) -> Self {
-        Self::small(i128::from(value))
+        Self::small128(i128::from(value))
     }
 }
 
@@ -634,7 +671,7 @@ impl FromStr for Integer {
             return Err(NonCanonicalInteger);
         }
         if let Ok(value) = spelling.parse::<i128>() {
-            return Ok(Self::small(value));
+            return Ok(Self::small128(value));
         }
         BigInt::from_str(spelling)
             .map(Self::from_big_normalized)
@@ -769,7 +806,10 @@ impl Integer {
     /// object for the lifetime of `self`.
     pub fn as_big(&self) -> &BigInt {
         match &self.0 {
-            IntegerRepr::Small { value, cache } => {
+            IntegerRepr::Small64 { value, cache } => {
+                cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
+            }
+            IntegerRepr::Small128 { value, cache } => {
                 cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
             }
             IntegerRepr::Large(value) => value,
@@ -782,7 +822,209 @@ mod tests {
     use alloc::string::ToString;
     use core::str::FromStr;
 
+    use ix_trace_rs::trace;
+
     use super::*;
+
+    fn assert_small128(value: &Integer) {
+        assert!(matches!(&value.0, IntegerRepr::Small128 { .. }));
+    }
+
+    fn assert_empty_inline_cache(value: &Integer) {
+        match &value.0 {
+            IntegerRepr::Small64 { cache, .. } | IntegerRepr::Small128 { cache, .. } => {
+                assert!(cache.get().is_none());
+            }
+            IntegerRepr::Large(_) => panic!("expected an inline value"),
+        }
+    }
+
+    #[test]
+    #[trace("FR-371-AC-7")]
+    fn constructor_routes_preserve_the_selected_storage_class() {
+        for value in [i64::MIN, -1, 0, 1, i64::MAX] {
+            let integer = Integer::from(value);
+            assert!(
+                matches!(&integer.0, IntegerRepr::Small64 { value: stored, .. } if *stored == value)
+            );
+            assert_empty_inline_cache(&integer);
+            assert_eq!(integer.as_big(), &BigInt::from(value));
+        }
+        for value in [
+            i128::MIN,
+            i128::from(i64::MIN) - 1,
+            -1,
+            0,
+            1,
+            i128::from(i64::MAX) + 1,
+            i128::MAX,
+        ] {
+            for integer in [
+                Integer::from(value),
+                Integer::from_big(BigInt::from(value)),
+                Integer::from_str(&value.to_string()).unwrap(),
+            ] {
+                assert_small128(&integer);
+                assert_empty_inline_cache(&integer);
+                assert_eq!(integer.as_big(), &BigInt::from(value));
+            }
+        }
+        for value in [0_u64, 1, u64::MAX] {
+            let integer = Integer::from(value);
+            assert_small128(&integer);
+            assert_empty_inline_cache(&integer);
+            assert_eq!(integer.as_big(), &BigInt::from(value));
+        }
+        for value in [0_usize, 1, usize::MAX] {
+            let integer = Integer::from(value);
+            // The existing platform-sized conversion preserves non-fitting
+            // continuation rather than assuming a pointer width.
+            if i128::try_from(value).is_ok() {
+                assert_small128(&integer);
+                assert_empty_inline_cache(&integer);
+            } else {
+                assert!(matches!(&integer.0, IntegerRepr::Large(_)));
+            }
+            assert_eq!(integer.as_big(), &BigInt::from(value));
+        }
+        for (integer, expected) in [
+            (Integer::zero(), 0),
+            (Integer::one(), 1),
+            (Integer::default(), 0),
+        ] {
+            assert!(matches!(&integer.0, IntegerRepr::Small64 { value, .. } if *value == expected));
+            assert_empty_inline_cache(&integer);
+        }
+        for value in [
+            BigInt::from(1_u8) << 200_u32,
+            -(BigInt::from(1_u8) << 200_u32),
+        ] {
+            for integer in [
+                Integer::from_big(value.clone()),
+                Integer::from_str(&value.to_string()).unwrap(),
+            ] {
+                assert!(matches!(&integer.0, IntegerRepr::Large(_)));
+                assert_eq!(integer.as_big(), &value);
+                let cloned = integer.clone();
+                assert!(matches!(&cloned.0, IntegerRepr::Large(_)));
+                assert_eq!(cloned.as_big(), &value);
+            }
+        }
+    }
+
+    #[test]
+    #[trace("FR-371-AC-7")]
+    fn storage_pair_transitions_keep_fitting_results_wide() {
+        for left in [i64::MIN, -1, 0, 1, i64::MAX] {
+            for right in [i64::MIN, -1, 0, 1, i64::MAX] {
+                for a in [Integer::from(left), Integer::from(i128::from(left))] {
+                    for b in [Integer::from(right), Integer::from(i128::from(right))] {
+                        for (actual, expected) in [
+                            (a.add(&b), BigInt::from(left) + BigInt::from(right)),
+                            (a.sub(&b), BigInt::from(left) - BigInt::from(right)),
+                            (a.mul(&b), BigInt::from(left) * BigInt::from(right)),
+                            (a.neg(), -BigInt::from(left)),
+                        ] {
+                            assert_small128(&actual);
+                            assert_empty_inline_cache(&actual);
+                            assert_eq!(actual.as_big(), &expected);
+                        }
+                    }
+                }
+            }
+        }
+        for outside in [i128::from(i64::MIN) - 1, i128::from(i64::MAX) + 1] {
+            let wide = Integer::from(outside);
+            let narrow = Integer::from(1_i64);
+            for actual in [
+                wide.add(&narrow),
+                narrow.add(&wide),
+                wide.sub(&narrow),
+                narrow.sub(&wide),
+                wide.mul(&narrow),
+                narrow.mul(&wide),
+                wide.neg(),
+            ] {
+                assert_small128(&actual);
+            }
+        }
+        let zero = Integer::zero().add(&Integer::zero());
+        assert_small128(&zero);
+        assert_small128(&zero.add(&Integer::one()));
+        assert_eq!(zero.add(&Integer::one()), Integer::one());
+        let min = Integer::from(i128::MIN);
+        let max = Integer::from(i128::MAX);
+        for (actual, expected) in [
+            (
+                max.add(&Integer::one()),
+                "170141183460469231731687303715884105728",
+            ),
+            (
+                min.sub(&Integer::one()),
+                "-170141183460469231731687303715884105729",
+            ),
+            (min.neg(), "170141183460469231731687303715884105728"),
+            (
+                min.mul(&Integer::from(-1_i64)),
+                "170141183460469231731687303715884105728",
+            ),
+        ] {
+            assert!(matches!(&actual.0, IntegerRepr::Large(_)));
+            assert_eq!(actual.to_string(), expected);
+        }
+        let large = Integer::from_big(BigInt::from(1_u8) << 200_u32);
+        let cancellation = large.add(&Integer::from(42_i64)).sub(&large);
+        assert_small128(&cancellation);
+        assert_eq!(cancellation, Integer::from(42_i64));
+        let zero = large.sub(&large);
+        assert_small128(&zero);
+        assert!(zero.is_zero());
+    }
+
+    #[test]
+    #[trace("FR-371-AC-2", "FR-371-AC-5", "FR-371-AC-7")]
+    fn both_inline_classes_retain_borrows_and_reset_only_clone_caches() {
+        for original in [Integer::from(42_i64), Integer::from(42_i128)] {
+            assert_empty_inline_cache(&original);
+            let start = std::sync::Barrier::new(4);
+            std::thread::scope(|scope| {
+                let workers = (0..4)
+                    .map(|_| {
+                        let original = &original;
+                        let start = &start;
+                        scope.spawn(move || {
+                            start.wait();
+                            let borrowed = original.as_big();
+                            assert_eq!(borrowed, &BigInt::from(42_i64));
+                            borrowed as *const BigInt as usize
+                        })
+                    })
+                    .collect::<alloc::vec::Vec<_>>();
+                let addresses = workers
+                    .into_iter()
+                    .map(|worker| worker.join().unwrap())
+                    .collect::<alloc::vec::Vec<_>>();
+                assert!(addresses.iter().all(|address| *address == addresses[0]));
+            });
+            let borrowed = original.as_big();
+            let mut cloned = None;
+            let allocations = allocation_counter::measure(|| {
+                cloned = Some(original.clone());
+            });
+            assert_eq!(allocations.count_total, 0);
+            assert_eq!(allocations.bytes_total, 0);
+            let cloned = cloned.unwrap();
+            assert_eq!(
+                core::mem::discriminant(&cloned.0),
+                core::mem::discriminant(&original.0)
+            );
+            assert_empty_inline_cache(&cloned);
+            assert_eq!(cloned.as_big(), borrowed);
+            drop(cloned);
+            assert_eq!(borrowed, &BigInt::from(42_i64));
+            assert!(core::ptr::eq(borrowed, original.as_big()));
+        }
+    }
 
     /// Trace: FR-374-AC-5
     #[test]
@@ -859,10 +1101,10 @@ mod tests {
             min.magnitude_limbs().collect::<alloc::vec::Vec<_>>(),
             [0, 0, 0, 0x8000_0000]
         );
-        assert!(matches!(&zero.0, IntegerRepr::Small { value: 0, .. }));
+        assert!(matches!(&zero.0, IntegerRepr::Small64 { value: 0, .. }));
         assert!(matches!(
             &zero.add(&Integer::one()).0,
-            IntegerRepr::Small { value: 1, .. }
+            IntegerRepr::Small128 { value: 1, .. }
         ));
     }
 
@@ -878,6 +1120,8 @@ mod tests {
         let parsed = Integer::from_str("42").unwrap();
         let from_big = Integer::from_big(BigInt::from(42));
         let arithmetic = Integer::from(40_i128).add(&Integer::from(2_i128));
+        let narrow = Integer::from(42_i64);
+        assert_eq!(value, narrow);
         assert_eq!(value, parsed);
         assert_eq!(value, from_big);
         assert_eq!(value, arithmetic);
@@ -892,7 +1136,7 @@ mod tests {
         assert_eq!(retained, &BigInt::from(42));
         assert!(core::ptr::eq(retained, value.as_big()));
         let clone = value.clone();
-        assert!(matches!(&clone.0, IntegerRepr::Small { cache, .. } if cache.get().is_none()));
+        assert!(matches!(&clone.0, IntegerRepr::Small128 { cache, .. } if cache.get().is_none()));
 
         std::thread::scope(|scope| {
             let first = scope.spawn(|| value.as_big() as *const BigInt as usize);
@@ -970,6 +1214,7 @@ mod tests {
 
     /// Trace: FR-371-AC-4
     #[test]
+    #[trace("FR-371-AC-7")]
     fn magnitude_limb_stream_does_not_materialize_small_cache() {
         let values = [
             Integer::zero(),
@@ -977,6 +1222,9 @@ mod tests {
             Integer::from(1_i128 << 32),
             Integer::from(i128::MIN),
             Integer::from(i128::MAX),
+            Integer::from(i64::MIN),
+            Integer::from(1_i64 << 32),
+            Integer::from(0_i128),
         ];
         let expected = [
             [0, 0, 0, 0],
@@ -984,10 +1232,13 @@ mod tests {
             [0, 1, 0, 0],
             [0, 0, 0, 0x8000_0000],
             [u32::MAX, u32::MAX, u32::MAX, 0x7fff_ffff],
+            [0, 0x8000_0000, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0],
         ];
-        let expected_lengths = [0, 1, 2, 4, 4];
-        let mut observed = [[0_u32; 4]; 5];
-        let mut lengths = [0_usize; 5];
+        let expected_lengths = [0, 1, 2, 4, 4, 2, 2, 0];
+        let mut observed = [[0_u32; 4]; 8];
+        let mut lengths = [0_usize; 8];
         let allocations = allocation_counter::measure(|| {
             for (index, value) in values.iter().enumerate() {
                 for limb in value.magnitude_limbs() {
@@ -1002,7 +1253,8 @@ mod tests {
         assert_eq!(observed, expected);
         assert!(values.iter().all(|value| matches!(
             &value.0,
-            IntegerRepr::Small { cache, .. } if cache.get().is_none()
+            IntegerRepr::Small64 { cache, .. } | IntegerRepr::Small128 { cache, .. }
+                if cache.get().is_none()
         )));
     }
 }
