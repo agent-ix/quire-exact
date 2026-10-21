@@ -496,27 +496,46 @@ enum ChargeStorage {
 // The common admission payload owns no exact integer, allocation or drop glue.
 #[derive(Clone, Copy, Eq, PartialEq)]
 struct CommonCharge {
-    sizes: [Option<(LimitKind, u64)>; 2],
+    sizes: CommonRequests,
     work_units: u64,
     result_units: u64,
+}
+
+// A two-slot cursor needs no indexed search or owned-array iterator state.
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct CommonRequests {
+    first: Option<(LimitKind, u64)>,
+    second: Option<(LimitKind, u64)>,
+}
+
+impl Iterator for CommonRequests {
+    type Item = (LimitKind, u64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(request) = self.first.take() {
+            Some(request)
+        } else {
+            self.second.take()
+        }
+    }
 }
 
 impl CommonCharge {
     fn new() -> Self {
         Self {
-            sizes: [None; 2],
+            sizes: CommonRequests { first: None, second: None },
             work_units: 1,
             result_units: 0,
         }
     }
 
     fn into_general(self) -> GeneralCharge {
-        let mut sizes = InlineSizes::new();
-        for (kind, amount) in self.sizes.into_iter().flatten() {
-            sizes.push(kind, ChargeAmount::Units(amount));
-        }
         GeneralCharge {
-            sizes,
+            sizes: InlineSizes {
+                first: self.sizes.first.map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),
+                second: self.sizes.second.map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),
+                overflow: Vec::new(),
+            },
             work_units: ChargeAmount::Units(self.work_units),
             result_units: ChargeAmount::Units(self.result_units),
         }
@@ -688,8 +707,11 @@ impl Charge {
     fn push_units(mut self, kind: LimitKind, amount: u64) -> Self {
         self.storage = match self.storage {
             ChargeStorage::Common(mut common) => {
-                if let Some(slot) = common.sizes.iter_mut().find(|slot| slot.is_none()) {
-                    *slot = Some((kind, amount));
+                if common.sizes.first.is_none() {
+                    common.sizes.first = Some((kind, amount));
+                    ChargeStorage::Common(common)
+                } else if common.sizes.second.is_none() {
+                    common.sizes.second = Some((kind, amount));
                     ChargeStorage::Common(common)
                 } else {
                     let mut general = common.into_general();
@@ -1027,7 +1049,7 @@ impl Meter {
         match charge.storage {
             ChargeStorage::Common(common) => self.charge_fields(
                 charge.point,
-                common.sizes.into_iter().flatten(),
+                common.sizes,
                 common.work_units,
                 common.result_units,
             ),
@@ -1389,18 +1411,14 @@ mod tests {
         let ChargeStorage::Common(common) = first.storage else {
             panic!("first request must stay native");
         };
-        assert_eq!(common.sizes, [Some((LimitKind::IntegerBits, 1)), None]);
+        assert_eq!(common.sizes.first, Some((LimitKind::IntegerBits, 1)));
+        assert_eq!(common.sizes.second, None);
         let two = first.clone().size(LimitKind::DecimalDigits, 2);
         let ChargeStorage::Common(common) = two.storage else {
             panic!("second request must stay native");
         };
-        assert_eq!(
-            common.sizes,
-            [
-                Some((LimitKind::IntegerBits, 1)),
-                Some((LimitKind::DecimalDigits, 2))
-            ]
-        );
+        assert_eq!(common.sizes.first, Some((LimitKind::IntegerBits, 1)));
+        assert_eq!(common.sizes.second, Some((LimitKind::DecimalDigits, 2)));
         let three = two.size(LimitKind::ScaleExpansion, 3);
         let ChargeStorage::General(general) = &three.storage else {
             panic!("third request must promote");
@@ -1424,6 +1442,25 @@ mod tests {
                 LimitKind::TextInputBytes,
             ]
         );
+    }
+
+    #[trace("FR-359-AC-8")]
+    #[test]
+    fn common_cursor_keeps_request_order_and_clones_the_remaining_prefix() {
+        for second in [None, Some((LimitKind::IntegerBits, 0))] {
+            let mut cursor = CommonRequests {
+                first: Some((LimitKind::IntegerBits, 7)), second,
+            };
+            assert_eq!(cursor.next(), Some((LimitKind::IntegerBits, 7)));
+            let mut remaining = cursor;
+            assert_eq!(cursor.next(), second);
+            assert_eq!(remaining.next(), second);
+            assert_eq!(cursor.next(), None);
+            assert_eq!(remaining.next(), None);
+        }
+        let mut empty = CommonCharge::new().sizes;
+        assert_eq!(empty.next(), None);
+        assert_eq!(empty.next(), None);
     }
 
     #[trace("FR-359-AC-8")]
