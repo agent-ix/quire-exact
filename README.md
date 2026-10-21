@@ -139,3 +139,5 @@ committed is described in [`CONTENT_RIGHTS.md`](CONTENT_RIGHTS.md).
 ## License
 
 AGPL-3.0-or-later. See [`LICENSE`](LICENSE).
+
+The standalone [Meter Kani gate](docs/meter-kani-gate.md) runs the accounting proof and its production-loop mutation control with `make kani-meter-gate`.
