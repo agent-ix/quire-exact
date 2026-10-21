@@ -190,9 +190,7 @@ fn integer_arithmetic_charge(operation: IntegerArithmetic<'_>) -> Charge {
         IntegerArithmetic::Add(left, right) | IntegerArithmetic::Subtract(left, right) => {
             (left.magnitude_bits().max(right.magnitude_bits()), 1)
         }
-        IntegerArithmetic::Multiply(left, right) => {
-            (left.magnitude_bits(), right.magnitude_bits())
-        }
+        IntegerArithmetic::Multiply(left, right) => (left.magnitude_bits(), right.magnitude_bits()),
         IntegerArithmetic::Negate(operand) => (operand.magnitude_bits(), 0),
     };
     integer_bit_sum_charge(left, right)
@@ -484,29 +482,37 @@ mod tests {
                     #[cfg(feature = "test-support")]
                     assert_eq!(meter.admitted_charges()[1].integer_bits, Some(amount));
                     if amount > 3 {
-                        let mut limits = generous_meter().limits().clone();
+                        let mut limits = *generous_meter().limits();
                         limits.integer_bits = amount - 1;
                         let mut short = Meter::new(limits);
                         admit_integer_operand_prefix(&mut short);
-                        let refusal = short.charge(integer_bit_sum_charge(left, right)).unwrap_err();
-                        assert_eq!(refusal, crate::accounting::Incomplete {
-                            charge_point: ChargePoint::IntegerArithmeticArithmetic,
-                            limit_kind: LimitKind::IntegerBits,
-                            limit: amount - 1,
-                            consumed: 3,
-                            next_charge: Integer::from_big(oracle.clone()),
-                        });
+                        let refusal = short
+                            .charge(integer_bit_sum_charge(left, right))
+                            .unwrap_err();
+                        assert_eq!(
+                            refusal,
+                            crate::accounting::Incomplete {
+                                charge_point: ChargePoint::IntegerArithmeticArithmetic,
+                                limit_kind: LimitKind::IntegerBits,
+                                limit: amount - 1,
+                                consumed: 3,
+                                next_charge: Integer::from_big(oracle.clone()),
+                            }
+                        );
                         assert_integer_charge_prefix(&short, 3, 1);
                     }
                 }
                 Err(_) => {
-                    assert_eq!(result.unwrap_err(), crate::accounting::Incomplete {
-                        charge_point: ChargePoint::IntegerArithmeticArithmetic,
-                        limit_kind: LimitKind::IntegerBits,
-                        limit: u64::MAX,
-                        consumed: 3,
-                        next_charge: Integer::from_big(oracle),
-                    });
+                    assert_eq!(
+                        result.unwrap_err(),
+                        crate::accounting::Incomplete {
+                            charge_point: ChargePoint::IntegerArithmeticArithmetic,
+                            limit_kind: LimitKind::IntegerBits,
+                            limit: u64::MAX,
+                            consumed: 3,
+                            next_charge: Integer::from_big(oracle),
+                        }
+                    );
                     assert_integer_charge_prefix(&meter, 3, 1);
                 }
             }
@@ -514,9 +520,13 @@ mod tests {
     }
 
     fn admit_integer_operand_prefix(meter: &mut Meter) {
-        meter.charge(Charge::new(ChargePoint::IntegerArithmeticOperands)
-            .size(LimitKind::IntegerBits, 3)
-            .size(LimitKind::ValueOccurrences, 2)).unwrap();
+        meter
+            .charge(
+                Charge::new(ChargePoint::IntegerArithmeticOperands)
+                    .size(LimitKind::IntegerBits, 3)
+                    .size(LimitKind::ValueOccurrences, 2),
+            )
+            .unwrap();
     }
 
     fn assert_integer_charge_prefix(meter: &Meter, bits: u64, work: u64) {
@@ -532,10 +542,18 @@ mod tests {
         assert_eq!(meter.admission_count(), work);
         #[cfg(feature = "test-support")]
         {
-            let expected = [ChargePoint::IntegerArithmeticOperands,
-                ChargePoint::IntegerArithmeticArithmetic];
-            assert_eq!(meter.admitted_charges().iter().map(|charge| charge.point)
-                .collect::<alloc::vec::Vec<_>>(), expected[..work as usize]);
+            let expected = [
+                ChargePoint::IntegerArithmeticOperands,
+                ChargePoint::IntegerArithmeticArithmetic,
+            ];
+            assert_eq!(
+                meter
+                    .admitted_charges()
+                    .iter()
+                    .map(|charge| charge.point)
+                    .collect::<alloc::vec::Vec<_>>(),
+                expected[..work as usize]
+            );
         }
     }
 
@@ -558,14 +576,19 @@ mod tests {
                     occurrence: NonZeroU64::new(1).unwrap(),
                 });
             }
-            let refusal = meter.charge(integer_bit_sum_charge(u64::MAX, 1)).unwrap_err();
-            assert_eq!(refusal, crate::accounting::Incomplete {
-                charge_point: ChargePoint::IntegerArithmeticArithmetic,
-                limit_kind: LimitKind::WorkUnits,
-                limit: 1,
-                consumed: 1,
-                next_charge: Integer::one(),
-            });
+            let refusal = meter
+                .charge(integer_bit_sum_charge(u64::MAX, 1))
+                .unwrap_err();
+            assert_eq!(
+                refusal,
+                crate::accounting::Incomplete {
+                    charge_point: ChargePoint::IntegerArithmeticArithmetic,
+                    limit_kind: LimitKind::WorkUnits,
+                    limit: 1,
+                    consumed: 1,
+                    next_charge: Integer::one(),
+                }
+            );
             assert_integer_charge_prefix(&meter, 3, 1);
         }
     }
