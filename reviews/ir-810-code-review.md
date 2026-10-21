@@ -220,3 +220,35 @@ scope:
     charge appends no record and leaves the existing log unchanged. The named `tc_931_admitted_log_matches_model_ordered_prefix`
     and `tc_931_admitted_log_matches_model_same_kind` tests verify these prope
 ```
+
+## Dispositions
+
+Round 1; inspected frozen fix head d772466d6c3a106aea068a4983d0dcdc137e1b7b. Original review scope and finding rows are preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified wait_group/stop_group inspect every live process-group member and escalate remaining descendants even after the leader exits; wait_scope/stop_scope use recursive cgroup.events populated state and escalate the whole scope. run_gate only removes registered private inputs after confirmed quiescence; unknown quiescence preserves inputs. Six real leader-exit/timeout/SIGALRM interruption cases assert descendant death and empty group/scope. |
+| FND-002 | fixed | Verified all six required process names are present. Identity now uses /proc/comm and strict real executable basename, with native target/deps detection and verified current-process ancestor exemption. Real hidden-argv probes for all six names reject; fake argv alone is accepted; actual named ancestor is exempt. |
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: "        with (args.report / \"kani.log\").open(\"w\") as output:\n            process\
+    \ = subprocess.Popen(COMMAND, cwd=args.fixture, env=env,\n                                       stdout=output,\
+    \ stderr=subprocess.STDOUT, start_new_session=True)\n            wait_group(process, TIMEOUT_SECONDS)"
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: "    heavy = {\"cargo\", \"kani\", \"cargo-kani\", \"kani-driver\", \"kani-compiler\"\
+    , \"rustc\",\n             \"clippy-driver\", \"rustfmt\", \"cbmc\", \"goto-instrument\", \"goto-cc\"\
+    }\n    for entry in Path(\"/proc\").iterdir():\n        if not entry.name.isdigit() or int(entry.name)\
+    \ in ancestors:\n            continue\n        try:\n            command = (entry / \"comm\").read_text().strip()"
+```
+
+## Disposition validation
+
+Reviewer independently reran all 12 operational tests in a checked 16 GiB, zero-swap scope: 12 passed in 1.912 seconds, parent memory peak 21,598,208 bytes, all memory events zero. Six lifecycle tests execute actual TERM-resistant descendants against production group/scope cleanup helpers, using real Linux/systemd process boundaries. OS identity tests cover all six required names, misleading argv and the verified ancestor exemption. Bash syntax and Python compilation also passed. Receipt: disposition-confined.log. Changes affect lifecycle/guard behavior only; the real Make/Rust binder, kernel, proof, manifest, lockfile and toolchain remain byte-identical to qualified 636dd88. No additional healthy Kani run is necessary for these confined fixes; no new heavy execution or aggregate gate was performed.
+
+## Current Disposition Verdict
+
+No unresolved code-review finding remains; both FND-001 and FND-002 are fixed. No new defect found in this disposition pass.

@@ -1377,3 +1377,53 @@ scope:
 ## Evidence and inventory
 
 Independently reclassified both archived raw Kani logs using the frozen production classifier: healthy Verified, 2,565 checks (2,534 SUCCESS, 31 UNREACHABLE), all six unwinds successful, 130.15448 s verification; mutant sole accounting::Meter::charge.unwind.1 failure at production line 862, 1/2,586 failures, 4.272985 s verification. Worker receipts and parent observations agree on memory.max 17,179,869,184, swap.max 0, zero memory events, peaks 8,196,722,688 / 613,203,968 bytes, wall 135.6143 / 9.8273 seconds. Final systemd peaks are explicitly unavailable/null. The native log records one actual ignored test executed and passing in 145.80 seconds. fmt-check/focused locked Clippy logs pass; reviewer reran three lightweight Python operational tests and Bash syntax. Production src, Cargo.toml, Cargo.lock and toolchain byte-match the published base. No CI workflow change, proof/harness replacement, vendored implementation, source hash catalog or tool-version pin machinery was introduced. The internal Git commit is used to check out exact private inputs. Reserved-host weekly maintainer execution is the ticket-authorized documented scheduled option.
+
+## Dispositions
+
+Round 1; inspected frozen fix head d772466d6c3a106aea068a4983d0dcdc137e1b7b. Original review scope and finding rows are preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Assigned follow-up IR-17 owns the five original external FR-359-AC-10 consumer tests and unchanged verdict/domain requirements. Actual handoff 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec preserves that ownership. IR-705 blocker 6fbc7f05-3dea-481a-831a-9c402cf22f5a, also referenced by IR-17 d5ebc5b8-8f56-4a46-84cd-e33a641c96c5, documents the missing public replay-owned admitted context. Kernel proof/gate evidence does not substitute; receipt remains UNRUN and no Covered claim is made. |
+| FND-002 | deferred | Assigned follow-up IR-17 owns the original external FR-371-AC-6 healthy, bound-mutant and arithmetic-mutant qualification. Handoff 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec and the actual IR-705 published-context blocker 6fbc7f05-3dea-481a-831a-9c402cf22f5a retain the original domains, oracle and expected verdicts. This inherited consumer gap is outside the IR-810 kernel gate and remains outstanding. |
+| FND-003 | deferred | Unchanged FR-383-AC-4 no_std verification-method/source-binding taxonomy belongs to the original IR-895 IR-team owner, via actual handoff 34ab0c74-b3c9-4dd5-9f84-e9d25e146366. The delivered cancel accessor is not reopened and no runtime regression is claimed. IR-810 is not expanded to invent a binding or change the separate requirement; the local criterion remains untagged. |
+| FND-004 | deferred | The actual external FR-056-AC-23 exists in QSL and defines native String scalar retention/equality/UTF-8 key semantics; original quire-exact PR37 names paired QSL-729. Concrete owner handoff 626a8b01-bd61-4da5-8335-6f5ff60003f2 assigns the four inherited unqualified claims to QSL-729 conformance ownership for a supported cross-repository trace namespace. The issue is unchanged metadata outside this gate, not absent String functionality; no duplicate kernel requirement, false Covered claim, behavior change or reopening of delivered functionality is proposed. |
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Assigned follow-up IR-17 owns the five original external FR-359-AC-10 consumer tests and unchanged
+    verdict/domain requirements. Actual handoff 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec preserves that ownership.
+    IR-705 blocker 6fbc7f05-3dea-481a-831a-9c402cf22f5a, also referenced by IR-17 d5ebc5b8-8f56-4a46-84cd-e33a641c96c5,
+    documents the missing public replay-owned admitted context. Kernel proof/gate evidence does not substitute;
+    receipt remains UNRUN and no Covered claim is made.
+- fnd: FND-002
+  outcome: deferred
+  reason: Assigned follow-up IR-17 owns the original external FR-371-AC-6 healthy, bound-mutant and arithmetic-mutant
+    qualification. Handoff 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec and the actual IR-705 published-context
+    blocker 6fbc7f05-3dea-481a-831a-9c402cf22f5a retain the original domains, oracle and expected verdicts.
+    This inherited consumer gap is outside the IR-810 kernel gate and remains outstanding.
+- fnd: FND-003
+  outcome: deferred
+  reason: Unchanged FR-383-AC-4 no_std verification-method/source-binding taxonomy belongs to the original
+    IR-895 IR-team owner, via actual handoff 34ab0c74-b3c9-4dd5-9f84-e9d25e146366. The delivered cancel
+    accessor is not reopened and no runtime regression is claimed. IR-810 is not expanded to invent a
+    binding or change the separate requirement; the local criterion remains untagged.
+- fnd: FND-004
+  outcome: deferred
+  reason: The actual external FR-056-AC-23 exists in QSL and defines native String scalar retention/equality/UTF-8
+    key semantics; original quire-exact PR37 names paired QSL-729. Concrete owner handoff 626a8b01-bd61-4da5-8335-6f5ff60003f2
+    assigns the four inherited unqualified claims to QSL-729 conformance ownership for a supported cross-repository
+    trace namespace. The issue is unchanged metadata outside this gate, not absent String functionality;
+    no duplicate kernel requirement, false Covered claim, behavior change or reopening of delivered functionality
+    is proposed.
+```
+
+## Disposition validation
+
+Verified the existing IR-17 and IR-895 owner comments and the new QSL-729 owner handoff by reading the actual tracker comments. Also read QSL FR-056-AC-23 and original PR37 paired-owner reference. These are explicit deferrals of unchanged, unrelated obligations. They do not alter the matrix or manufacture coverage. The four original finding rows stay unchanged.
+
+## Current Disposition Verdict
+
+All four findings are explicitly deferred to their existing owners; none is silently closed. The historical whole-repository assurance verdict remains FAIL because the inherited untagged/dangling claims remain. These owner-assigned gaps do not block this focused gate PR.
