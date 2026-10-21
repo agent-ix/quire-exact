@@ -231,3 +231,65 @@ scope:
 ## Disposition Round 1
 
 PASS retained. Inspected frozen fix head `8cacb30872e724094260d8bc92ec6432a58c3232`: only two Status wording changes plus original review-file custody. Both Rust files byte-match qualified source. No new finding, no source change, no heavy rerun. No dispositions comment is required for this artifact because it had no findings.
+
+## New findings (disposition pass 2)
+
+Root's actual aggregate at `301ccea9a388715f005e59d07408761a6d34b7fa` reached the complete default integration suite and exposed this obsolete expectation, missed by the initial focused review. `root-final-gate.log` records five bounded-integer tests passing and this sixth test failing at line 591. No new production defect is established.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | high | The native metered allocation observer still requires a positive size-vector allocation; two inline request slots correctly eliminate that allocation, causing the unchanged integration test and make ci to fail. | tests/ir705_bounded_integer.rs:591-594 |
+
+The required fix must retain independently measured public arithmetic versus explicit accounting-only charge schedules, the actual arithmetic result, refusal path and accounting checks, and a nontrivial assertion that native arithmetic adds no allocations. The old positive-allocation premise is not required by FR-371-AC-4. A concrete zero-allocation expectation for this specific native schedule is grounded in two inline slots, machine-width charge amounts and fitting arithmetic; it does not assert every public metered operation is allocation-free. The original clean placeholder FND-001 is preserved and is not a defect/disposition obligation.
+
+```yaml
+new_findings:
+- fnd: FND-002
+  severity: high
+  confidence: high
+  method: code-review
+  check: test-intent
+  artifact_id: FR-371-AC-4
+  related_ids:
+  - FR-359-AC-8
+  path: tests/ir705_bounded_integer.rs
+  lines: 591-594
+  excerpt: Observation of public metered calls separately identifies ordinary accounting/refusal allocations and
+    does not misreport the entire call as allocation-free.
+  finding: The native metered allocation observer still requires a positive size-vector allocation; two inline request
+    slots correctly eliminate that allocation, causing the unchanged integration test and make ci to fail.
+scope:
+- id: FR-371-AC-4
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: Observation of public metered calls separately identifies ordinary accounting/refusal allocations and
+    does not misreport the entire call as allocation-free.
+- id: native_public_metered_call_matches_accounting_only_allocation_observation
+  path: tests/ir705_bounded_integer.rs
+  role: examined
+  excerpt: "assert!(\n        public_allocations.bytes_total > 0,\n        \"metered size-vector allocation is expected\"\
+    \n    );"
+```
+
+## Dispositions
+
+Round 2: independently inspected actual fix head `c769905d7946697d9814eb7cac61a3fd4ca81384`, one integration-test file only. FND-002 is the only real pending finding; FND-001 is the original clean placeholder and is excluded.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | fixed | The independent accounting-only schedule now must allocate zero bytes, and the unchanged separately measured public path must equal it. Both observations are exercised; equality is not self-comparison or deletion of the allocation gate. Completed Integer 11, actual public refusal, separately executed refusal baseline and their allocation equality remain unchanged. Other existing arithmetic/counter/denial assertions remain intact. The trace attribute is confined to the actual default-only test, with a matching cfg-gated import. |
+
+```yaml
+dispositions:
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: "    assert_eq!(\n        baseline_allocations.bytes_total, 0,\n        \"the two-request arithmetic\
+    \ charge schedule stays inline\"\n    );\n    assert_eq!(\n        public_allocations.bytes_total,\n       \
+    \ baseline_allocations.bytes_total\n    );"
+```
+
+## Current Disposition Verdict
+
+PASS. No unresolved source/test finding blocks this PR. The independent accounting-only schedule now must allocate zero bytes, and the unchanged separately measured public path must equal it. Both observations are exercised; equality is not self-comparison or deletion of the allocation gate. Completed Integer 11, actual public refusal, separately executed refusal baseline and their allocation equality remain unchanged. Other existing arithmetic/counter/denial assertions remain intact. The trace attribute is confined to the actual default-only test, with a matching cfg-gated import.
+
+Actual raw allocation-fix-exact.log records the repaired observer test passing; allocation-fix-default.log records all six integration tests passing; allocation-fix-support.log records all five applicable tests passing, with the default-only allocation observer excluded as before. The existing test-support diagnostic log legitimately allocates and is not folded into this no-extra native arithmetic measurement. Both production accounting and proof files remain byte-identical to the healthy qualified source. No new production behavior, reduced input domain, changed oracle, dummy test, disabled assertion or heavy reviewer run was introduced. These focused checks do not replace the root final aggregate rerun.
