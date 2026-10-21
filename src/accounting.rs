@@ -523,7 +523,10 @@ impl Iterator for CommonRequests {
 impl CommonCharge {
     fn new() -> Self {
         Self {
-            sizes: CommonRequests { first: None, second: None },
+            sizes: CommonRequests {
+                first: None,
+                second: None,
+            },
             work_units: 1,
             result_units: 0,
         }
@@ -532,8 +535,14 @@ impl CommonCharge {
     fn into_general(self) -> GeneralCharge {
         GeneralCharge {
             sizes: InlineSizes {
-                first: self.sizes.first.map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),
-                second: self.sizes.second.map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),
+                first: self
+                    .sizes
+                    .first
+                    .map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),
+                second: self
+                    .sizes
+                    .second
+                    .map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),
                 overflow: Vec::new(),
             },
             work_units: ChargeAmount::Units(self.work_units),
@@ -1441,7 +1450,8 @@ mod tests {
     fn common_cursor_keeps_request_order_and_clones_the_remaining_prefix() {
         for second in [None, Some((LimitKind::IntegerBits, 0))] {
             let mut cursor = CommonRequests {
-                first: Some((LimitKind::IntegerBits, 7)), second,
+                first: Some((LimitKind::IntegerBits, 7)),
+                second,
             };
             assert_eq!(cursor.next(), Some((LimitKind::IntegerBits, 7)));
             let mut remaining = cursor;
