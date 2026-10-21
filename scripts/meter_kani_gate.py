@@ -65,18 +65,22 @@ def reject_unrelated_heavy_processes():
         ancestors.add(current)
         status = Path(f"/proc/{current}/status").read_text()
         current = int(re.search(r"^PPid:\s+(\d+)$", status, re.MULTILINE)[1])
-    heavy = {"cargo", "cargo-kani", "kani-driver", "kani-compiler", "rustc",
+    heavy = {"cargo", "kani", "cargo-kani", "kani-driver", "kani-compiler", "rustc",
              "clippy-driver", "rustfmt", "cbmc", "goto-instrument", "goto-cc"}
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit() or int(entry.name) in ancestors:
             continue
         try:
-            words = (entry / "cmdline").read_bytes().split(b"\0")
-            command = Path(os.fsdecode(words[0])).name
-            executable = (entry / "exe").resolve()
-        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            command = (entry / "comm").read_text().strip()
+        except (FileNotFoundError, ProcessLookupError):
             continue
-        if command in heavy or ("target" in executable.parts and "deps" in executable.parts):
+        names = {command}
+        try:
+            executable = (entry / "exe").resolve(strict=True)
+            names.add(executable.name)
+        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            executable = None
+        if names & heavy or (executable and "target" in executable.parts and "deps" in executable.parts):
             raise GateError(f"unrelated heavy process {entry.name} ({command}); reserve the host first")
 
 
@@ -228,6 +232,125 @@ def finish_observation(unit, observation):
     observation["final_peak_unavailable"] = observation["final_peak_bytes"] is None
 
 
+def live_group_members(group):
+    members = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        if int(fields[2]) == group and fields[0] not in {"Z", "X"}:
+            members.append(int(entry.name))
+    return members
+
+
+def wait_until_empty(is_empty, seconds):
+    deadline = time.monotonic() + seconds
+    while not is_empty():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
+def stop_group(process, grace=10):
+    """Escalate surviving group members even when the leader already exited."""
+    for signum in (signal.SIGTERM, signal.SIGKILL):
+        if not live_group_members(process.pid):
+            break
+        try:
+            os.killpg(process.pid, signum)
+        except ProcessLookupError:
+            pass
+        if wait_until_empty(lambda: not live_group_members(process.pid), grace):
+            break
+    else:
+        raise GateError(f"process group {process.pid} remains live; preserve proof inputs")
+    process.wait(timeout=grace)
+
+
+def wait_group(process, timeout, grace=10):
+    try:
+        returncode = process.wait(timeout=timeout)
+    except BaseException:
+        stop_group(process, grace)
+        raise
+    if live_group_members(process.pid):
+        stop_group(process, grace)
+        raise GateError("proof leader exited with live descendants")
+    return returncode
+
+
+def scope_empty(unit, observation):
+    cgroup = observation["cgroup"]
+    if cgroup:
+        try:
+            events = dict(line.split() for line in (Path(cgroup) / "cgroup.events").read_text().splitlines())
+            return events["populated"] == "0"
+        except FileNotFoundError:
+            pass
+    query = subprocess.run(
+        ["systemctl", "--user", "show", unit + ".scope", "--property=ControlGroup",
+         "--property=LoadState", "--property=ActiveState"],
+        capture_output=True, text=True, check=False,
+    )
+    fields = dict(line.split("=", 1) for line in query.stdout.splitlines() if "=" in line)
+    if fields.get("LoadState") == "not-found":
+        return True
+    relative = fields.get("ControlGroup", "")
+    if relative.startswith("/"):
+        observation["cgroup"] = "/sys/fs/cgroup" + relative
+        try:
+            events = dict(line.split() for line in
+                          (Path(observation["cgroup"]) / "cgroup.events").read_text().splitlines())
+            return events["populated"] == "0"
+        except FileNotFoundError:
+            return False
+    if query.returncode == 0 and fields.get("ActiveState") in {"inactive", "failed"}:
+        return True
+    raise GateError(f"cannot confirm {unit}.scope is empty; preserve proof inputs")
+
+
+def stop_scope(unit, observation, grace=10):
+    for signum in ("TERM", "KILL"):
+        if scope_empty(unit, observation):
+            return
+        subprocess.run(["systemctl", "--user", "kill", "--signal=" + signum, unit + ".scope"],
+                       capture_output=True, check=False)
+        if wait_until_empty(lambda: scope_empty(unit, observation), grace):
+            return
+    raise GateError(f"{unit}.scope remains populated; preserve proof inputs")
+
+
+def wait_scope(process, unit, observation, timeout=None, grace=10):
+    started = time.monotonic()
+    try:
+        while process.poll() is None:
+            observe_scope(unit, observation)
+            if timeout is not None and time.monotonic() - started >= timeout:
+                raise subprocess.TimeoutExpired(process.args, timeout)
+            try:
+                process.wait(timeout=0.05)
+            except subprocess.TimeoutExpired:
+                pass
+        if not scope_empty(unit, observation):
+            raise GateError("scope leader exited with live descendants")
+        return process.returncode
+    finally:
+        # Stop an interrupted launcher before checking for its scope, including
+        # interruption during startup. Its exit never substitutes for quiescence.
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=grace)
+        stop_scope(unit, observation, grace)
+
+
 def proof_worker(args):
     report = {"accepted": False, "command": COMMAND, "timeout_seconds": TIMEOUT_SECONDS}
     try:
@@ -257,18 +380,7 @@ def proof_worker(args):
         with (args.report / "kani.log").open("w") as output:
             process = subprocess.Popen(COMMAND, cwd=args.fixture, env=env,
                                        stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
-            try:
-                process.wait(timeout=TIMEOUT_SECONDS)
-            except BaseException:
-                # All backend/compiler children share this process group. A timeout
-                # or interrupted wait must not leave a live CBMC behind.
-                os.killpg(process.pid, signal.SIGTERM)
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    process.wait()
-                raise
+            wait_group(process, TIMEOUT_SECONDS)
         report.update(wall_seconds=time.monotonic() - started, returncode=process.returncode)
         if (before != input_bytes(args.fixture)
                 or expected_status != git(args.fixture, "status", "--porcelain", "--untracked-files=normal")
@@ -296,6 +408,7 @@ def run_gate(args):
     original = input_bytes(root)
     report = {"accepted": False, "proofs": {}}
     owned_worktrees = []
+    unsafe_inputs = set()
     try:
         commit = require_clean(root)
         reject_unrelated_heavy_processes()
@@ -325,29 +438,17 @@ def run_gate(args):
                 if mutant_line is not None:
                     command.extend(["--mutant-line", str(mutant_line)])
                 observation = {"unit": unit + ".scope", "cgroup": None, "last_cgroup_sample": None}
+                unsafe_inputs.add(fixture)
                 with (lane / "scope.log").open("w") as output:
                     process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT)
                     try:
-                        while process.poll() is None:
-                            observe_scope(unit, observation)
-                            try:
-                                process.wait(timeout=0.05)
-                            except subprocess.TimeoutExpired:
-                                pass
-                        returncode = process.returncode
-                    except BaseException:
-                        # Terminate this invocation's whole proof scope before its
-                        # private worktree can be removed underneath a live backend.
-                        subprocess.run(["systemctl", "--user", "kill", "--signal=TERM", unit + ".scope"],
-                                       stdout=output, stderr=subprocess.STDOUT, check=False)
-                        try:
-                            process.wait(timeout=30)
-                        except subprocess.TimeoutExpired:
-                            subprocess.run(["systemctl", "--user", "kill", "--signal=KILL", unit + ".scope"],
-                                           stdout=output, stderr=subprocess.STDOUT, check=False)
-                            process.wait()
-                        raise
+                        returncode = wait_scope(process, unit, observation)
                     finally:
+                        try:
+                            if scope_empty(unit, observation):
+                                unsafe_inputs.remove(fixture)
+                        except (GateError, OSError) as error:
+                            observation["cleanup_error"] = str(error)
                         finish_observation(unit, observation)
                         write_json(lane / "resource-observation.json", observation)
                 report["proofs"][name] = {"accepted": False, "resource_observation": observation}
@@ -360,8 +461,12 @@ def run_gate(args):
         finally:
             for fixture in reversed(owned_worktrees):
                 # Only paths registered by this invocation may be force-removed.
-                git(root, "worktree", "remove", "--force", str(fixture))
-            Path(temporary).rmdir()
+                if fixture in unsafe_inputs:
+                    report.setdefault("preserved_inputs", []).append(str(fixture))
+                else:
+                    git(root, "worktree", "remove", "--force", str(fixture))
+            if not unsafe_inputs:
+                Path(temporary).rmdir()
         if require_clean(root) != commit:
             raise GateError("candidate commit changed during the gate")
         report["accepted"] = True

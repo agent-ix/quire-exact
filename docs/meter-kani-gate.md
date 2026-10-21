@@ -14,7 +14,8 @@ The regular-output parser is grounded in Kani 0.68.0 / CBMC 6.11.0 output and
 fails closed if the check records or verdict format change.
 
 Reserve the shared host's proof slot before starting. The runner rejects other
-visible Cargo, Rust compiler, Kani and CBMC jobs, while allowing its own native
+visible Cargo, Rust compiler, Kani and CBMC jobs by OS process name and executable
+identity, while allowing its own native
 test and Cargo ancestors. This is an additional preflight check; operators must
 still serialize work across lanes and avoid starting another job during a run.
 
@@ -28,7 +29,9 @@ proof followed by the ALL-loop control, each in a fresh 16 GiB, zero-swap scope.
 Each worker verifies its actual `memory.max` and `memory.swap.max` before any
 Cargo invocation, with one build job, one proof job and one Rayon thread. Each
 proof command has a 600-second wall timeout, followed by TERM and a ten-second
-KILL grace period for its process group. The fixed proof command is:
+KILL grace period for its process group. Cleanup checks all live group members
+and the whole scope, escalating remaining descendants even after a leader exits.
+Private inputs remain in place if quiescence cannot be confirmed. The fixed proof command is:
 
 ```sh
 cargo kani --harness accounting::kani_proofs::meter_integer_arithmetic_schedule_matches_reference --exact --unwind 3 --solver cadical --output-format regular --jobs 1
@@ -61,8 +64,8 @@ worker before it can write a result. The final systemd properties are also
 recorded. A sampled peak is explicitly a lower bound when no final peak is
 available; missing measurements remain unavailable, never zero estimates.
 Missing worker results always fail the gate. Reports from a failed run remain for diagnosis. Private
-worktrees and their targets are removed after success, failure or a handled
-interrupt; the original checkout and its existing target are never mutated or
+worktrees and their targets are removed after confirmed process/scope quiescence
+on success, failure or a handled interrupt; the original checkout and its existing target are never mutated or
 cleaned. SIGKILL or host loss can require removing the invocation's registered
 worktrees with `git worktree remove --force <reported-private-path>` after
 confirming no worker remains.
