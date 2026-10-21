@@ -92,17 +92,15 @@ fn order(
     let occurrences = LimitKind::ValueOccurrences;
     let ordering = match operands {
         OrderedOperands::Integers(left, right) => {
+            let bits = left.magnitude_bits().max(right.magnitude_bits());
             meter.charge(
                 Charge::new(ChargePoint::OrderingOperands)
-                    .size(
-                        LimitKind::IntegerBits,
-                        left.magnitude_bits().max(right.magnitude_bits()),
-                    )
+                    .size(LimitKind::IntegerBits, bits)
                     .size(occurrences, 2),
             )?;
             meter.charge(
                 Charge::new(ChargePoint::OrderingArithmetic)
-                    .exact_size(LimitKind::IntegerBits, integer_ordering_bits(left, right)),
+                    .size(LimitKind::IntegerBits, bits),
             )?;
             left.cmp(right)
         }
@@ -170,11 +168,6 @@ fn order(
 /// `bits(n)` as an unbounded amount.
 fn bits(value: &Integer) -> Integer {
     Integer::from(value.magnitude_bits())
-}
-
-/// The `integer_bits` amount of `ordering.arithmetic` for integers.
-fn integer_ordering_bits(left: &Integer, right: &Integer) -> Integer {
-    bits(left).max(bits(right))
 }
 
 /// The `integer_bits` amount of `ordering.arithmetic` for `a/b` and `c/d`:

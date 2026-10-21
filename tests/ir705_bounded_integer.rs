@@ -9,7 +9,7 @@ use std::{str::FromStr, string::ToString};
 #[cfg(not(feature = "test-support"))]
 use quire_exact::Charge;
 use quire_exact::{
-    evaluate_integer_arithmetic, ChargePoint, InjectedDenial, Integer, IntegerArithmetic,
+    order_numbers, OrderedOperands, OrderingOperator, evaluate_integer_arithmetic, ChargePoint, InjectedDenial, Integer, IntegerArithmetic,
     IntegerInterval, LimitKind, Meter, Outcome, ScalarLimits,
 };
 
@@ -1141,4 +1141,83 @@ fn native_public_metered_call_matches_accounting_only_allocation_observation() {
         refused_allocations.bytes_total,
         refusal_baseline_allocations.bytes_total
     );
+}
+
+#[trace("FR-362-AC-4", "FR-362-AC-5", "FR-362-AC-6", "FR-362-AC-8")]
+#[test]
+fn integer_ordering_preserves_values_sizes_and_denied_prefixes() {
+    let values = [
+        Integer::from(i64::MIN), Integer::from(-1_i64), Integer::zero(),
+        Integer::from(1_i64), Integer::from(i64::MAX),
+        Integer::from(i128::MIN), Integer::from(-1_i128), Integer::from(1_i128),
+        Integer::from(i128::MAX),
+        Integer::from_str("-340282366920938463463374607431768211456").unwrap(),
+        Integer::from_str("340282366920938463463374607431768211456").unwrap(),
+    ];
+    let points = [ChargePoint::OrderingOperands, ChargePoint::OrderingArithmetic,
+        ChargePoint::OrderingResultRetain];
+    for left in &values {
+        for right in &values {
+            // The maintained arbitrary-precision implementation supplies both
+            // the numeric oracle and an independent magnitude measurement.
+            let a = BigInt::from_str(&left.to_string()).unwrap();
+            let b = BigInt::from_str(&right.to_string()).unwrap();
+            let bits = a.bits().max(b.bits()).max(1);
+            for (operator, expected) in [
+                (OrderingOperator::Less, a < b),
+                (OrderingOperator::LessOrEqual, a <= b),
+                (OrderingOperator::Greater, a > b),
+                (OrderingOperator::GreaterOrEqual, a >= b),
+            ] {
+                let mut exact = limits();
+                exact.integer_bits = bits;
+                exact.work_units = 3;
+                let mut meter = Meter::new(exact);
+                assert_eq!(order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter), Outcome::Completed(expected));
+                assert_metered_counters(&meter, bits, 2, 3, 1);
+                assert_points(&meter, &points);
+                #[cfg(feature = "test-support")]
+                {
+                    let charges = meter.admitted_charges();
+                    assert_eq!(charges[0].integer_bits, Some(bits));
+                    assert_eq!(charges[1].integer_bits, Some(bits));
+                    assert_eq!(charges[2].integer_bits, None);
+                    assert_eq!(charges[0].value_occurrences, Some(2));
+                    assert_eq!(charges[1].value_occurrences, None);
+                }
+                let mut short = limits();
+                short.integer_bits = bits - 1;
+                let mut meter = Meter::new(short);
+                let outcome = order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter);
+                let Outcome::Incomplete(denial) = outcome else { panic!("expected bit denial: {outcome:?}"); };
+                assert_eq!(denial.charge_point, points[0]);
+                assert_eq!(denial.limit_kind, LimitKind::IntegerBits);
+                assert_eq!(denial.limit, bits - 1);
+                assert_eq!(denial.consumed, 0);
+                assert_eq!(denial.next_charge, Integer::from(bits));
+                assert_metered_counters(&meter, 0, 0, 0, 0);
+                assert_points(&meter, &[]);
+                for (index, point) in points.into_iter().enumerate() {
+                    let mut meter = Meter::new(limits()).with_injected_denial(InjectedDenial {
+                        point, occurrence: NonZeroU64::new(1).unwrap(),
+                    });
+                    let outcome = order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter);
+                    let Outcome::Incomplete(denial) = outcome else { panic!("expected injected denial: {outcome:?}"); };
+                    assert_eq!(denial.charge_point, point);
+                    assert_eq!(denial.limit_kind, LimitKind::WorkUnits);
+                    assert_eq!(denial.limit, index as u64);
+                    assert_eq!(denial.consumed, index as u64);
+                    assert_eq!(denial.next_charge, Integer::one());
+                    assert_metered_counters(&meter, if index == 0 {0} else {bits}, if index == 0 {0} else {2}, index as u64, 0);
+                    assert_points(&meter, &points[..index]);
+                    // The injected stop is one-shot. Reuse the actual meter:
+                    // the next comparison retains its independent full schedule.
+                    assert_eq!(order_numbers(operator, OrderedOperands::Integers(left, right), &mut meter), Outcome::Completed(expected));
+                    assert_metered_counters(&meter, bits, 2, index as u64 + 3, 1);
+                    let expected_points = points[..index].iter().chain(points.iter()).copied().collect::<Vec<_>>();
+                    assert_points(&meter, &expected_points);
+                }
+            }
+        }
+    }
 }
