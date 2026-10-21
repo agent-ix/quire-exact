@@ -52,10 +52,15 @@ already recorded in TC-931 and is not repeated by this persistent lane.
 
 Reports live under `target/meter-kani-reports/<run>/`. Keep the top-level
 `result.json` and both proof directories when archiving a receipt. They contain
-the Git commit, input hashes, temporary mutation patch, actual installed
+the temporary mutation patch, actual installed
 Kani/CBMC versions, command, verdict and check counts, individual verification
 and wall times, per-proof cgroup peak bytes, swap and memory events, plus the
-full Kani and scope logs. Reports from a failed run remain for diagnosis. Private
+full Kani and scope logs. The parent samples each proof's cgroup from outside
+that scope and retains its last measured peak/events even if OOM kills the
+worker before it can write a result. The final systemd properties are also
+recorded. A sampled peak is explicitly a lower bound when no final peak is
+available; missing measurements remain unavailable, never zero estimates.
+Missing worker results always fail the gate. Reports from a failed run remain for diagnosis. Private
 worktrees and their targets are removed after success, failure or a handled
 interrupt; the original checkout and its existing target are never mutated or
 cleaned. SIGKILL or host loss can require removing the invocation's registered

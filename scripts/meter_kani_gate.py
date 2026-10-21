@@ -6,7 +6,6 @@ Git worktree and target directory; the checked-out crate is never mutated.
 """
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -37,11 +36,11 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
-def input_hashes(root):
+def input_bytes(root):
     paths = [root / name for name in CRATE_FILES]
     paths.extend(sorted((root / "src").rglob("*")))
     return {
-        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        str(path.relative_to(root)): path.read_bytes()
         for path in paths if path.is_file()
     }
 
@@ -186,6 +185,49 @@ def memory_record(cgroup):
     }
 
 
+def observe_scope(unit, observation):
+    """Sample from the parent, which survives a proof scope's OOM kill."""
+    if observation["cgroup"] is None:
+        query = subprocess.run(
+            ["systemctl", "--user", "show", unit + ".scope", "--property=ControlGroup", "--value"],
+            capture_output=True, text=True, check=False,
+        )
+        relative = query.stdout.strip()
+        if query.returncode == 0 and relative.startswith("/"):
+            observation["cgroup"] = "/sys/fs/cgroup" + relative
+    if observation["cgroup"] is not None:
+        try:
+            cgroup = Path(observation["cgroup"])
+            sample = memory_record(cgroup)
+            sample["memory_max"] = (cgroup / "memory.max").read_text().strip()
+            sample["swap_max"] = (cgroup / "memory.swap.max").read_text().strip()
+            observation["last_cgroup_sample"] = sample
+        except OSError:
+            pass  # Scope may have been removed; retain the last actual sample.
+
+
+def finish_observation(unit, observation):
+    observe_scope(unit, observation)
+    query = subprocess.run(
+        ["systemctl", "--user", "show", unit + ".scope", "--property=MemoryPeak",
+         "--property=MemoryCurrent", "--property=MemorySwapCurrent", "--property=Result"],
+        capture_output=True, text=True, check=False,
+    )
+    observation["systemd_final"] = {
+        "returncode": query.returncode,
+        "properties": dict(line.split("=", 1) for line in query.stdout.splitlines() if "=" in line),
+        "stderr": query.stderr.strip(),
+    }
+    peak = observation["systemd_final"]["properties"].get("MemoryPeak", "")
+    # UINT64_MAX is systemd's unavailable/infinity sentinel, not a measured peak.
+    observation["final_peak_bytes"] = (
+        int(peak) if query.returncode == 0 and peak.isdigit() and int(peak) < 2**64 - 1 else None
+    )
+    sample = observation["last_cgroup_sample"]
+    observation["sampled_peak_lower_bound_bytes"] = sample["peak_bytes"] if sample else None
+    observation["final_peak_unavailable"] = observation["final_peak_bytes"] is None
+
+
 def proof_worker(args):
     report = {"accepted": False, "command": COMMAND, "timeout_seconds": TIMEOUT_SECONDS}
     try:
@@ -208,9 +250,9 @@ def proof_worker(args):
         if not re.search(r"^Kani Rust Verifier \S+", version.stdout, re.MULTILINE) or not re.search(
                 r"^CBMC \S+", version.stdout, re.MULTILINE):
             raise GateError("Kani did not report both installed Kani and CBMC versions")
-        before = input_hashes(args.fixture)
-        report["source_sha256"] = before
-        report["commit"] = git(args.fixture, "rev-parse", "HEAD")
+        before = input_bytes(args.fixture)
+        expected_status = git(args.fixture, "status", "--porcelain", "--untracked-files=normal")
+        expected_patch = git(args.fixture, "diff", "--binary")
         started = time.monotonic()
         with (args.report / "kani.log").open("w") as output:
             process = subprocess.Popen(COMMAND, cwd=args.fixture, env=env,
@@ -228,7 +270,9 @@ def proof_worker(args):
                     process.wait()
                 raise
         report.update(wall_seconds=time.monotonic() - started, returncode=process.returncode)
-        if before != input_hashes(args.fixture):
+        if (before != input_bytes(args.fixture)
+                or expected_status != git(args.fixture, "status", "--porcelain", "--untracked-files=normal")
+                or expected_patch != git(args.fixture, "diff", "--binary")):
             raise GateError("Kani changed its source inputs or lockfile")
         report["memory"] = memory_record(cgroup)
         if (report["memory"]["peak_bytes"] > MEMORY_BYTES or report["memory"]["swap_bytes"]
@@ -249,12 +293,11 @@ def proof_worker(args):
 def run_gate(args):
     root = Path(__file__).resolve().parent.parent
     args.report.mkdir(parents=True, exist_ok=False)
-    original = input_hashes(root)
-    report = {"accepted": False, "source_sha256": original, "proofs": {}}
+    original = input_bytes(root)
+    report = {"accepted": False, "proofs": {}}
     owned_worktrees = []
     try:
         commit = require_clean(root)
-        report["commit"] = commit
         reject_unrelated_heavy_processes()
         if shutil.disk_usage(root).free < 20 * 1024**3:
             raise GateError("at least 20 GiB free disk is required")
@@ -271,7 +314,6 @@ def run_gate(args):
                 mutant_line = mutate_all_loop(fixture) if name == "all-loop" else None
                 lane = args.report / name
                 lane.mkdir()
-                write_json(lane / "source-sha256.json", input_hashes(fixture))
                 (lane / "source.patch").write_text(git(fixture, "diff", "--", "src/accounting.rs") + "\n")
                 unit = "meter-kani-" + uuid.uuid4().hex
                 command = [
@@ -282,10 +324,17 @@ def run_gate(args):
                 ]
                 if mutant_line is not None:
                     command.extend(["--mutant-line", str(mutant_line)])
+                observation = {"unit": unit + ".scope", "cgroup": None, "last_cgroup_sample": None}
                 with (lane / "scope.log").open("w") as output:
                     process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT)
                     try:
-                        returncode = process.wait()
+                        while process.poll() is None:
+                            observe_scope(unit, observation)
+                            try:
+                                process.wait(timeout=0.05)
+                            except subprocess.TimeoutExpired:
+                                pass
+                        returncode = process.returncode
                     except BaseException:
                         # Terminate this invocation's whole proof scope before its
                         # private worktree can be removed underneath a live backend.
@@ -298,10 +347,14 @@ def run_gate(args):
                                            stdout=output, stderr=subprocess.STDOUT, check=False)
                             process.wait()
                         raise
+                    finally:
+                        finish_observation(unit, observation)
+                        write_json(lane / "resource-observation.json", observation)
+                report["proofs"][name] = {"accepted": False, "resource_observation": observation}
                 result_path = lane / "result.json"
                 if not result_path.is_file():
                     raise GateError(f"{name}: no worker result; inspect scope.log (scope exit {returncode})")
-                report["proofs"][name] = json.loads(result_path.read_text())
+                report["proofs"][name].update(json.loads(result_path.read_text()))
                 if returncode or not report["proofs"][name]["accepted"]:
                     raise GateError(f"{name}: proof/control failed; inspect result.json and kani.log")
         finally:
@@ -315,7 +368,7 @@ def run_gate(args):
     except (GateError, OSError, subprocess.SubprocessError, KeyboardInterrupt) as error:
         report["error"] = str(error) or "interrupted"
     finally:
-        if input_hashes(root) != original:
+        if input_bytes(root) != original:
             report.update(accepted=False, error="checked-out crate inputs changed during the gate")
         write_json(args.report / "result.json", report)
     print(f"Meter Kani gate: {'PASS' if report['accepted'] else 'FAIL'}; report: {args.report}")
