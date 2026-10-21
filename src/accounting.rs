@@ -1401,9 +1401,12 @@ mod tests {
                 Some((LimitKind::DecimalDigits, 2))
             ]
         );
-        let four = two
-            .size(LimitKind::ScaleExpansion, 3)
-            .size(LimitKind::TextInputBytes, 4);
+        let three = two.size(LimitKind::ScaleExpansion, 3);
+        let ChargeStorage::General(general) = &three.storage else {
+            panic!("third request must promote");
+        };
+        assert_eq!(general.sizes.overflow.len(), 1);
+        let four = three.size(LimitKind::TextInputBytes, 4);
         let ChargeStorage::General(general) = four.storage else {
             panic!("third request must promote");
         };
