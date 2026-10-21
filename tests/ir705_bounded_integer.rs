@@ -174,6 +174,93 @@ fn construction_boundaries_and_sampled_arithmetic_match_independent_oracles() {
 }
 
 #[test]
+#[trace("FR-371-AC-2")]
+fn structural_comparisons_match_independent_bigint_order_across_all_storage_pairs() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut cases = Vec::new();
+    for value in [i64::MIN, -1, 0, 1, i64::MAX] {
+        cases.push((Integer::from(value), BigInt::from(value)));
+        cases.push((Integer::from(i128::from(value)), BigInt::from(value)));
+    }
+    for value in [i128::MIN, i128::MAX] {
+        cases.push((Integer::from(value), BigInt::from(value)));
+    }
+    for expected in [
+        BigInt::from(i128::MIN) - 1_u8,
+        BigInt::from(i128::MAX) + 1_u8,
+        -(BigInt::from(1_u8) << 200_u32),
+        BigInt::from(1_u8) << 200_u32,
+    ] {
+        cases.push((Integer::from_big(expected.clone()), expected));
+    }
+    for materialized in [false, true] {
+        if materialized {
+            for (actual, expected) in &cases {
+                assert_eq!(actual.as_big(), expected);
+            }
+        }
+        for (left, left_reference) in &cases {
+            assert_eq!(left.cmp(left), core::cmp::Ordering::Equal);
+            for (right, right_reference) in &cases {
+                let expected = left_reference.cmp(right_reference);
+                assert_eq!(left.cmp(right), expected);
+                assert_eq!(left.partial_cmp(right), Some(expected));
+                assert_eq!(left == right, left_reference == right_reference);
+                assert_eq!(right.cmp(left), expected.reverse());
+            }
+        }
+        for (actual, expected) in &cases {
+            let cloned = actual.clone();
+            assert_eq!(&cloned, actual);
+            assert_eq!(cloned.as_big(), expected);
+            let mut actual_hash = DefaultHasher::new();
+            let mut reference_hash = DefaultHasher::new();
+            actual.hash(&mut actual_hash);
+            expected.hash(&mut reference_hash);
+            assert_eq!(actual_hash.finish(), reference_hash.finish());
+            assert_eq!(actual.to_string(), expected.to_string());
+            assert_eq!(format!("{actual:?}"), format!("Integer({expected:?})"));
+        }
+    }
+}
+
+// Resource diagnostic for mixed comparisons, not an assertion that AC-4
+// already promises allocation-free comparisons for every Large input.
+#[test]
+#[trace("FR-371-AC-2")]
+fn mixed_large_inline_comparisons_do_not_allocate_inline_bigint_images() {
+    for reference in [
+        BigInt::from(i128::MIN) - 1_u8,
+        BigInt::from(i128::MAX) + 1_u8,
+        -(BigInt::from(1_u8) << 200_u32),
+        BigInt::from(1_u8) << 200_u32,
+    ] {
+        let large = Integer::from_big(reference.clone());
+        for (inline, inline_reference) in [
+            (Integer::from(i64::MIN), BigInt::from(i64::MIN)),
+            (Integer::from(i64::MAX), BigInt::from(i64::MAX)),
+            (Integer::from(i128::MIN), BigInt::from(i128::MIN)),
+            (Integer::from(i128::MAX), BigInt::from(i128::MAX)),
+        ] {
+            let expected = inline_reference.cmp(&reference);
+            let mut observed = None;
+            let allocations = allocation_counter::measure(|| {
+                observed = Some((inline == large, large == inline, inline.cmp(&large), large.cmp(&inline)));
+            });
+            assert_eq!(allocations.count_total, 0);
+            assert_eq!(allocations.bytes_total, 0);
+            let (left_equal, right_equal, left_order, right_order) = observed.unwrap();
+            assert!(!left_equal);
+            assert!(!right_equal);
+            assert_eq!(left_order, expected);
+            assert_eq!(right_order, expected.reverse());
+        }
+    }
+}
+
+#[test]
 #[trace("FR-371-AC-1", "FR-371-AC-2")]
 fn mixed_constructor_pairs_preserve_arithmetic_and_public_observations() {
     use std::collections::hash_map::DefaultHasher;
