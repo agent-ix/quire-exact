@@ -117,19 +117,37 @@ impl PartialOrd for Integer {
 impl Ord for Integer {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         match (&self.0, &other.0) {
-            (IntegerRepr::Small64 { value: left, .. }, IntegerRepr::Small64 { value: right, .. }) => left.cmp(right),
-            (IntegerRepr::Small64 { value: left, .. }, IntegerRepr::Small128 { value: right, .. }) => i128::from(*left).cmp(right),
-            (IntegerRepr::Small128 { value: left, .. }, IntegerRepr::Small64 { value: right, .. }) => left.cmp(&i128::from(*right)),
-            (IntegerRepr::Small128 { value: left, .. }, IntegerRepr::Small128 { value: right, .. }) => left.cmp(right),
+            (
+                IntegerRepr::Small64 { value: left, .. },
+                IntegerRepr::Small64 { value: right, .. },
+            ) => left.cmp(right),
+            (
+                IntegerRepr::Small64 { value: left, .. },
+                IntegerRepr::Small128 { value: right, .. },
+            ) => i128::from(*left).cmp(right),
+            (
+                IntegerRepr::Small128 { value: left, .. },
+                IntegerRepr::Small64 { value: right, .. },
+            ) => left.cmp(&i128::from(*right)),
+            (
+                IntegerRepr::Small128 { value: left, .. },
+                IntegerRepr::Small128 { value: right, .. },
+            ) => left.cmp(right),
             (IntegerRepr::Large(left), IntegerRepr::Large(right)) => left.cmp(right),
-            (IntegerRepr::Large(left), IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. }) => {
+            (
+                IntegerRepr::Large(left),
+                IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. },
+            ) => {
                 if left.is_negative() {
                     core::cmp::Ordering::Less
                 } else {
                     core::cmp::Ordering::Greater
                 }
             }
-            (IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. }, IntegerRepr::Large(right)) => {
+            (
+                IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. },
+                IntegerRepr::Large(right),
+            ) => {
                 if right.is_negative() {
                     core::cmp::Ordering::Greater
                 } else {
@@ -862,7 +880,10 @@ mod tests {
         let below = BigInt::from(i128::MIN) - 1_u8;
         let huge = BigInt::from(1_u8) << 200_u32;
         for expected in [above, below, huge.clone(), -huge] {
-            for actual in [Integer::from_big(expected.clone()), Integer::from_str(&expected.to_string()).unwrap()] {
+            for actual in [
+                Integer::from_big(expected.clone()),
+                Integer::from_str(&expected.to_string()).unwrap(),
+            ] {
                 assert!(matches!(&actual.0, IntegerRepr::Large(_)));
                 assert!(i128::try_from(actual.as_big()).is_err());
                 assert_eq!(actual.as_big(), &expected);
@@ -874,10 +895,19 @@ mod tests {
         let min = Integer::from(i128::MIN);
         let max = Integer::from(i128::MAX);
         for (actual, expected) in [
-            (max.add(&Integer::one()), "170141183460469231731687303715884105728"),
-            (min.sub(&Integer::one()), "-170141183460469231731687303715884105729"),
+            (
+                max.add(&Integer::one()),
+                "170141183460469231731687303715884105728",
+            ),
+            (
+                min.sub(&Integer::one()),
+                "-170141183460469231731687303715884105729",
+            ),
             (min.neg(), "170141183460469231731687303715884105728"),
-            (min.mul(&Integer::from(-1_i64)), "170141183460469231731687303715884105728"),
+            (
+                min.mul(&Integer::from(-1_i64)),
+                "170141183460469231731687303715884105728",
+            ),
         ] {
             assert!(matches!(&actual.0, IntegerRepr::Large(_)));
             assert!(i128::try_from(actual.as_big()).is_err());
@@ -894,7 +924,12 @@ mod tests {
     fn mixed_comparisons_preserve_empty_inline_caches_and_later_borrows() {
         let positive = Integer::from_big(BigInt::from(1_u8) << 200_u32);
         let negative = positive.neg();
-        for inline in [Integer::from(i64::MIN), Integer::from(i64::MAX), Integer::from(i128::MIN), Integer::from(i128::MAX)] {
+        for inline in [
+            Integer::from(i64::MIN),
+            Integer::from(i64::MAX),
+            Integer::from(i128::MIN),
+            Integer::from(i128::MAX),
+        ] {
             assert_empty_inline_cache(&inline);
             assert!(negative < inline);
             assert!(inline < positive);

@@ -247,7 +247,12 @@ fn mixed_large_inline_comparisons_do_not_allocate_inline_bigint_images() {
             let expected = inline_reference.cmp(&reference);
             let mut observed = None;
             let allocations = allocation_counter::measure(|| {
-                observed = Some((inline == large, large == inline, inline.cmp(&large), large.cmp(&inline)));
+                observed = Some((
+                    inline == large,
+                    large == inline,
+                    inline.cmp(&large),
+                    large.cmp(&inline),
+                ));
             });
             assert_eq!(allocations.count_total, 0);
             assert_eq!(allocations.bytes_total, 0);
