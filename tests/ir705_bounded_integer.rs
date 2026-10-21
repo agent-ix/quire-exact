@@ -191,19 +191,38 @@ fn canonical_parsing_preserves_native_boundaries_and_arbitrary_precision() {
         assert_eq!(parsed.to_string(), spelling);
     }
 
-    let positive_overflow = Integer::from_str("170141183460469231731687303715884105728")
-        .unwrap();
-    let negative_overflow = Integer::from_str("-170141183460469231731687303715884105729")
-        .unwrap();
-    assert_eq!(positive_overflow.sub(&Integer::one()), Integer::from(i128::MAX));
-    assert_eq!(negative_overflow.add(&Integer::one()), Integer::from(i128::MIN));
+    let positive_overflow = Integer::from_str("170141183460469231731687303715884105728").unwrap();
+    let negative_overflow = Integer::from_str("-170141183460469231731687303715884105729").unwrap();
+    assert_eq!(
+        positive_overflow.sub(&Integer::one()),
+        Integer::from(i128::MAX)
+    );
+    assert_eq!(
+        negative_overflow.add(&Integer::one()),
+        Integer::from(i128::MIN)
+    );
 
     for (spelling, expected) in [
-        ("170141183460469231731687303715884105728", BigInt::from(1_u8) << 127_u32),
-        ("-170141183460469231731687303715884105729", -(BigInt::from(1_u8) << 127_u32) - 1_u8),
-        ("1267650600228229401496703205376", BigInt::from(1_u8) << 100_u32),
-        ("1606938044258990275541962092341162602522202993782792835301376", BigInt::from(1_u8) << 200_u32),
-        ("-1606938044258990275541962092341162602522202993782792835301376", -(BigInt::from(1_u8) << 200_u32)),
+        (
+            "170141183460469231731687303715884105728",
+            BigInt::from(1_u8) << 127_u32,
+        ),
+        (
+            "-170141183460469231731687303715884105729",
+            -(BigInt::from(1_u8) << 127_u32) - 1_u8,
+        ),
+        (
+            "1267650600228229401496703205376",
+            BigInt::from(1_u8) << 100_u32,
+        ),
+        (
+            "1606938044258990275541962092341162602522202993782792835301376",
+            BigInt::from(1_u8) << 200_u32,
+        ),
+        (
+            "-1606938044258990275541962092341162602522202993782792835301376",
+            -(BigInt::from(1_u8) << 200_u32),
+        ),
     ] {
         let parsed = Integer::from_str(spelling).unwrap();
         assert_eq!(parsed.as_big(), &expected);
@@ -211,12 +230,32 @@ fn canonical_parsing_preserves_native_boundaries_and_arbitrary_precision() {
     }
 
     for spelling in [
-        "", "-", "+1", "+0", "00", "01", "-0", "-01", " 1", "1 ", "1\n",
-        "1_000", "1.0", "1e3", "--1", "١", "１", "−1",
+        "",
+        "-",
+        "+1",
+        "+0",
+        "00",
+        "01",
+        "-0",
+        "-01",
+        " 1",
+        "1 ",
+        "1\n",
+        "1_000",
+        "1.0",
+        "1e3",
+        "--1",
+        "١",
+        "１",
+        "−1",
         "+170141183460469231731687303715884105728",
         "01606938044258990275541962092341162602522202993782792835301376",
     ] {
-        assert_eq!(Integer::from_str(spelling), Err(quire_exact::NonCanonicalInteger), "{spelling:?}");
+        assert_eq!(
+            Integer::from_str(spelling),
+            Err(quire_exact::NonCanonicalInteger),
+            "{spelling:?}"
+        );
     }
 }
 
