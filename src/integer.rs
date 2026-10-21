@@ -380,10 +380,14 @@ impl Integer {
     /// `self + other`. Exact; unbounded `Integer` addition never overflows.
     pub fn add(&self, other: &Self) -> Self {
         match (self.native(), other.native()) {
-            (Some(left), Some(right)) => left
-                .checked_add(right)
-                .map(Self::small)
-                .unwrap_or_else(|| Self::from_big_normalized(self.as_big() + other.as_big())),
+            (Some(left), Some(right)) => {
+                if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
+                    return Self::small(i128::from(left) + i128::from(right));
+                }
+                left.checked_add(right)
+                    .map(Self::small)
+                    .unwrap_or_else(|| Self::from_big_normalized(self.as_big() + other.as_big()))
+            }
             _ => Self::from_big_normalized(self.as_big() + other.as_big()),
         }
     }
@@ -392,10 +396,14 @@ impl Integer {
     /// overflows.
     pub fn sub(&self, other: &Self) -> Self {
         match (self.native(), other.native()) {
-            (Some(left), Some(right)) => left
-                .checked_sub(right)
-                .map(Self::small)
-                .unwrap_or_else(|| Self::from_big_normalized(self.as_big() - other.as_big())),
+            (Some(left), Some(right)) => {
+                if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
+                    return Self::small(i128::from(left) - i128::from(right));
+                }
+                left.checked_sub(right)
+                    .map(Self::small)
+                    .unwrap_or_else(|| Self::from_big_normalized(self.as_big() - other.as_big()))
+            }
             _ => Self::from_big_normalized(self.as_big() - other.as_big()),
         }
     }
@@ -404,10 +412,14 @@ impl Integer {
     /// overflows.
     pub fn mul(&self, other: &Self) -> Self {
         match (self.native(), other.native()) {
-            (Some(left), Some(right)) => left
-                .checked_mul(right)
-                .map(Self::small)
-                .unwrap_or_else(|| Self::from_big_normalized(self.as_big() * other.as_big())),
+            (Some(left), Some(right)) => {
+                if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
+                    return Self::small(i128::from(left) * i128::from(right));
+                }
+                left.checked_mul(right)
+                    .map(Self::small)
+                    .unwrap_or_else(|| Self::from_big_normalized(self.as_big() * other.as_big()))
+            }
             _ => Self::from_big_normalized(self.as_big() * other.as_big()),
         }
     }
@@ -415,10 +427,15 @@ impl Integer {
     /// `-self`.
     pub fn neg(&self) -> Self {
         match self.native() {
-            Some(value) => value
-                .checked_neg()
-                .map(Self::small)
-                .unwrap_or_else(|| Self::from_big_normalized(-self.as_big())),
+            Some(value) => {
+                if let Ok(value) = i64::try_from(value) {
+                    return Self::small(-i128::from(value));
+                }
+                value
+                    .checked_neg()
+                    .map(Self::small)
+                    .unwrap_or_else(|| Self::from_big_normalized(-self.as_big()))
+            }
             None => Self::from_big_normalized(-self.as_big()),
         }
     }
