@@ -5,7 +5,32 @@
 use super::reference::MathematicalInteger as Math;
 use super::*;
 
+// Every valid inclusive interval has exactly one of these sign classes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum IntervalSign {
+    Negative,
+    Nonnegative,
+    Straddling,
+}
+
+fn interval_sign(interval: NativeIntegerInterval) -> IntervalSign {
+    if interval.upper < 0 {
+        IntervalSign::Negative
+    } else if interval.lower >= 0 {
+        IntervalSign::Nonnegative
+    } else {
+        IntervalSign::Straddling
+    }
+}
+
 fn refinement(kind: NativeIntegerOperationKind) {
+    refinement_in_partition(kind, None);
+}
+
+fn refinement_in_partition(
+    kind: NativeIntegerOperationKind,
+    partition: Option<(IntervalSign, IntervalSign)>,
+) {
     let a: i128 = kani::any();
     let b: i128 = kani::any();
     let c: i128 = kani::any();
@@ -14,6 +39,13 @@ fn refinement(kind: NativeIntegerOperationKind) {
     let y: i128 = kani::any();
     let left = NativeIntegerInterval::new(a.min(b), a.max(b)).unwrap();
     let right = NativeIntegerInterval::new(c.min(d), c.max(d)).unwrap();
+    if let Some((left_sign, right_sign)) = partition {
+        // These are exhaustive proof partitions, not an admission assumption:
+        // all nine pairs plus interval_sign_partition_is_exhaustive are needed.
+        // In particular no capacity or payload-membership premise is assumed.
+        kani::assume(interval_sign(left) == left_sign);
+        kani::assume(interval_sign(right) == right_sign);
+    }
     let operation = match kind {
         NativeIntegerOperationKind::Add => NativeIntegerOperation::Add { left, right },
         NativeIntegerOperationKind::Subtract => NativeIntegerOperation::Subtract { left, right },
@@ -141,5 +173,98 @@ fn native_ordering_refines_mathematical_integer() {
     kani::cover!(
         left == i128::MIN && right == i128::MAX && matches!(result, Outcome::Completed(_)),
         "full-width ordering completion witness"
+    );
+}
+
+/// Establish that the partition guards classify every native interval exactly
+/// once. The predicates here are explicit mathematical endpoint conditions;
+/// they are checked against the function used by the nine proof guards.
+#[kani::proof]
+fn interval_sign_partition_is_exhaustive() {
+    let a: i128 = kani::any();
+    let b: i128 = kani::any();
+    let interval = NativeIntegerInterval::new(a.min(b), a.max(b)).unwrap();
+    let negative = interval.upper < 0;
+    let nonnegative = interval.lower >= 0;
+    let straddling = interval.lower < 0 && interval.upper >= 0;
+    assert_eq!(u8::from(negative) + u8::from(nonnegative) + u8::from(straddling), 1);
+    let classification = interval_sign(interval);
+    assert_eq!(classification == IntervalSign::Negative, negative);
+    assert_eq!(classification == IntervalSign::Nonnegative, nonnegative);
+    assert_eq!(classification == IntervalSign::Straddling, straddling);
+    kani::cover!(negative, "negative interval witness");
+    kani::cover!(nonnegative, "nonnegative interval witness");
+    kani::cover!(straddling, "straddling interval witness");
+}
+
+#[kani::proof]
+fn native_multiply_negative_negative_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Negative, IntervalSign::Negative)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_negative_nonnegative_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Negative, IntervalSign::Nonnegative)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_negative_straddling_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Negative, IntervalSign::Straddling)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_nonnegative_negative_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Nonnegative, IntervalSign::Negative)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_nonnegative_nonnegative_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Nonnegative, IntervalSign::Nonnegative)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_nonnegative_straddling_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Nonnegative, IntervalSign::Straddling)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_straddling_negative_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Straddling, IntervalSign::Negative)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_straddling_nonnegative_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Straddling, IntervalSign::Nonnegative)),
+    );
+}
+
+#[kani::proof]
+fn native_multiply_straddling_straddling_refines_mathematical_integer() {
+    refinement_in_partition(
+        NativeIntegerOperationKind::Multiply,
+        Some((IntervalSign::Straddling, IntervalSign::Straddling)),
     );
 }
