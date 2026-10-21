@@ -227,3 +227,7 @@ scope:
     \ operands (up to two size requests),\n    // arithmetic (one) and result-retain (none).\n    let operand_bits\
     \ = bits(left).max(bits(right));\n    let (operands, count, arithmetic_bit"
 ```
+
+## Disposition Round 1
+
+PASS retained. Inspected frozen fix head `8cacb30872e724094260d8bc92ec6432a58c3232`: only two Status wording changes plus original review-file custody. Both Rust files byte-match qualified source. No new finding, no source change, no heavy rerun. No dispositions comment is required for this artifact because it had no findings.

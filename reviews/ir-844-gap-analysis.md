@@ -1288,3 +1288,45 @@ scope:
   excerpt: The public `Meter::cancel(&self) -> Option<&Cancel>` signature compiles in the crate's `no_std` + `alloc`
     build.
 ```
+
+## Dispositions
+
+Round 1, inspected frozen fix head `8cacb30872e724094260d8bc92ec6432a58c3232`. Original finding rows and review scope are preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Assigned follow-up IR-810 owns the real executable FR-359-AC-9 binding and persistent proof gate. Its actual handoff comment fe73c787-aaed-483e-8d28-a62870a9a6ea explicitly retains this work in the user-assigned chain. Healthy proof/control evidence is complete but the local binding remains absent; no Covered or Done claim. |
+| FND-002 | deferred | Assigned follow-up IR-17 owns the original external FR-359-AC-10 consumer adoption receipt, still UNRUN. Actual owner handoff comment 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec retains all five original consumer tests and expected verdicts in the user-assigned chain. Kernel evidence supplies no substitute and no local Covered claim. |
+| FND-003 | deferred | Assigned follow-up IR-17 owns the original FR-371-AC-6 external healthy/bound-mutant/arithmetic-mutant qualification, still outstanding. Actual owner handoff comment 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec preserves the original domains and required verdicts. This inherited consumer gap is not closed by the Meter change. |
+| FND-004 | deferred | Explicitly out of scope for IR-844 Meter encoding: the unchanged FR-383-AC-4 cancel-accessor verification-method/binding discrepancy returns to original IR-895 IR-team owner via actual comment 34ab0c74-b3c9-4dd5-9f84-e9d25e146366. Current actual bare-metal build passed; FR-383 already documents its missing source binding. IR-895 delivered behavior remains Done, no regression/reopen or fake coverage is claimed, and IR-810 is not expanded. |
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: deferred
+  reason: Assigned follow-up IR-810 owns the real executable FR-359-AC-9 binding and persistent proof gate. Its
+    actual handoff comment fe73c787-aaed-483e-8d28-a62870a9a6ea explicitly retains this work in the user-assigned
+    chain. Healthy proof/control evidence is complete but the local binding remains absent; no Covered or Done claim.
+- fnd: FND-002
+  outcome: deferred
+  reason: Assigned follow-up IR-17 owns the original external FR-359-AC-10 consumer adoption receipt, still UNRUN.
+    Actual owner handoff comment 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec retains all five original consumer tests and
+    expected verdicts in the user-assigned chain. Kernel evidence supplies no substitute and no local Covered claim.
+- fnd: FND-003
+  outcome: deferred
+  reason: Assigned follow-up IR-17 owns the original FR-371-AC-6 external healthy/bound-mutant/arithmetic-mutant
+    qualification, still outstanding. Actual owner handoff comment 8c2f9ca5-4601-49ff-a56a-8ce0528fc7ec preserves
+    the original domains and required verdicts. This inherited consumer gap is not closed by the Meter change.
+- fnd: FND-004
+  outcome: deferred
+  reason: 'Explicitly out of scope for IR-844 Meter encoding: the unchanged FR-383-AC-4 cancel-accessor verification-method/binding
+    discrepancy returns to original IR-895 IR-team owner via actual comment 34ab0c74-b3c9-4dd5-9f84-e9d25e146366.
+    Current actual bare-metal build passed; FR-383 already documents its missing source binding. IR-895 delivered
+    behavior remains Done, no regression/reopen or fake coverage is claimed, and IR-810 is not expanded.'
+```
+
+## Current Disposition Verdict
+
+No unresolved finding blocks this PR after explicit inherited-gap deferrals. The historical repository audit remains FAIL: four computed gaps remain open under named owners. This is not repository-wide coverage acceptance.
+
+Only two Status wording changes and verbatim custody of the original three SR files landed in the fix. Both Rust files still byte-match qualified source; no new tests or heavy checks were warranted.

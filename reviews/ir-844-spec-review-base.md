@@ -235,3 +235,30 @@ scope:
     succeeded. Verification took 131.5852 s; command wall time was 137.15 s. The cgroup measured 8,183,332,864 bytes
     peak under an enforced 17,179,869,184-byte ceiling, zero'
 ```
+
+## Dispositions
+
+Round 1, inspected frozen fix head `8cacb30872e724094260d8bc92ec6432a58c3232`. Original finding rows and review scope are preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Actual fix removes the recorded source revision; the complete measured result remains unchanged. |
+| FND-002 | fixed | Actual fix removes the recorded source revision; the complete measured result remains unchanged. |
+
+```yaml
+dispositions:
+- fnd: FND-001
+  outcome: fixed
+  after_excerpt: 'IR-844 baseline evidence: Kani 0.68.0 / CBMC 6.11.0 / CaDiCaL 3.0.0 returned `Verified`, with
+    0 failed checks out of 2,565 (2,534 successful and 31 unreachable); all six unwinding checks succeeded.'
+- fnd: FND-002
+  outcome: fixed
+  after_excerpt: 'The IR-844 baseline is `Verified` with Kani 0.68.0, CBMC 6.11.0 and CaDiCaL 3.0.0: 0 / 2,565 checks
+    failed, 2,534 succeeded, 31 were unreachable and all six unwinding checks succeeded.'
+```
+
+## Current Disposition Verdict
+
+Both requested revision-record removals are fixed at the actual frozen fix head. No new finding. Current specification disposition is PASS.
+
+Only two Status wording changes and verbatim custody of the original three SR files landed in the fix. Both Rust files still byte-match qualified source; no new tests or heavy checks were warranted.
