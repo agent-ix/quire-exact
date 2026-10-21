@@ -431,7 +431,8 @@ impl Integer {
                 if let Ok(value) = i64::try_from(value) {
                     return Self::small(-i128::from(value));
                 }
-                value.checked_neg()
+                value
+                    .checked_neg()
                     .map(Self::small)
                     .unwrap_or_else(|| Self::from_big_normalized(-self.as_big()))
             }

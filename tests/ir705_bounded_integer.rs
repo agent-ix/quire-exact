@@ -180,21 +180,40 @@ fn signed_i64_extremes_refine_all_four_widened_operations() {
     for left in values {
         let left_integer = Integer::from(left);
         let left_reference = i128::from(left);
-        assert_eq!(left_integer.neg(), Integer::from(left_reference.checked_neg().unwrap()));
+        assert_eq!(
+            left_integer.neg(),
+            Integer::from(left_reference.checked_neg().unwrap())
+        );
         for right in values {
             let right_integer = Integer::from(right);
             let right_reference = i128::from(right);
             for (actual, expected) in [
-                (left_integer.add(&right_integer), left_reference.checked_add(right_reference)),
-                (left_integer.sub(&right_integer), left_reference.checked_sub(right_reference)),
-                (left_integer.mul(&right_integer), left_reference.checked_mul(right_reference)),
+                (
+                    left_integer.add(&right_integer),
+                    left_reference.checked_add(right_reference),
+                ),
+                (
+                    left_integer.sub(&right_integer),
+                    left_reference.checked_sub(right_reference),
+                ),
+                (
+                    left_integer.mul(&right_integer),
+                    left_reference.checked_mul(right_reference),
+                ),
             ] {
-                assert_eq!(actual, Integer::from(expected.unwrap()), "left={left}, right={right}");
+                assert_eq!(
+                    actual,
+                    Integer::from(expected.unwrap()),
+                    "left={left}, right={right}"
+                );
             }
         }
     }
     let min = Integer::from(i64::MIN);
-    assert_eq!(min.mul(&min).to_string(), "85070591730234615865843651857942052864");
+    assert_eq!(
+        min.mul(&min).to_string(),
+        "85070591730234615865843651857942052864"
+    );
     assert_eq!(min.neg().to_string(), "9223372036854775808");
 }
 
@@ -220,9 +239,18 @@ fn failed_width_guards_retain_full_i128_and_arbitrary_precision_results() {
             let right_integer = Integer::from(right);
             let right_reference = BigInt::from(right);
             for (actual, expected) in [
-                (left_integer.add(&right_integer), &left_reference + &right_reference),
-                (left_integer.sub(&right_integer), &left_reference - &right_reference),
-                (left_integer.mul(&right_integer), &left_reference * &right_reference),
+                (
+                    left_integer.add(&right_integer),
+                    &left_reference + &right_reference,
+                ),
+                (
+                    left_integer.sub(&right_integer),
+                    &left_reference - &right_reference,
+                ),
+                (
+                    left_integer.mul(&right_integer),
+                    &left_reference * &right_reference,
+                ),
             ] {
                 assert_eq!(actual.as_big(), &expected, "left={left}, right={right}");
             }
