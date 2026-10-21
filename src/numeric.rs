@@ -484,7 +484,7 @@ mod tests {
             );
             if amount > Integer::from(u64::MAX) {
                 let refusal = result.unwrap_err();
-                assert_eq!(refusal.point, ChargePoint::IntegerArithmeticArithmetic);
+                assert_eq!(refusal.charge_point, ChargePoint::IntegerArithmeticArithmetic);
                 assert_eq!(refusal.limit_kind, LimitKind::IntegerBits);
                 assert_eq!(refusal.limit, u64::MAX);
                 assert_eq!(refusal.consumed, 0);
