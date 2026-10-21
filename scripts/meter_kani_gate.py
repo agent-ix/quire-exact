@@ -139,7 +139,7 @@ def classify(log, returncode, mutant_line=None):
         verdict = "Verified"
         marker = "VERIFICATION:- SUCCESSFUL"
     else:
-        if returncode != 1 or statuses - {"SUCCESS", "UNREACHABLE", "UNDETERMINED", "FAILURE"}:
+        if returncode != 1 or statuses - {"SUCCESS", "UNREACHABLE", "FAILURE"}:
             raise GateError("ALL-loop control was inconclusive")
         if len(failures) != 1:
             raise GateError("ALL-loop control must fail exactly one assertion")

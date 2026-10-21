@@ -76,6 +76,14 @@ class VerdictTests(unittest.TestCase):
             with self.subTest(returncode=returncode), self.assertRaises(gate.GateError):
                 gate.classify(log(True), returncode, 862)
 
+    def test_expected_unwind_does_not_accept_an_unresolved_companion(self):
+        resolved = log(True) + check(2, "companion.assertion.1", "SUCCESS")
+        self.assertEqual(gate.classify(resolved, 1, 862)["verdict"],
+                         "ExpectedProductionUnwindFailure")
+        unresolved = log(True) + check(2, "companion.assertion.1", "UNDETERMINED")
+        with self.assertRaises(gate.GateError):
+            gate.classify(unresolved, 1, 862)
+
     def test_mutation_keeps_original_input_and_targets_real_request_loop(self):
         original = (Path(__file__).parent.parent / "src/accounting.rs").read_bytes()
         with tempfile.TemporaryDirectory() as temporary:

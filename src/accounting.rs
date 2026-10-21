@@ -1426,7 +1426,7 @@ mod tests {
         );
     }
 
-    #[trace("FR-359-AC-8", "FR-358-AC-13")]
+    #[trace("FR-359-AC-8")]
     #[test]
     fn common_and_promoted_builder_histories_have_identical_observations() {
         let point = ChargePoint::FunctionCall;
