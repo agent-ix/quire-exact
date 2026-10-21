@@ -2,7 +2,6 @@
 //! Integer representation refinement observations (FR-371).
 
 use core::num::{NonZeroU32, NonZeroU64};
-#[cfg(not(feature = "test-support"))]
 use ix_trace_rs::trace;
 use num_bigint::BigInt;
 use std::{str::FromStr, string::ToString};
@@ -171,6 +170,119 @@ fn construction_boundaries_and_sampled_arithmetic_match_independent_oracles() {
         let spelling = left.to_string();
         assert_eq!(Integer::from_str(&spelling).unwrap(), left_integer);
         assert_eq!(Integer::from_big(BigInt::from(left)), left_integer);
+    }
+}
+
+#[test]
+#[trace("FR-371-AC-1")]
+fn canonical_parsing_preserves_native_boundaries_and_arbitrary_precision() {
+    for (spelling, expected) in [
+        ("-170141183460469231731687303715884105728", i128::MIN),
+        ("170141183460469231731687303715884105727", i128::MAX),
+        ("-9223372036854775808", i128::from(i64::MIN)),
+        ("9223372036854775807", i128::from(i64::MAX)),
+        ("-1", -1),
+        ("0", 0),
+        ("1", 1),
+    ] {
+        let parsed = Integer::from_str(spelling).unwrap();
+        assert_eq!(parsed, Integer::from(expected));
+        assert_eq!(parsed.as_big(), &BigInt::from(expected));
+        assert_eq!(parsed.to_string(), spelling);
+    }
+
+    let positive_overflow = Integer::from_str("170141183460469231731687303715884105728")
+        .unwrap();
+    let negative_overflow = Integer::from_str("-170141183460469231731687303715884105729")
+        .unwrap();
+    assert_eq!(positive_overflow.sub(&Integer::one()), Integer::from(i128::MAX));
+    assert_eq!(negative_overflow.add(&Integer::one()), Integer::from(i128::MIN));
+
+    for (spelling, expected) in [
+        ("170141183460469231731687303715884105728", BigInt::from(1_u8) << 127_u32),
+        ("-170141183460469231731687303715884105729", -(BigInt::from(1_u8) << 127_u32) - 1_u8),
+        ("1267650600228229401496703205376", BigInt::from(1_u8) << 100_u32),
+        ("1606938044258990275541962092341162602522202993782792835301376", BigInt::from(1_u8) << 200_u32),
+        ("-1606938044258990275541962092341162602522202993782792835301376", -(BigInt::from(1_u8) << 200_u32)),
+    ] {
+        let parsed = Integer::from_str(spelling).unwrap();
+        assert_eq!(parsed.as_big(), &expected);
+        assert_eq!(parsed.to_string(), spelling);
+    }
+
+    for spelling in [
+        "", "-", "+1", "+0", "00", "01", "-0", "-01", " 1", "1 ", "1\n",
+        "1_000", "1.0", "1e3", "--1", "١", "１", "−1",
+        "+170141183460469231731687303715884105728",
+        "01606938044258990275541962092341162602522202993782792835301376",
+    ] {
+        assert_eq!(Integer::from_str(spelling), Err(quire_exact::NonCanonicalInteger), "{spelling:?}");
+    }
+}
+
+// Resource diagnostic for canonical construction, beyond AC-1's value contract;
+// AC-4's existing allocation promise covers primitive/arithmetic paths.
+#[test]
+#[trace("FR-371-AC-1")]
+fn fitting_canonical_parsing_requests_no_allocations() {
+    for (spelling, expected) in [
+        ("0", 0),
+        ("-1", -1),
+        ("1", 1),
+        ("-9223372036854775808", i128::from(i64::MIN)),
+        ("9223372036854775807", i128::from(i64::MAX)),
+        ("-170141183460469231731687303715884105728", i128::MIN),
+        ("170141183460469231731687303715884105727", i128::MAX),
+    ] {
+        let mut parsed = None;
+        let allocations = allocation_counter::measure(|| {
+            parsed = Some(Integer::from_str(spelling));
+        });
+        assert_eq!(allocations.count_total, 0, "{spelling}");
+        assert_eq!(allocations.bytes_total, 0, "{spelling}");
+        assert_eq!(parsed.unwrap().unwrap(), Integer::from(expected));
+    }
+}
+
+#[test]
+#[trace("FR-371-AC-2")]
+fn parsed_values_keep_observations_and_borrows_across_materialization_and_clone() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    for value in [i128::MIN, -1, 0, 1, i128::MAX] {
+        let spelling = value.to_string();
+        let parsed = Integer::from_str(&spelling).unwrap();
+        let routes = [
+            Integer::from(value),
+            Integer::from_big(BigInt::from(value)),
+            Integer::from(value).add(&Integer::zero()),
+        ];
+        let before_clone = parsed.clone();
+        // Display and native equality/order do not require BigInt observation.
+        assert_eq!(parsed.to_string(), spelling);
+        for other in &routes {
+            assert_eq!(&parsed, other);
+            assert_eq!(parsed.cmp(other), core::cmp::Ordering::Equal);
+        }
+        let borrowed = parsed.as_big();
+        assert_eq!(borrowed, &BigInt::from(value));
+        assert!(core::ptr::eq(borrowed, parsed.as_big()));
+        let after_clone = parsed.clone();
+        for other in routes.iter().chain([&before_clone, &after_clone]) {
+            let mut parsed_hash = DefaultHasher::new();
+            let mut other_hash = DefaultHasher::new();
+            parsed.hash(&mut parsed_hash);
+            other.hash(&mut other_hash);
+            assert_eq!(parsed_hash.finish(), other_hash.finish());
+            assert_eq!(format!("{parsed:?}"), format!("{other:?}"));
+            assert_eq!(other.to_string(), spelling);
+            assert_eq!(other.as_big(), borrowed);
+        }
+        drop(after_clone);
+        drop(before_clone);
+        assert_eq!(borrowed, &BigInt::from(value));
+        assert!(core::ptr::eq(borrowed, parsed.as_big()));
     }
 }
 

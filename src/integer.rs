@@ -616,6 +616,9 @@ impl FromStr for Integer {
         if !canonical {
             return Err(NonCanonicalInteger);
         }
+        if let Ok(value) = spelling.parse::<i128>() {
+            return Ok(Self::small(value));
+        }
         BigInt::from_str(spelling)
             .map(Self::from_big_normalized)
             .map_err(|_| NonCanonicalInteger)
