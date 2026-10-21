@@ -187,7 +187,10 @@ fn interval_sign_partition_is_exhaustive() {
     let negative = interval.upper < 0;
     let nonnegative = interval.lower >= 0;
     let straddling = interval.lower < 0 && interval.upper >= 0;
-    assert_eq!(u8::from(negative) + u8::from(nonnegative) + u8::from(straddling), 1);
+    assert_eq!(
+        u8::from(negative) + u8::from(nonnegative) + u8::from(straddling),
+        1
+    );
     let classification = interval_sign(interval);
     assert_eq!(classification == IntervalSign::Negative, negative);
     assert_eq!(classification == IntervalSign::Nonnegative, nonnegative);
