@@ -271,3 +271,6 @@ fn native_multiply_straddling_straddling_refines_mathematical_integer() {
         Some((IntervalSign::Straddling, IntervalSign::Straddling)),
     );
 }
+
+#[cfg(feature = "native-integer-refinement-contracts")]
+mod contracts;

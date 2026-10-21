@@ -206,10 +206,10 @@ impl NativeIntegerOperation {
                 left.upper.checked_sub(right.lower)?,
             ),
             Self::Multiply { left, right } => {
-                let a = left.lower.checked_mul(right.lower)?;
-                let b = left.lower.checked_mul(right.upper)?;
-                let c = left.upper.checked_mul(right.lower)?;
-                let d = left.upper.checked_mul(right.upper)?;
+                let a = checked_product(left.lower, right.lower)?;
+                let b = checked_product(left.lower, right.upper)?;
+                let c = checked_product(left.upper, right.lower)?;
+                let d = checked_product(left.upper, right.upper)?;
                 (a.min(b).min(c).min(d), a.max(b).max(c).max(d))
             }
             Self::Negate { operand } => {
@@ -332,7 +332,7 @@ impl AdmittedNativeIntegerOperation {
             (
                 NativeIntegerOperation::Multiply { .. },
                 NativeIntegerOperands::Binary { left, right },
-            ) => left.0.checked_mul(right.0),
+            ) => checked_product(left.0, right.0),
             (NativeIntegerOperation::Negate { .. }, NativeIntegerOperands::Unary { operand }) => {
                 operand.0.checked_neg()
             }
@@ -426,3 +426,21 @@ pub fn evaluate_native_integer_ordering(
 mod kani_proofs;
 #[cfg(any(test, kani))]
 mod reference;
+
+// Contract metadata is opt-in so ordinary consumers execute only this body.
+#[cfg_attr(
+    all(kani, feature = "native-integer-refinement-contracts"),
+    kani::ensures(|result: &Option<i128>| {
+        let expected = reference::MathematicalInteger::evaluate(
+            NativeIntegerOperationKind::Multiply, left, right,
+        );
+        result.is_some() == expected.fits_native()
+            && match *result {
+                Some(value) => reference::MathematicalInteger::from_native(value) == expected,
+                None => true,
+            }
+    })
+)]
+fn checked_product(left: i128, right: i128) -> Option<i128> {
+    left.checked_mul(right)
+}

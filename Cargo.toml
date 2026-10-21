@@ -19,6 +19,8 @@ path = "src/lib.rs"
 # this through a dev-dependency, which resolver 2 turns on only for test
 # builds. A normal or build dependency must never enable it.
 test-support = []
+# Opt-in metadata for universal kernel refinement proofs; consumers leave this off.
+native-integer-refinement-contracts = []
 
 [dependencies]
 allocator-api2 = { version = "0.2.21", default-features = false, features = ["alloc"] }
