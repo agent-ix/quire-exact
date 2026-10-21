@@ -174,6 +174,77 @@ fn construction_boundaries_and_sampled_arithmetic_match_independent_oracles() {
 }
 
 #[test]
+#[trace("FR-371-AC-1", "FR-371-AC-2")]
+fn mixed_constructor_pairs_preserve_arithmetic_and_public_observations() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    for left in [i64::MIN, -1, 0, 1, i64::MAX] {
+        let narrow = Integer::from(left);
+        let wide = Integer::from(i128::from(left));
+        let parsed = Integer::from_str(&left.to_string()).unwrap();
+        let from_big = Integer::from_big(BigInt::from(left));
+        for materialized in [false, true] {
+            if materialized {
+                assert_eq!(narrow.as_big(), &BigInt::from(left));
+                assert_eq!(wide.as_big(), &BigInt::from(left));
+            }
+            for a in [&narrow, &wide, &parsed, &from_big] {
+                assert_eq!(a, &narrow);
+                assert_eq!(a.cmp(&wide), core::cmp::Ordering::Equal);
+                assert_eq!(a.to_string(), left.to_string());
+                assert_eq!(format!("{a:?}"), format!("{narrow:?}"));
+                let mut actual = DefaultHasher::new();
+                let mut reference = DefaultHasher::new();
+                a.hash(&mut actual);
+                BigInt::from(left).hash(&mut reference);
+                assert_eq!(actual.finish(), reference.finish());
+                let cloned = a.clone();
+                assert_eq!(cloned.as_big(), &BigInt::from(left));
+                for right in [i64::MIN, -1, 0, 1, i64::MAX] {
+                    for b in [Integer::from(right), Integer::from(i128::from(right))] {
+                        let (left, right) = (i128::from(left), i128::from(right));
+                        for (result, expected) in [
+                            (a.add(&b), left.checked_add(right)),
+                            (a.sub(&b), left.checked_sub(right)),
+                            (a.mul(&b), left.checked_mul(right)),
+                            (a.neg(), left.checked_neg()),
+                        ] {
+                            assert_eq!(result, Integer::from(expected.unwrap()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[trace("FR-371-AC-4")]
+fn mixed_inline_operations_and_materialized_source_clones_allocate_nothing() {
+    for left in [Integer::from(i64::MIN), Integer::from(i128::from(i64::MIN))] {
+        for right in [Integer::from(i64::MAX), Integer::from(i128::from(i64::MAX))] {
+            let _ = left.as_big();
+            let _ = right.as_big();
+            let mut observed = None;
+            let allocations = allocation_counter::measure(|| {
+                observed = Some((left.add(&right), left.sub(&right), left.mul(&right), left.neg(), left.clone(), right.clone()));
+            });
+            assert_eq!(allocations.count_total, 0);
+            assert_eq!(allocations.bytes_total, 0);
+            let (add, sub, mul, neg, left_clone, right_clone) = observed.unwrap();
+            let (a, b) = (i128::from(i64::MIN), i128::from(i64::MAX));
+            assert_eq!(add, Integer::from(a.checked_add(b).unwrap()));
+            assert_eq!(sub, Integer::from(a.checked_sub(b).unwrap()));
+            assert_eq!(mul, Integer::from(a.checked_mul(b).unwrap()));
+            assert_eq!(neg, Integer::from(a.checked_neg().unwrap()));
+            assert_eq!(left_clone, left);
+            assert_eq!(right_clone, right);
+        }
+    }
+}
+
+#[test]
 #[trace("FR-371-AC-1")]
 fn signed_i64_extremes_refine_all_four_widened_operations() {
     let values = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
@@ -540,6 +611,8 @@ fn metered_native_and_overflow_operations_keep_the_existing_charge_schedule() {
 fn metered_operation_matrix_preserves_fr362_amounts_work_and_denial_prefixes() {
     let i64_min = Integer::from(i64::MIN);
     let i64_max = Integer::from(i64::MAX);
+    let wide_i64_min = Integer::from(i128::from(i64::MIN));
+    let wide_i64_max = Integer::from(i128::from(i64::MAX));
     let small_pos = Integer::from(8_i128);
     let small_pos_rhs = Integer::from(3_i128);
     let small_sub_rhs = Integer::from(7_i128);
@@ -563,6 +636,34 @@ fn metered_operation_matrix_preserves_fr362_amounts_work_and_denial_prefixes() {
     // FR-362 independently gives binary operands max(B(a), B(c)), add/sub
     // max(B(a), B(c)) + 1, multiply B(a) + B(c), and negate B(a).
     let cases = [
+        Case {
+            operation: IntegerArithmetic::Add(&i64_min, &wide_i64_min),
+            expected: "-18446744073709551616",
+            operand_bits: 64,
+            arithmetic_bits: 65,
+            occurrences: 2,
+        },
+        Case {
+            operation: IntegerArithmetic::Subtract(&wide_i64_max, &i64_min),
+            expected: "18446744073709551615",
+            operand_bits: 64,
+            arithmetic_bits: 65,
+            occurrences: 2,
+        },
+        Case {
+            operation: IntegerArithmetic::Multiply(&wide_i64_min, &wide_i64_min),
+            expected: "85070591730234615865843651857942052864",
+            operand_bits: 64,
+            arithmetic_bits: 128,
+            occurrences: 2,
+        },
+        Case {
+            operation: IntegerArithmetic::Negate(&wide_i64_min),
+            expected: "9223372036854775808",
+            operand_bits: 64,
+            arithmetic_bits: 64,
+            occurrences: 1,
+        },
         Case {
             operation: IntegerArithmetic::Add(&i64_min, &i64_min),
             expected: "-18446744073709551616",
