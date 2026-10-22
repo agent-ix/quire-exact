@@ -155,6 +155,7 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
         results: 0,
     };
     let actual = meter.charge_units(charge);
+    let completed = actual.is_ok();
     let injected = !cancelled && same_point && count.checked_add(1) == Some(occurrence.get());
     if cancelled || injected {
         let error = actual.unwrap_err();
@@ -197,7 +198,7 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
     );
     kani::cover!(injected, "exact injected occurrence denies");
     kani::cover!(
-        !cancelled && same_point && count == u64::MAX && actual.is_ok(),
+        !cancelled && same_point && count == u64::MAX && completed,
         "occurrence count saturation still admits"
     );
 }

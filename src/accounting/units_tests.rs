@@ -44,6 +44,35 @@ fn check(
     assert_eq!(general.charge_general(charge), actual);
     assert_eq!(adapter, direct);
     assert_eq!(general, direct);
+    #[cfg(feature = "test-support")]
+    {
+        if actual.is_ok() {
+            let log = direct.admitted_charges();
+            assert_eq!(log.len(), 1);
+            assert_eq!(log[0].point, point);
+            let observed = [
+                log[0].integer_bits,
+                log[0].decimal_digits,
+                log[0].scale_expansion,
+                log[0].text_input_bytes,
+                log[0].text_scalars,
+                log[0].normalized_scalars,
+                log[0].unit_edges,
+                log[0].value_occurrences,
+            ];
+            for (index, kind) in KINDS[..8].iter().enumerate() {
+                let expected = requests
+                    .iter()
+                    .flatten()
+                    .filter(|(requested, _)| requested == kind)
+                    .map(|(_, amount)| *amount)
+                    .max();
+                assert_eq!(observed[index], expected);
+            }
+        } else {
+            assert!(direct.admitted_charges().is_empty());
+        }
+    }
     match (actual, expected) {
         (Ok(()), Ok(output)) => {
             assert_eq!(direct.counters.consumed, output);
@@ -181,13 +210,37 @@ fn units_injection_cancellation_and_saturation_match_general() {
                 direct.counters.denied_point_admissions = count;
                 direct.counters.admissions = count;
                 let mut general = direct.clone();
+                let mut pending = true;
+                let mut expected_count = count;
+                let mut expected_admissions = count;
+                let mut expected_units = 0;
                 for _ in 0..3 {
+                    let hit =
+                        !cancelled && pending && expected_count.checked_add(1) == Some(occurrence);
+                    let denied = cancelled || hit;
                     let charge = Charge::new(point).results(1);
                     assert_eq!(
                         direct.charge_units(UnitsCharge::from_charge(&charge).unwrap()),
                         general.charge_general(charge)
                     );
                     assert_eq!(direct, general);
+                    if hit {
+                        pending = false;
+                    }
+                    if !denied {
+                        expected_units += 1;
+                        expected_admissions = expected_admissions.saturating_add(1);
+                        if pending {
+                            expected_count = expected_count.saturating_add(1);
+                        }
+                    }
+                    assert_eq!(direct.counters.consumed[8], expected_units);
+                    assert_eq!(direct.counters.consumed[9], expected_units);
+                    assert_eq!(direct.counters.denial.is_some(), pending);
+                    assert_eq!(direct.counters.denied_point_admissions, expected_count);
+                    assert_eq!(direct.admission_count(), expected_admissions);
+                    #[cfg(feature = "test-support")]
+                    assert_eq!(direct.admitted_charges().len(), expected_units as usize);
                 }
                 if cancelled {
                     assert!(cancel.tripped().is_some());
@@ -228,5 +281,31 @@ fn units_boolean_retention_preserves_real_meter_stops() {
                 }
             }
         }
+    }
+}
+
+/// Trace: FR-383-AC-1, FR-359-AC-8
+#[test]
+#[trace("FR-383-AC-1", "FR-359-AC-8")]
+fn units_and_adapter_poll_cancel_exactly_once_per_attempt() {
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    let polls = Arc::new(AtomicUsize::new(0));
+    let observed = polls.clone();
+    let cancel = Cancel::observing(move || {
+        observed.fetch_add(1, Ordering::SeqCst);
+    });
+    let mut meter = Meter::new(limits([0; 10])).with_cancel(cancel.clone());
+    for attempt in 1..=3 {
+        if attempt == 3 {
+            cancel.cancel(crate::CancelCause::Requested);
+        }
+        let charge = UnitsCharge::new(ChargePoint::FunctionCall);
+        assert!(meter.charge_units(charge).is_err());
+        assert_eq!(polls.load(Ordering::SeqCst), attempt * 2 - 1);
+        assert!(meter
+            .charge(Charge::new(ChargePoint::FunctionCall))
+            .is_err());
+        assert_eq!(polls.load(Ordering::SeqCst), attempt * 2);
     }
 }
