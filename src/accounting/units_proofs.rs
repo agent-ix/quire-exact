@@ -88,6 +88,11 @@ fn check(adapter: bool) {
         (Ok(()), Ok(output)) => {
             counters_equal!(output);
             assert_eq!(meter.admission_count(), admissions.saturating_add(1));
+            kani::cover!(first.is_none(), "zero-request common admission completes");
+            kani::cover!(
+                first.is_some() && second.is_none(),
+                "one-request common admission completes"
+            );
             kani::cover!(
                 first.is_some() && second.is_some(),
                 "two-request common admission completes"
