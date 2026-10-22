@@ -169,7 +169,7 @@ fn units_adapter_keeps_exact_and_unrestricted_fallback() {
     let charges = [
         Charge::new(ChargePoint::FunctionCall).exact_size(LimitKind::IntegerBits, large.clone()),
         Charge::new(ChargePoint::FunctionCall).work(large.clone()),
-        Charge::new(ChargePoint::FunctionCall).exact_results(large),
+        Charge::new(ChargePoint::FunctionCall).exact_results(large.clone()),
         Charge::new(ChargePoint::FunctionCall)
             .exact_size(LimitKind::IntegerBits, Integer::from(-1_i64)),
         Charge::new(ChargePoint::FunctionCall)
@@ -177,15 +177,40 @@ fn units_adapter_keeps_exact_and_unrestricted_fallback() {
             .size(LimitKind::IntegerBits, 2)
             .size(LimitKind::IntegerBits, 3),
     ];
-    for charge in charges {
+    for (index, charge) in charges.into_iter().enumerate() {
         assert!(UnitsCharge::from_charge(&charge).is_none());
         let mut actual = Meter::new(limits([u64::MAX; 10]));
         let mut expected = actual.clone();
-        assert_eq!(
-            actual.charge(charge.clone()),
-            expected.charge_general(charge)
-        );
+        let outcome = actual.charge(charge.clone());
+        assert_eq!(outcome, expected.charge_general(charge));
         assert_eq!(actual, expected);
+        if index < 4 {
+            let error = outcome.unwrap_err();
+            let kind = [
+                LimitKind::IntegerBits,
+                LimitKind::WorkUnits,
+                LimitKind::ResultUnits,
+                LimitKind::IntegerBits,
+            ][index];
+            assert_eq!(error.limit_kind, kind);
+            assert_eq!(error.limit, u64::MAX);
+            assert_eq!(error.consumed, 0);
+            assert_eq!(
+                error.next_charge,
+                if index == 3 {
+                    Integer::from(-1_i64)
+                } else {
+                    large.clone()
+                }
+            );
+            assert_eq!(error.charge_point, ChargePoint::FunctionCall);
+            assert_eq!(actual.admission_count(), 0);
+        } else {
+            assert!(outcome.is_ok());
+            assert_eq!(actual.consumed(LimitKind::IntegerBits), 3);
+            assert_eq!(actual.consumed(LimitKind::WorkUnits), 1);
+            assert_eq!(actual.admission_count(), 1);
+        }
     }
 }
 
@@ -307,5 +332,72 @@ fn units_and_adapter_poll_cancel_exactly_once_per_attempt() {
             .charge(Charge::new(ChargePoint::FunctionCall))
             .is_err());
         assert_eq!(polls.load(Ordering::SeqCst), attempt * 2);
+    }
+}
+
+/// Trace: FR-359-AC-6, FR-359-AC-8, FR-359-AC-12, FR-383-AC-1
+#[test]
+#[trace("FR-359-AC-6", "FR-359-AC-8", "FR-359-AC-12", "FR-383-AC-1")]
+fn units_public_and_fallback_share_one_meter_and_pending_denial() {
+    let point = ChargePoint::FunctionCall;
+    let cancel = Cancel::new();
+    let mut meter = Meter::new(limits([10; 10]))
+        .with_cancel(cancel.clone())
+        .with_injected_denial(InjectedDenial {
+            point,
+            occurrence: NonZeroU64::new(4).unwrap(),
+        });
+    assert_eq!(meter.cancel(), Some(&cancel));
+    meter
+        .charge_units(UnitsCharge::one(point, LimitKind::IntegerBits, 0))
+        .unwrap();
+    meter
+        .charge(Charge::new(point).size(LimitKind::IntegerBits, 2))
+        .unwrap();
+    // A normal denial at the same point cannot spend the pending occurrence.
+    let before = meter.clone();
+    let error = meter
+        .charge_units(UnitsCharge::two(
+            point,
+            (LimitKind::IntegerBits, 11),
+            (LimitKind::IntegerBits, 12),
+        ))
+        .unwrap_err();
+    assert_eq!(error.next_charge.to_u64(), Some(11));
+    assert_eq!(meter, before);
+    meter
+        .charge(
+            Charge::new(point)
+                .size(LimitKind::IntegerBits, 3)
+                .size(LimitKind::IntegerBits, 7)
+                .size(LimitKind::IntegerBits, 0),
+        )
+        .unwrap();
+    assert_eq!(meter.consumed(LimitKind::IntegerBits), 7);
+    assert_eq!(meter.consumed(LimitKind::WorkUnits), 3);
+    assert_eq!(meter.admission_count(), 3);
+    let before = meter.clone();
+    let error = meter.charge_units(UnitsCharge::new(point)).unwrap_err();
+    assert_eq!(
+        (
+            error.limit_kind,
+            error.limit,
+            error.consumed,
+            error.next_charge.to_u64(),
+            error.charge_point
+        ),
+        (LimitKind::WorkUnits, 3, 3, Some(1), point)
+    );
+    assert_eq!(meter.counters.consumed, before.counters.consumed);
+    assert_eq!(meter.admission_count(), 3);
+    assert!(meter.counters.denial.is_none());
+    #[cfg(feature = "test-support")]
+    {
+        let log = meter.admitted_charges();
+        assert_eq!(log.len(), 3);
+        assert_eq!(log[0].integer_bits, Some(0));
+        assert_eq!(log[1].integer_bits, Some(2));
+        assert_eq!(log[2].integer_bits, Some(7));
+        assert_eq!(log, before.admitted_charges());
     }
 }
