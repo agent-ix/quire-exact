@@ -470,6 +470,97 @@ fn native_multiply_straddling_straddling_stays_in_capacity() {
     );
 }
 
+/// The public i128 payload population is not silently replaced by i32 draws:
+/// every actual interval-admitted payload roundtrips through signed32 exactly.
+#[kani::proof]
+fn native_multiply_admitted_payloads_roundtrip_signed32() {
+    let left = signed32_interval();
+    let right = signed32_interval();
+    let semantic = semantic_interval();
+    let x: i128 = kani::any();
+    let y: i128 = kani::any();
+    let plan = NativeIntegerPlan::new(
+        NativeIntegerOperation::Multiply { left, right }, semantic,
+    ).unwrap();
+    let operands = NativeIntegerOperands::Binary {
+        left: NativeInteger::new(x), right: NativeInteger::new(y),
+    };
+    if let Ok(admitted) = plan.admit(operands) {
+        assert_eq!(admitted.plan, plan, "admission retains the original checked plan");
+        assert_eq!(admitted.operands, operands, "admission retains the original i128 payloads");
+        let x32 = i32::try_from(x).unwrap();
+        let y32 = i32::try_from(y).unwrap();
+        assert_eq!(i128::from(x32), x);
+        assert_eq!(i128::from(y32), y);
+        kani::cover!(true, "interval-admitted public i128 payloads roundtrip losslessly");
+    }
+}
+
+/// Bind the actual production calculation to Rust's exact checked wide product.
+/// This is a compiler/mathematics bridge, not an independent arithmetic oracle.
+#[kani::proof]
+fn native_multiply_signed32_matches_checked_wide_product() {
+    let x = i128::from(kani::any::<i32>());
+    let y = i128::from(kani::any::<i32>());
+    let full = NativeIntegerInterval::new(i32::MIN.into(), i32::MAX.into()).unwrap();
+    let plan = NativeIntegerPlan::new(
+        NativeIntegerOperation::Multiply { left: full, right: full }, None,
+    ).unwrap();
+    let actual = plan.admit(NativeIntegerOperands::Binary {
+        left: NativeInteger::new(x), right: NativeInteger::new(y),
+    }).unwrap().calculate();
+    let wide = x.checked_mul(y);
+    assert!(wide.is_some(), "every signed32 mathematical product fits i128");
+    let wide = wide.unwrap();
+    let signed64 = i64::try_from(wide).unwrap();
+    assert_eq!(i128::from(signed64), wide, "the exact product also roundtrips signed64");
+    assert_eq!(actual, Some(NativeInteger::new(wide)));
+    kani::cover!(x == i128::from(i32::MIN) && y == i128::from(i32::MIN), "wide bridge MIN squared completion");
+    kani::cover!(x == i128::from(i32::MIN) && y == i128::from(i32::MAX), "wide bridge negative extreme completion");
+    kani::cover!(x == 0 && y == i128::from(i32::MIN), "wide bridge zero completion");
+}
+
+/// Bind actual interval endpoints to four exact wide checked products. No
+/// scalar theorem is assumed and no verified stub replaces a production body.
+#[kani::proof]
+fn native_multiply_capacity_matches_checked_wide_corners() {
+    let left = signed32_interval();
+    let right = signed32_interval();
+    let semantic = semantic_interval();
+    let plan = NativeIntegerPlan::new(
+        NativeIntegerOperation::Multiply { left, right }, semantic,
+    ).unwrap();
+    let a = left.lower.checked_mul(right.lower);
+    let b = left.lower.checked_mul(right.upper);
+    let c = left.upper.checked_mul(right.lower);
+    let d = left.upper.checked_mul(right.upper);
+    assert!(a.is_some() && b.is_some() && c.is_some() && d.is_some(), "all four exact corner products fit i128");
+    let (a, b, c, d) = (a.unwrap(), b.unwrap(), c.unwrap(), d.unwrap());
+    assert_eq!(plan.capacity.lower, a.min(b).min(c).min(d));
+    assert_eq!(plan.capacity.upper, a.max(b).max(c).max(d));
+    assert_eq!(plan.result_domain, semantic, "semantic interval is independent of numerical capacity");
+    kani::cover!(left.lower == i128::from(i32::MIN) && left.upper == i128::from(i32::MAX) && left == right, "wide corner bridge full-domain completion");
+    kani::cover!(left.lower == 0 && left.upper == 0, "wide corner bridge zero image");
+}
+
+/// Bind the real interval method to the mathematical signed-order predicate
+/// through Rust's primitive signed i128 comparisons, for every native value.
+#[kani::proof]
+fn native_interval_contains_matches_signed_wide_order() {
+    let a: i128 = kani::any();
+    let b: i128 = kani::any();
+    let value: i128 = kani::any();
+    let lower = a.min(b);
+    let upper = a.max(b);
+    let interval = NativeIntegerInterval::new(lower, upper).unwrap();
+    assert_eq!(interval.lower(), lower);
+    assert_eq!(interval.upper(), upper);
+    let outside = value < lower || value > upper;
+    assert_eq!(interval.contains(NativeInteger::new(value)), !outside);
+    kani::cover!(lower == i128::MIN && upper == i128::MAX && value == i128::MIN, "signed-order bridge includes native MIN");
+    kani::cover!(value < lower || value > upper, "signed-order bridge rejects outside payload");
+}
+
 /// Arbitrary i128 endpoints include every unsupported operand interval, with
 /// arbitrary optional semantic bounds. No multiplication theorem is assumed.
 #[kani::proof]
