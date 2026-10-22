@@ -221,15 +221,24 @@ fn native_multiply_signed32_corner_image_refines_mathematical_integer() {
     let low = p.min(q).min(r).min(s);
     let high = p.max(q).max(r).max(s);
     let semantic = semantic_interval();
-    let plan = NativeIntegerPlan::new(
-        NativeIntegerOperation::Multiply { left, right }, semantic,
-    ).unwrap();
-    assert_eq!(plan.result_domain, semantic, "semantic i128 endpoints remain independent");
-    assert_eq!(Math::from_native(plan.capacity.lower), low, "exact mathematical lower image endpoint");
-    assert_eq!(Math::from_native(plan.capacity.upper), high, "exact mathematical upper image endpoint");
+    let plan =
+        NativeIntegerPlan::new(NativeIntegerOperation::Multiply { left, right }, semantic).unwrap();
+    assert_eq!(
+        plan.result_domain, semantic,
+        "semantic i128 endpoints remain independent"
+    );
+    assert_eq!(
+        Math::from_native(plan.capacity.lower),
+        low,
+        "exact mathematical lower image endpoint"
+    );
+    assert_eq!(
+        Math::from_native(plan.capacity.upper),
+        high,
+        "exact mathematical upper image endpoint"
+    );
     kani::cover!(
-        left.lower == i128::from(i32::MIN) && left.upper == i128::from(i32::MAX)
-            && right == left,
+        left.lower == i128::from(i32::MIN) && left.upper == i128::from(i32::MAX) && right == left,
         "full signed32 operand intervals admitted",
     );
     kani::cover!(
@@ -237,7 +246,11 @@ fn native_multiply_signed32_corner_image_refines_mathematical_integer() {
         "zero interval image admitted",
     );
     kani::cover!(
-        semantic == Some(NativeIntegerInterval { lower: i128::MIN, upper: i128::MAX }),
+        semantic
+            == Some(NativeIntegerInterval {
+                lower: i128::MIN,
+                upper: i128::MAX
+            }),
         "full signed128 semantic domain retained",
     );
 }
@@ -253,27 +266,48 @@ fn native_multiply_signed32_interval_calculation_stays_in_capacity() {
     let semantic = semantic_interval();
     let x: i128 = kani::any();
     let y: i128 = kani::any();
-    let plan = NativeIntegerPlan::new(
-        NativeIntegerOperation::Multiply { left, right }, semantic,
-    ).unwrap();
+    let plan =
+        NativeIntegerPlan::new(NativeIntegerOperation::Multiply { left, right }, semantic).unwrap();
     let operands = NativeIntegerOperands::Binary {
-        left: NativeInteger::new(x), right: NativeInteger::new(y),
+        left: NativeInteger::new(x),
+        right: NativeInteger::new(y),
     };
     let admitted = plan.admit(operands);
     let membership = left.contains(NativeInteger::new(x)) && right.contains(NativeInteger::new(y));
-    assert_eq!(admitted.is_ok(), membership, "exact whole-domain payload membership");
+    assert_eq!(
+        admitted.is_ok(),
+        membership,
+        "exact whole-domain payload membership"
+    );
     if let Ok(admitted) = admitted {
         let result = admitted.calculate();
-        assert!(result.is_some(), "every interval-admitted calculation completes");
+        assert!(
+            result.is_some(),
+            "every interval-admitted calculation completes"
+        );
         let result = result.unwrap();
         let full = NativeIntegerInterval::new(i32::MIN.into(), i32::MAX.into()).unwrap();
         let full_plan = NativeIntegerPlan::new(
-            NativeIntegerOperation::Multiply { left: full, right: full }, None,
-        ).unwrap();
+            NativeIntegerOperation::Multiply {
+                left: full,
+                right: full,
+            },
+            None,
+        )
+        .unwrap();
         let full_result = full_plan.admit(operands).unwrap().calculate().unwrap();
-        assert_eq!(result, full_result, "same production result as the complete signed32 plan");
-        assert!(plan.capacity.contains(result), "every admitted result belongs to the exact image");
-        kani::cover!(true, "certified interval calculation completes within capacity");
+        assert_eq!(
+            result, full_result,
+            "same production result as the complete signed32 plan"
+        );
+        assert!(
+            plan.capacity.contains(result),
+            "every admitted result belongs to the exact image"
+        );
+        kani::cover!(
+            true,
+            "certified interval calculation completes within capacity"
+        );
         kani::cover!(
             left.lower < 0 && left.upper > 0 && right.lower < 0 && right.upper > 0,
             "two straddling domains complete within capacity",
