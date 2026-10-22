@@ -361,11 +361,11 @@ fn native_arithmetic(
     meter: &mut Meter,
 ) -> Result<NativeInteger, Stop> {
     let (left_bits, right_bits, count) = operation.operand_sizes();
-    meter.charge_units(
-        UnitsCharge::two(ChargePoint::IntegerArithmeticOperands,
-            (LimitKind::IntegerBits, left_bits.max(right_bits)),
-            (LimitKind::ValueOccurrences, count)),
-    )?;
+    meter.charge_units(UnitsCharge::two(
+        ChargePoint::IntegerArithmeticOperands,
+        (LimitKind::IntegerBits, left_bits.max(right_bits)),
+        (LimitKind::ValueOccurrences, count),
+    ))?;
     let (first, second) = match operation.plan.operation {
         NativeIntegerOperation::Add { .. } | NativeIntegerOperation::Subtract { .. } => {
             (left_bits.max(right_bits), 1)
@@ -376,9 +376,11 @@ fn native_arithmetic(
     // Native magnitudes are at most 128 bits, so every amount here is at
     // most 256. Retain a units charge directly; no general Integer amount
     // continuation is needed for this closed native domain.
-    meter.charge_units(
-        UnitsCharge::one(ChargePoint::IntegerArithmeticArithmetic, LimitKind::IntegerBits, first + second),
-    )?;
+    meter.charge_units(UnitsCharge::one(
+        ChargePoint::IntegerArithmeticArithmetic,
+        LimitKind::IntegerBits,
+        first + second,
+    ))?;
     let result = operation
         .calculate()
         .filter(|value| operation.plan.capacity.contains(*value))
@@ -407,13 +409,16 @@ pub fn evaluate_native_integer_ordering(
 ) -> Outcome<bool> {
     Outcome::from_stop((|| {
         let bits = left.bits().max(right.bits());
-        meter.charge_units(
-            UnitsCharge::two(ChargePoint::OrderingOperands,
-                (LimitKind::IntegerBits, bits), (LimitKind::ValueOccurrences, 2)),
-        )?;
-        meter.charge_units(
-            UnitsCharge::one(ChargePoint::OrderingArithmetic, LimitKind::IntegerBits, bits),
-        )?;
+        meter.charge_units(UnitsCharge::two(
+            ChargePoint::OrderingOperands,
+            (LimitKind::IntegerBits, bits),
+            (LimitKind::ValueOccurrences, 2),
+        ))?;
+        meter.charge_units(UnitsCharge::one(
+            ChargePoint::OrderingArithmetic,
+            LimitKind::IntegerBits,
+            bits,
+        ))?;
         let result = operator.holds(left.0.cmp(&right.0));
         meter.charge_units(UnitsCharge::new(ChargePoint::OrderingResultRetain).results(1))?;
         Ok(result)

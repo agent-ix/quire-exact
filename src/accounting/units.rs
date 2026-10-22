@@ -15,15 +15,32 @@ pub(crate) struct UnitsCharge {
 
 impl UnitsCharge {
     pub(crate) fn new(point: ChargePoint) -> Self {
-        Self { point, first: None, second: None, work: 1, results: 0 }
+        Self {
+            point,
+            first: None,
+            second: None,
+            work: 1,
+            results: 0,
+        }
     }
 
     pub(crate) fn one(point: ChargePoint, kind: LimitKind, amount: u64) -> Self {
-        Self { first: Some((kind, amount)), ..Self::new(point) }
+        Self {
+            first: Some((kind, amount)),
+            ..Self::new(point)
+        }
     }
 
-    pub(crate) fn two(point: ChargePoint, first: (LimitKind, u64), second: (LimitKind, u64)) -> Self {
-        Self { first: Some(first), second: Some(second), ..Self::new(point) }
+    pub(crate) fn two(
+        point: ChargePoint,
+        first: (LimitKind, u64),
+        second: (LimitKind, u64),
+    ) -> Self {
+        Self {
+            first: Some(first),
+            second: Some(second),
+            ..Self::new(point)
+        }
     }
 
     pub(crate) fn results(mut self, amount: u64) -> Self {
@@ -32,7 +49,9 @@ impl UnitsCharge {
     }
 
     pub(super) fn from_charge(charge: &Charge) -> Option<Self> {
-        if !charge.sizes.overflow.is_empty() { return None; }
+        if !charge.sizes.overflow.is_empty() {
+            return None;
+        }
         let request = |slot: &Option<(LimitKind, ChargeAmount)>| match slot {
             Some((kind, amount)) => Some(Some((*kind, amount.units()?))),
             None => Some(None),
@@ -70,7 +89,8 @@ impl Meter {
                     *slot = Some(slot.map_or(amount, |previous: u64| previous.max(amount)));
                     #[cfg(feature = "test-support")]
                     record.observe(kind, amount);
-                } else if first_fail.is_none_or(|(first_kind, _)| kind.index() < first_kind.index()) {
+                } else if first_fail.is_none_or(|(first_kind, _)| kind.index() < first_kind.index())
+                {
                     first_fail = Some((kind, amount));
                 }
             }
@@ -81,13 +101,18 @@ impl Meter {
             return Err(self.incomplete(kind, Integer::from(amount), point));
         }
         let cumulative = |kind: LimitKind, addition: u64| {
-            self.consumed(kind).checked_add(addition)
+            self.consumed(kind)
+                .checked_add(addition)
                 .filter(|total| *total <= kind.limit(&self.counters.limits))
                 .ok_or_else(|| self.incomplete(kind, Integer::from(addition), point))
         };
         let work = cumulative(LimitKind::WorkUnits, charge.work)?;
         let results = cumulative(LimitKind::ResultUnits, charge.results)?;
-        self.commit_charge(point, sizes, work, results,
+        self.commit_charge(
+            point,
+            sizes,
+            work,
+            results,
             #[cfg(feature = "test-support")]
             record,
         );
