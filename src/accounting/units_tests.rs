@@ -212,7 +212,7 @@ fn units_adapter_keeps_exact_and_unrestricted_fallback() {
 }
 
 #[test]
-#[trace("FR-359-AC-6", "FR-359-AC-8", "FR-383-AC-1")]
+#[trace("FR-359-AC-6", "FR-359-AC-8")]
 fn units_injection_cancellation_and_saturation_match_general() {
     for occurrence in [1, 2, 3, u64::MAX] {
         for count in [0, 1, 2, u64::MAX - 1, u64::MAX] {
@@ -273,7 +273,7 @@ fn units_injection_cancellation_and_saturation_match_general() {
 }
 
 #[test]
-#[trace("FR-359-AC-6", "FR-359-AC-8", "FR-383-AC-1")]
+#[trace("FR-359-AC-6", "FR-359-AC-8")]
 fn units_boolean_retention_preserves_real_meter_stops() {
     for limit in [0, 1, 2, u64::MAX] {
         for consumed in [0, 1, u64::MAX - 1, u64::MAX] {
@@ -305,7 +305,7 @@ fn units_boolean_retention_preserves_real_meter_stops() {
 }
 
 #[test]
-#[trace("FR-383-AC-1", "FR-359-AC-8")]
+#[trace("FR-359-AC-8")]
 fn units_and_adapter_poll_cancel_exactly_once_per_attempt() {
     use alloc::sync::Arc;
     use core::sync::atomic::{AtomicUsize, Ordering};
