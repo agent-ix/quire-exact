@@ -1559,3 +1559,112 @@ scope:
     or a vacuous Verified. Unwind3, Cadical and existing 600-second ceilings remain
     unchanged where speci
 ```
+
+## Dispositions
+
+Round 1, exact head b5cf31fa136e132f62d9176a432315780c524c42. Original finding rows remain unchanged.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Inherited matrix evidence debt remains assigned to IR-705 ownership; this separate kernel API checkpoint does not discharge the original qualification criterion or authorize program closure. |
+| FND-002 | deferred | Inherited matrix evidence debt remains assigned to IR-705 ownership; this separate kernel API checkpoint does not discharge the original qualification criterion or authorize program closure. |
+| FND-003 | deferred | Inherited matrix evidence debt remains assigned to IR-705 ownership; this separate kernel API checkpoint does not discharge the original qualification criterion or authorize program closure. |
+| FND-004 | deferred | Inherited matrix evidence debt remains assigned to IR-705 ownership; this separate kernel API checkpoint does not discharge the original qualification criterion or authorize program closure. |
+| FND-005 | still-open | Reviewed preserved add proof: actual full-width production calculate/capacity property passes, 0/223 failed (16 unreachable), admitted cover1/1, actual16GiB peak530489344B and zero memory events, source intact and teardown confirmed. Other four healthy proofs plus substantive arithmetic/admission mutation counterexamples remain unqualified; no full refinement or memory-fit claim. |
+| FND-006 | deferred | Explicit IR-705 subsequent CG adoption phase owns ordinary generated-client execution. Kernel public-client no-allocation evidence cannot replace it; remains required before IR-705 completion. |
+| FND-007 | deferred | Explicit IR-705 subsequent genuine CG qualification phase owns TC-027/TC-025/IR-917/IR-948 including original-domain playback and impossible-precondition control. No profile fit or program completion accepted by this checkpoint. |
+
+## Round 1 verdict
+
+FAIL — Full-capacity healthy/mutant qualification remains a merge hold; deferred ledger rows are staged owner work, not waivers or program completion.
+
+Inspected complete test-only delta and exact source/proof/manifest/lock identity to 31ed8641. Author raw fix-round1b records contain default/support eight tests each, warnings-denied default/support/thumb lint and formatting success. Actual16GiB/swap0 peak105545728B, memory events0, full scopesGone/TENempty. Reviewer source/read-only evidence inspection only; no second Cargo/backend run.
+
+## Round 2 dispositions
+
+Round 2 at 30bfe47fda029e90a1f19d1bc40f7083498288f3, under merged operator-specific FR-384 at 03c55fcca0d023e63ee8c5baf4cb8ded563b6856.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-005 | fixed | Machine-checked component refinement is now established by actual source-bound full128 healthy proofs, signed32 independent Math A/B, global interval membership/admission policy, the four actual wide/roundtrip/contains Rust bridges and actual unbounded SMT enclosure/embedding UNSAT with SAT witnesses and substantive production mutations/native playback. Complete composition inspected; all original failed attempts remain failures. This closes the missing numerical evidence finding, not ordinary generated-client or genuine consumer qualification. |
+
+## Round 2 repository coverage and component boundary
+
+FAIL — Full computed repository matrix still has 194 criteria: 171 tagged, 18 inspection-method rows, four untagged, one ignored-only. Inherited FND-001 through FND-004 and consumer-phase FND-006/FND-007 retain their explicit IR-705 owner deferrals. FND-005 is now fixed by the reviewed complete composition. The direct user requires kernel merge before generated-client/genuine consumer qualification; these deferrals stage that work and do not waive it. Component merge is possible after SR-15241 FND-003 is fixed and the lead final aggregate passes. Whole IR-705/IR-917/IR-948 completion and consumer 16 GiB fit remain unclaimed.
+
+Plan completion: not assessed
+
+Independently inspected the actual SMT theorem, Int-to-Real embedding theorem, protocol and composition.json, all 20 query/source hashes and raw results, all 16 actual SAT model assignments with independent exact-integer recomputation, and source-bound Rust receipts. The healthy Real theorem negates below-all-four or above-all-four under exactly six interval/membership premises; it has no width, integrality or sign restriction. Its UNSAT plus unbounded Int-to-Real product/order/min/max preservation entails the integer corner theorem. Nonvacuity, all nine signs and signed32 extrema have actual SAT witnesses. Three substantive mutant countermodels expose omitted b*d upper corner, Add-for-Multiply and omitted lower membership. Contradictory membership/sign controls return UNSAT and are not treated as theorem evidence.
+
+All four final-head Rust bridges pass their real properties and covers: payload roundtrip 0/235 failed, one cover; checked-wide-product 0/112 failed, three covers; exact four-wide-corners 0/121 failed, two covers; actual full-i128 contains/order 0/59 failed, two covers. Maximum bridge cgroup peak is 1,032,101,888 B under 16 GiB/swap0, memory events0, complete teardown. The exact native i128 payload maps to a mathematical signed integer; checked i128 multiplication Some establishes exact non-overflowing product, with signed64 roundtrip. Every actual admitted i128 payload roundtrips signed32. C1 binds each actual interval calculation to the full supported plan, and the wide corner bridge binds capacity to four exact products with independent semantic bounds. The contains bridge returns mathematical enclosure to the actual production filter. These edges close containment by reviewed machine-checked composition without a stub or assumed arithmetic identity; no C2 Kani PASS is claimed.
+
+Thirteen successful Kani execution archives were checked for actual raw successful summaries/covers and complete resource/teardown records; production/reference/manifests/lock and each relevant harness/helper body are byte-equal to this candidate. Earlier heads remain stated accurately: A/D and Add/Sub at 0ef9099; B and Neg/Order at 3cd4f525; C1/classifier at 0243ec95. The four new bridges and SMT protocol executed at 30bfe47f. This is source-equivalence-supported composition, never a claim that the older runs executed at the final head. Full-i128 Add/Subtract/Negate/ordering retain their original universal domains and actual covers. Independent signed-limb Math A/B remain separate from checked-wide embedding bridges. General Integer/as_big, Meter, existing proof inputs and consumer domain boundaries remain unchanged.
+
+Actual production arithmetic mutant bounded_product -> checked_add falsifies the independent payload theorem with original-domain witness (1073741824,0), and native generated playback has one failing mutant test versus one passing healthy test. Actual capacity mutant permits exactly left=2147483648 through a safe widened calculation and falsifies the universal interval policy; corrected playback has one failing mutant test versus one passing healthy test. The initial wrong selector ran zero tests and remains explicitly unqualified. All unrestricted-i128 multiplication, combined interval and C2 timeouts remain unsuccessful, with original sources/raw results/targets preserved. Their resource outcomes supply no theorem.
+
+Focused ordinary evidence at source-identical production: default/support nine public tests each, reference and existing Integer/scalar/invariant controls, fmt/lint/no_std all pass. Original SR-15241 FND-001 derived exact/one-less cumulative boundaries and FND-002 ordering cancellation/injection tests survive with their assertions intact. Reviewer ran no Cargo/Kani/SMT/provisioning or aggregate job. The lead still owns the single final aggregate after fixes/custody. No dependency, manifest, lock, CI gate, unsafe or cfg production-body replacement was introduced.
+
+## Updated examined requirement scope
+
+```yaml
+scope:
+- id: FR-384-AC-1
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Admission accepts every valid Add/Subtract/Negate domain whose complete
+    interval image fits signed i128, retains full-i128 ordering, and accepts every
+    valid Multiply interval pair whose four operand endpoints lie in signed32. It
+    rejects any out-of-signed32 Multiply endpoint as a typed operation-capacity refusal
+    before evaluator charges, including `[2147483648, 2147483648] * [0, 0]` and `[-2147483649,
+    0] * [0, 0]`; payload/product zero or a semantic result restriction cannot conceal
+    the unsupported interval. In-capacity Multiply image endpoints equal the exact
+    four-corner signed64 minimum/maxim
+- id: FR-384-AC-2
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: A machine-checked refinement against an independently expressed mathematical
+    abstraction of the actual BigInt semantics covers every admitted native payload/operation
+    under the operator-specific capacity policy and its abstraction to mathematical
+    Integer/BigInt, including all signed32 multiplication pairs with widened signed64
+    results and full admitted signed-i128 Add/Subtract/Negate/ordering capacities.
+    Admission proof covers all valid in-capacity interval pairs and rejects out-of-signed32
+    Multiply endpoints independently of actual payload and semantic result bounds.
+    Independent BigInt differ
+- id: FR-384-AC-3
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Fresh and cumulative real Meter comparisons against the normative formulas
+    and general exact calls agree on completed values, domain refusal, cancellation,
+    every named injected denial, all counters, admitted prefix and complete incomplete
+    fields at sufficient, exact and one-less limits. Every operation and Boolean/comparison
+    consumer used by the genuine profiles is exercised; arithmetic equivalence alone
+    does not satisfy accounting refinement.
+- id: FR-384-AC-4
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Source inspection and ordinary generated-client execution demonstrate native
+    carriers persist through a multi-operation expression without successful-path
+    BigInt/cache/general Integer construction. Input/output conversions are identified
+    separately. Default and test-support checks, required no_std target and existing
+    borrowed as_big regression checks pass without local unsafe or verification-only
+    implementation.
+- id: FR-384-AC-5
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Genuine CG TC-027 healthy, TC-027 bound mutant, TC-025 arithmetic mutant,
+    IR-917 clause implication and IR-948 V2 contract profiles execute the reviewed
+    production admitted API over their original inputs, domains and assertions. Healthy
+    cases verify with their final completion covers at 16 GiB; each required substantive
+    mutant falsifies with original-domain native playback. The IR-948 impossible-precondition
+    control must complete as CoverUnsatisfied at the same ceiling, not resource exhaustion
+    or a vacuous Verified. Unwind3, Cadical and existing 600-second ceilings remain
+    unchanged where speci
+```
+
+## Round 3 source-equivalence and owner boundary
+
+At d82ca775e0954c6ceb66d042539a9cc832722abd, FND-005 remains fixed by the previously reviewed complete actual SMT/Rust composition. All selected functions/helpers, production, independent reference, SMT/protocol and controls are unchanged from 30bfe47f; prior receipts retain their actual execution-head identities and unsuccessful alternatives retain their failures. The obsolete C2 active wrappers alone were retired under SR-15241 FND-003. No newly missing logical edge or proof claim was introduced.
+
+Repository FAIL persists only for explicitly owned inherited FND-001 through FND-004 and subsequent generated-client/genuine-profile FND-006/FND-007, assigned to open IR-705. Direct user orders kernel component merge before consumer qualification; no waiver or whole-program completion. Component is mergeable after latest typed custody import and the lead final ordinary aggregate.
+
+Plan completion: not assessed
