@@ -148,23 +148,45 @@ fn native_multiply_signed32_payload_refines_mathematical_integer() {
     let y = i128::from(kani::any::<i32>());
     let full = NativeIntegerInterval::new(i32::MIN.into(), i32::MAX.into()).unwrap();
     let plan = NativeIntegerPlan::new(
-        NativeIntegerOperation::Multiply { left: full, right: full }, None,
-    ).unwrap();
+        NativeIntegerOperation::Multiply {
+            left: full,
+            right: full,
+        },
+        None,
+    )
+    .unwrap();
     assert_eq!(plan.capacity.lower, -4611686016279904256);
     assert_eq!(plan.capacity.upper, 4611686018427387904);
-    let admitted = plan.admit(NativeIntegerOperands::Binary {
-        left: NativeInteger::new(x), right: NativeInteger::new(y),
-    }).unwrap();
+    let admitted = plan
+        .admit(NativeIntegerOperands::Binary {
+            left: NativeInteger::new(x),
+            right: NativeInteger::new(y),
+        })
+        .unwrap();
     let result = admitted.calculate();
-    assert!(result.is_some(), "every signed32 pair completes production calculation");
+    assert!(
+        result.is_some(),
+        "every signed32 pair completes production calculation"
+    );
     let result = result.unwrap();
-    assert_eq!(Math::from_native(result.value()), Math::evaluate(
-        NativeIntegerOperationKind::Multiply, x, y,
-    ), "signed64 production product refines independent exact limb mathematics");
+    assert_eq!(
+        Math::from_native(result.value()),
+        Math::evaluate(NativeIntegerOperationKind::Multiply, x, y,),
+        "signed64 production product refines independent exact limb mathematics"
+    );
     assert!(plan.capacity.contains(result));
-    kani::cover!(x == i128::from(i32::MIN) && y == i128::from(i32::MIN), "MIN squared completion");
-    kani::cover!(x == i128::from(i32::MIN) && y == i128::from(i32::MAX), "negative extreme completion");
-    kani::cover!(x == 0 && y == i128::from(i32::MIN), "zero product completion");
+    kani::cover!(
+        x == i128::from(i32::MIN) && y == i128::from(i32::MIN),
+        "MIN squared completion"
+    );
+    kani::cover!(
+        x == i128::from(i32::MIN) && y == i128::from(i32::MAX),
+        "negative extreme completion"
+    );
+    kani::cover!(
+        x == 0 && y == i128::from(i32::MIN),
+        "zero product completion"
+    );
 }
 
 /// Sorted arbitrary signed32 endpoints enumerate every supported nonempty
@@ -189,26 +211,47 @@ fn native_multiply_signed32_intervals_refine_mathematical_integer() {
     let high = p.max(q).max(r).max(s);
     let semantic_a: i128 = kani::any();
     let semantic_b: i128 = kani::any();
-    let semantic = NativeIntegerInterval::new(semantic_a.min(semantic_b), semantic_a.max(semantic_b)).unwrap();
+    let semantic =
+        NativeIntegerInterval::new(semantic_a.min(semantic_b), semantic_a.max(semantic_b)).unwrap();
     let plan = NativeIntegerPlan::new(
-        NativeIntegerOperation::Multiply { left, right }, Some(semantic),
-    ).unwrap();
-    assert_eq!(plan.result_domain, Some(semantic), "semantic i128 endpoints remain independent");
+        NativeIntegerOperation::Multiply { left, right },
+        Some(semantic),
+    )
+    .unwrap();
+    assert_eq!(
+        plan.result_domain,
+        Some(semantic),
+        "semantic i128 endpoints remain independent"
+    );
     assert_eq!(Math::from_native(plan.capacity.lower), low);
     assert_eq!(Math::from_native(plan.capacity.upper), high);
     let admitted = plan.admit(NativeIntegerOperands::Binary {
-        left: NativeInteger::new(x), right: NativeInteger::new(y),
+        left: NativeInteger::new(x),
+        right: NativeInteger::new(y),
     });
     let membership = left.contains(NativeInteger::new(x)) && right.contains(NativeInteger::new(y));
-    assert_eq!(admitted.is_ok(), membership, "exact whole-domain payload membership");
+    assert_eq!(
+        admitted.is_ok(),
+        membership,
+        "exact whole-domain payload membership"
+    );
     if let Ok(admitted) = admitted {
         let result = admitted.calculate().unwrap();
-        assert_eq!(Math::from_native(result.value()), Math::evaluate(kind, x, y));
-        assert!(plan.capacity.contains(result), "every admitted result belongs to the exact image");
+        assert_eq!(
+            Math::from_native(result.value()),
+            Math::evaluate(kind, x, y)
+        );
+        assert!(
+            plan.capacity.contains(result),
+            "every admitted result belongs to the exact image"
+        );
         kani::cover!(true, "certified interval calculation completes");
     }
     kani::cover!(!membership, "outside-interval payload is rejected");
-    kani::cover!(left.lower < 0 && left.upper > 0 && right.lower < 0 && right.upper > 0, "two straddling domains admitted");
+    kani::cover!(
+        left.lower < 0 && left.upper > 0 && right.lower < 0 && right.upper > 0,
+        "two straddling domains admitted"
+    );
 }
 
 /// Arbitrary i128 endpoints include every unsupported operand interval, with
@@ -225,17 +268,42 @@ fn native_multiply_rejects_every_outside_signed32_interval() {
     let f: i128 = kani::any();
     let semantic = if kani::any::<bool>() {
         Some(NativeIntegerInterval::new(e.min(f), e.max(f)).unwrap())
-    } else { None };
-    let supported = left.lower >= -2147483648 && left.upper <= 2147483647
-        && right.lower >= -2147483648 && right.upper <= 2147483647;
+    } else {
+        None
+    };
+    let supported = left.lower >= -2147483648
+        && left.upper <= 2147483647
+        && right.lower >= -2147483648
+        && right.upper <= 2147483647;
     let plan = NativeIntegerPlan::new(NativeIntegerOperation::Multiply { left, right }, semantic);
-    assert_eq!(plan.is_ok(), supported, "all and only whole signed32 intervals are supported");
+    assert_eq!(
+        plan.is_ok(),
+        supported,
+        "all and only whole signed32 intervals are supported"
+    );
     if !supported {
-        assert_eq!(plan, Err(NativeIntegerAdmissionError::CapacityExceeded {
-            operation: NativeIntegerOperationKind::Multiply,
-        }));
+        assert_eq!(
+            plan,
+            Err(NativeIntegerAdmissionError::CapacityExceeded {
+                operation: NativeIntegerOperationKind::Multiply,
+            })
+        );
     }
-    kani::cover!(!supported && right.lower == 0 && right.upper == 0 && left.lower == 2147483648, "zero opposite operand cannot hide high endpoint");
-    kani::cover!(!supported && right.lower == 0 && right.upper == 0 && left.lower == -2147483649 && left.upper == 0 && semantic == Some(NativeIntegerInterval { lower: 0, upper: 0 }), "zero payload and result domain cannot hide low endpoint");
-    kani::cover!(!supported && left.lower == 0 && left.upper == 0 && right.upper == 2147483648, "right operand capacity checked");
+    kani::cover!(
+        !supported && right.lower == 0 && right.upper == 0 && left.lower == 2147483648,
+        "zero opposite operand cannot hide high endpoint"
+    );
+    kani::cover!(
+        !supported
+            && right.lower == 0
+            && right.upper == 0
+            && left.lower == -2147483649
+            && left.upper == 0
+            && semantic == Some(NativeIntegerInterval { lower: 0, upper: 0 }),
+        "zero payload and result domain cannot hide low endpoint"
+    );
+    kani::cover!(
+        !supported && left.lower == 0 && left.upper == 0 && right.upper == 2147483648,
+        "right operand capacity checked"
+    );
 }

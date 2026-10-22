@@ -248,8 +248,12 @@ fn interval_images_and_results_match_bigint_at_extrema_and_reproducible_domains(
         seed ^= seed << 17;
         let b = i128::from_le_bytes(seed.to_le_bytes());
         domains.push(range(a.min(b), a.max(b)));
-        let a = i128::from(i32::from_le_bytes(seed.to_le_bytes()[..4].try_into().unwrap()));
-        let b = i128::from(i32::from_le_bytes(seed.to_le_bytes()[4..8].try_into().unwrap()));
+        let a = i128::from(i32::from_le_bytes(
+            seed.to_le_bytes()[..4].try_into().unwrap(),
+        ));
+        let b = i128::from(i32::from_le_bytes(
+            seed.to_le_bytes()[4..8].try_into().unwrap(),
+        ));
         domains.push(range(a.min(b), a.max(b)));
     }
     for kind in [Kind::Add, Kind::Subtract, Kind::Multiply, Kind::Negate] {
@@ -331,8 +335,18 @@ fn interval_images_and_results_match_bigint_at_extrema_and_reproducible_domains(
 fn multiply_capacity_checks_whole_signed32_domains_independently_of_results() {
     let full = range(i32::MIN.into(), i32::MAX.into());
     let semantic = range(i128::MIN, i128::MAX);
-    let plan = Plan::new(Op::Multiply { left: full, right: full }, Some(semantic)).unwrap();
-    assert_eq!(plan.capacity(), range(-4611686016279904256, 4611686018427387904));
+    let plan = Plan::new(
+        Op::Multiply {
+            left: full,
+            right: full,
+        },
+        Some(semantic),
+    )
+    .unwrap();
+    assert_eq!(
+        plan.capacity(),
+        range(-4611686016279904256, 4611686018427387904)
+    );
     for a in [i32::MIN, -1, 0, 1, i32::MAX] {
         for b in [i32::MIN, -1, 0, 1, i32::MAX] {
             let (a, b) = (i128::from(a), i128::from(b));
@@ -340,21 +354,35 @@ fn multiply_capacity_checks_whole_signed32_domains_independently_of_results() {
             let mut actual = Meter::new(limits());
             let mut expected = Meter::new(limits());
             let result = native(admitted, &mut actual);
-            assert_eq!(abstract_outcome(result.clone()), general(Kind::Multiply, a, b, Some(semantic), &mut expected));
+            assert_eq!(
+                abstract_outcome(result.clone()),
+                general(Kind::Multiply, a, b, Some(semantic), &mut expected)
+            );
             same_meter(&actual, &expected);
             let result = result.completed().unwrap();
-            assert_eq!(BigInt::from(result.value()), BigInt::from(a) * BigInt::from(b));
+            assert_eq!(
+                BigInt::from(result.value()),
+                BigInt::from(a) * BigInt::from(b)
+            );
         }
     }
     for unsupported in [
-        singleton(2147483648), singleton(-2147483649),
-        range(-2147483649, 0), range(0, 2147483648),
-        range(i128::MIN, 0), range(0, i128::MAX),
+        singleton(2147483648),
+        singleton(-2147483649),
+        range(-2147483649, 0),
+        range(0, 2147483648),
+        range(i128::MIN, 0),
+        range(0, i128::MAX),
     ] {
         for (left, right) in [(unsupported, singleton(0)), (singleton(0), unsupported)] {
             for domain in [None, Some(singleton(0)), Some(semantic)] {
                 let actual = Meter::new(limits());
-                assert_eq!(Plan::new(Op::Multiply { left, right }, domain), Err(Error::CapacityExceeded { operation: Kind::Multiply }));
+                assert_eq!(
+                    Plan::new(Op::Multiply { left, right }, domain),
+                    Err(Error::CapacityExceeded {
+                        operation: Kind::Multiply
+                    })
+                );
                 same_meter(&actual, &Meter::new(limits()));
             }
         }
@@ -432,7 +460,10 @@ fn formula_meter(
 fn fresh_and_cumulative_meters_match_formulas_and_general_exact_calls() {
     for kind in [Kind::Add, Kind::Subtract, Kind::Multiply, Kind::Negate] {
         let extremes = if kind == Kind::Multiply {
-            [(i128::from(i32::MIN), i128::from(i32::MAX)), (i128::from(i32::MAX), 0)]
+            [
+                (i128::from(i32::MIN), i128::from(i32::MAX)),
+                (i128::from(i32::MAX), 0),
+            ]
         } else {
             [(i128::from(i64::MIN), i128::from(i64::MAX)), (i128::MAX, 0)]
         };
