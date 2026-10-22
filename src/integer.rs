@@ -78,7 +78,7 @@ impl Integer {
         }
     }
 
-    fn native(&self) -> Option<i128> {
+    pub(crate) fn native(&self) -> Option<i128> {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Some(i128::from(*value)),
             IntegerRepr::Small128 { value, .. } => Some(*value),

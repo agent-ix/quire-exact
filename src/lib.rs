@@ -72,6 +72,7 @@ mod ieee;
 mod integer;
 mod key;
 mod location;
+mod native_integer;
 mod node;
 mod numeric;
 mod numeric_membership;
@@ -136,6 +137,12 @@ pub use integer::{
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
+pub use native_integer::{
+    evaluate_native_integer_arithmetic, evaluate_native_integer_ordering,
+    AdmittedNativeIntegerOperation, NativeInteger, NativeIntegerAdmissionError,
+    NativeIntegerEndpoint, NativeIntegerInterval, NativeIntegerOperandPosition,
+    NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
+};
 pub use node::{is_identifier, Identifier, InvalidIdentifier, NodeKey, NODE_KEY_DOMAIN};
 pub use numeric::{
     evaluate_boolean, evaluate_integer_arithmetic, evaluate_rational_arithmetic, order_numbers,

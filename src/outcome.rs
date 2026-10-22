@@ -118,6 +118,8 @@ pub enum Undefined {
 /// These are never catalog refusal codes or caller-supplied messages.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CheckedInvariantCause {
+    /// An opaque admitted native operation breached its certified capacity.
+    NativeIntegerCapacityBreach,
     /// An evaluated collection element is outside its declared type.
     CollectionElementNotAdmitted,
     /// A deferred composite result is outside its declared type.
