@@ -1519,3 +1519,57 @@ bindings:
   ac_id: FR-383-AC-1
   trace: correct
 ```
+
+## Dispositions
+
+Round 1 at 2bacb3af84debce437e174d6e083d18bf326877d. Original finding text is preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | Inherited trace/consumer bookkeeping remains explicitly owned by open IR-705; actual existing healthy schedule/no_std execution evidence is distinguished from the missing or ignored source binding. |
+| FND-002 | deferred | Inherited trace/consumer bookkeeping remains explicitly owned by open IR-705; actual existing healthy schedule/no_std execution evidence is distinguished from the missing or ignored source binding. |
+| FND-003 | deferred | Inherited trace/consumer bookkeeping remains explicitly owned by open IR-705; actual existing healthy schedule/no_std execution evidence is distinguished from the missing or ignored source binding. |
+| FND-004 | deferred | Inherited trace/consumer bookkeeping remains explicitly owned by open IR-705; actual existing healthy schedule/no_std execution evidence is distinguished from the missing or ignored source binding. |
+| FND-005 | still-open | Actual canonical healthy/ALL-loop gate now passes with exact strict classification; five common-path healthy proofs also pass. Four substantive production priority/duplicate/atomic/high-water-reset mutation counterexamples and corresponding actual native failing/healthy playbacks remain pending. No final common-core qualification yet. |
+| FND-006 | deferred | Subsequent authentic generated-client adoption is owned by IR-705; handwritten native clients and kernel proofs do not replace it. |
+| FND-007 | deferred | Subsequent genuine TC025/027/IR917/IR948 16GiB healthy/mutant/playback/impossible-precondition qualification is owned by IR-705, including future IR-948. No consumer fit or whole-program completion claimed. |
+| FND-008 | fixed | units_injection_cancellation_and_saturation_match_general: only the incorrect borrowed-accessor tag removed; behavioral assertions unchanged and real accounting bindings retained. The separate mixed-prefix test retains its valid meter.cancel identity observation. |
+| FND-009 | fixed | units_boolean_retention_preserves_real_meter_stops: only the incorrect borrowed-accessor tag removed; behavioral assertions unchanged and real accounting bindings retained. The separate mixed-prefix test retains its valid meter.cancel identity observation. |
+| FND-010 | fixed | units_and_adapter_poll_cancel_exactly_once_per_attempt: only the incorrect borrowed-accessor tag removed; behavioral assertions unchanged and real accounting bindings retained. The separate mixed-prefix test retains its valid meter.cancel identity observation. |
+
+## Round 1 verdict
+
+FAIL — only the new remaining mutation-control qualification is still-open; inherited and downstream ownership deferrals remain explicit. Incorrect trace bindings are fixed. No final component merge or program completion yet.
+
+Canonical mutation now targets the actual common production request validation in src/accounting/units.rs. The actual canonical binding ran one test with no filter loss and passed: healthy 0/2763 failed, and the ALL-loop control failed exactly accounting::units::<impl accounting::Meter>::charge_units.unwind.0 at src/accounting/units.rs:98:9, description unwinding assertion loop 0. Its remaining 2790 checks are UNDETERMINED, not proved. Strict classifier, complete units.rs source.patch and Kani-only competing-process guard all inspected; ordinary bounded builds/tests remain allowed. Both proof scopes enforce16GiB/swap0/unwind3/Cadical/600s with zero memory events, complete teardown and source integrity. The recorded through-proof-return memory.peak values are 11829903360B and10399846400B; the separate native wrapper sampled263139328B is only a lower bound because final systemd MemoryPeak is unavailable.
+
+All production/helper/proof/manifest/lock dependencies are byte-equal to the five successful healthy496a receipts. Candidate delta is only canonical gate script/tests, trace tags and exact initial review custody. Numerical theorem carry-forward is an explicit dependency-equivalence claim, not a claim of new-head numerical reruns. No Cargo/Kani/gate job was run by reviewer.
+
+## Round 2 dispositions
+
+At clean 2bacb3af84debce437e174d6e083d18bf326877d.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-005 | fixed | All four actual production controls now falsify the independent oracle with exactly one failed semantic assertion and four covers; the actual assertion-generated witness (excluding cover witnesses) runs one failing native test on the mutated core and the identical test/witness runs one passing test on the restored core. Independently reconstructed all twelve actual inputs in memory from baseline Git source.tar plus source.patch and matched every tracked-before hash, unchanged tracked-after, raw hashes, caps, exits and resource records. Verified exact priority <->>, duplicate <-><=, premature IntegerBits commit and reset-nonzero-highwater edits, with independent model and original proof body preserved. Canonical healthy/actual ALL-loop gate and all five healthy selected proofs were already qualified. This closes the changed-component qualification gap, not any genuine CG consumer or program-completion obligation. |
+
+## Round 2 final qualification boundary
+
+Repository FAIL — Only explicit inherited trace/consumer FND-001 through FND-004 and subsequent generated-client/genuine-profile FND-006/FND-007 remain deferred to open IR-705. FND-005 and FND-008/009/010 are fixed. No still-open new PR80 finding remains. The kernel component is review-mergeable after latest typed review custody import and the lead final ordinary aggregate. Whole IR-705/IR-917/IR-948 completion and genuine16GiB profile fit remain unclaimed.
+
+Plan completion: not assessed
+
+Actual control details (all proof settings16GiB/swap0/Cadical/unwind3/600s, zero memory events, complete scopesGone/sourceStable):
+
+| Production control | Proof result | Verification seconds | Final proof peak B | Final native failing/restored peaks B |
+| --- | --- | --- | --- | --- |
+| Wrong field priority | 1/2909 failed; 4 covers | 60.531868 | 9381089280 | 494374912 / 498556928 |
+| Replace first failing duplicate | 1/2909 failed; 4 covers | 61.091534 | 9387487232 | 493977600 / 490311680 |
+| Commit size before cumulative validation | 1/2911 failed; 4 covers | 60.985455 | 9942237184 | 494362624 / 498118656 |
+| Reset nonzero high-water at entry | 1/2541 failed; 4 covers | 61.684925 | 7996887040 | 492990464 / 495222784 |
+
+The native failures reproduce the intended assertions: wrong WorkUnits versus ValueOccurrences at units_proofs.rs102; wrong exact next_charge at105; modified IntegerBits counter at107; reset MAX high-water tozero at212. Each native failure has innerCargo101/outerKani1 and exactly one failed test; each identical restored witness has inner/outer0 and exactly one passed test. No filtered-zero-test result or cover-generated witness is accepted.
+
+The first field-priority native failure was configured with an unused1800-second ordinary wrapper ceiling and completed6.87seconds; the root explicitly carried this deterministic semantic falsification with the deviation retained. It is not claimed as a600-configured native run or backend qualification relaxation. The actual CBMC proof stayed600, and all remaining native playbacks were configured600. Preliminary sampled native peaks were superseded by the final recorded values above. The canonical gate's separate native wrapper sampled263139328B remains only a lower bound; its unavailable final systemd MemoryPeak is not invented.
+
+Production is fully restored to the clean reviewed2bac candidate after all cases. The five healthy proof receipts remain their actual496a execution-head results supported by byte-identical production/proof dependency closure; canonical and mutation receipts retain actual2bac source/provenance, reconstructing deliberate mutations with their source.patch. Pure numerical NativeInteger/Integer/SMT theorems retain their earlier actual heads and only verified unchanged numerical dependency closure; the new public ordering/Meter proof is separately qualified. No proof/ordinary aggregate job was run by the reviewer. No C2 timeout, previous CG917 MemoryExhausted result or sampled peak is relabeled as success.

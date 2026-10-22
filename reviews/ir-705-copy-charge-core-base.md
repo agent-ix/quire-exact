@@ -365,3 +365,26 @@ bindings:
   ac_id: FR-383-AC-1
   trace: correct
 ```
+
+## Round 1 source-contract checkpoint
+
+PASS at 2bacb3af84debce437e174d6e083d18bf326877d. Actual canonical gate now exercises the common production path with the original healthy harness/settings, strict exact mutant classification and complete source patch provenance. The guard follows current Kani-only serialization while ordinary bounded workloads remain permitted. Incorrect borrowed-accessor trace claims are removed without changing assertions. Production, reference/proof helpers, arithmetic contracts, manifest/lock and numerical dependency closure are unchanged. Five healthy proof receipts retain their actual496a execution identity; canonical healthy/ALL-loop receipts belong to the actual new head. Other2790ALL-loop checks remain UNDETERMINED. Four substantive controls still pending under SR15255 FND005, so this source-contract PASS is not final qualification or consumer fit.
+
+## Final component conformance checkpoint
+
+PASS at 2bacb3af84debce437e174d6e083d18bf326877d. No further source change since the reviewed canonical/trace fix. All actual healthy/semantic-control/native witnesses now support the unchanged normative accounting contract, including field priority, first failing duplicate, atomic commit and preservation of nonzero high-water state. No private numerical, public arithmetic, refusal, cancellation, Meter or diagnostic-log specification was weakened. Independent reference and full-domain proof populations remain intact; no new public API or specification amendment is needed. Kernel component is review-mergeable after custody import and the lead final aggregate, while inherited and future IR-705 consumer obligations remain open.
+
+Actual control details (all proof settings16GiB/swap0/Cadical/unwind3/600s, zero memory events, complete scopesGone/sourceStable):
+
+| Production control | Proof result | Verification seconds | Final proof peak B | Final native failing/restored peaks B |
+| --- | --- | --- | --- | --- |
+| Wrong field priority | 1/2909 failed; 4 covers | 60.531868 | 9381089280 | 494374912 / 498556928 |
+| Replace first failing duplicate | 1/2909 failed; 4 covers | 61.091534 | 9387487232 | 493977600 / 490311680 |
+| Commit size before cumulative validation | 1/2911 failed; 4 covers | 60.985455 | 9942237184 | 494362624 / 498118656 |
+| Reset nonzero high-water at entry | 1/2541 failed; 4 covers | 61.684925 | 7996887040 | 492990464 / 495222784 |
+
+The native failures reproduce the intended assertions: wrong WorkUnits versus ValueOccurrences at units_proofs.rs102; wrong exact next_charge at105; modified IntegerBits counter at107; reset MAX high-water tozero at212. Each native failure has innerCargo101/outerKani1 and exactly one failed test; each identical restored witness has inner/outer0 and exactly one passed test. No filtered-zero-test result or cover-generated witness is accepted.
+
+The first field-priority native failure was configured with an unused1800-second ordinary wrapper ceiling and completed6.87seconds; the root explicitly carried this deterministic semantic falsification with the deviation retained. It is not claimed as a600-configured native run or backend qualification relaxation. The actual CBMC proof stayed600, and all remaining native playbacks were configured600. Preliminary sampled native peaks were superseded by the final recorded values above. The canonical gate's separate native wrapper sampled263139328B remains only a lower bound; its unavailable final systemd MemoryPeak is not invented.
+
+Production is fully restored to the clean reviewed2bac candidate after all cases. The five healthy proof receipts remain their actual496a execution-head results supported by byte-identical production/proof dependency closure; canonical and mutation receipts retain actual2bac source/provenance, reconstructing deliberate mutations with their source.patch. Pure numerical NativeInteger/Integer/SMT theorems retain their earlier actual heads and only verified unchanged numerical dependency closure; the new public ordering/Meter proof is separately qualified. No proof/ordinary aggregate job was run by the reviewer. No C2 timeout, previous CG917 MemoryExhausted result or sampled peak is relabeled as success.

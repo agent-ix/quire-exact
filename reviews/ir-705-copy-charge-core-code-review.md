@@ -375,3 +375,41 @@ bindings:
 ## FND-001 canonical gate repair detail
 
 FND-001 canonical gate repair must update every coupled authority: mutate the actually selected common production path; pin the classifier to the observed new function/file/mutant line and exact unwinding property/index without accepting arbitrary failures; include src/accounting/units.rs in the persisted source.patch rather than only accounting.rs. Also bring reject_unrelated_heavy_processes into the current direct user policy: serialize Kani/CBMC/goto drivers, while allowing ordinary Cargo/rustc/clippy/rustfmt and native tests in their own bounded scopes. The existing guard rejects those ordinary processes and every target/deps binary, so it still blocks permitted concurrent work. The lead will invoke the canonical gate under /tmp/agent-e-heavy-build.lock; this finding requires no global Make policy change, security/account changes or weakened proof checks. Canonical healthy+ALL-loop control must actually run after the fix, with original settings and complete source/resource/teardown evidence.
+
+## Dispositions
+
+Round 1 at 2bacb3af84debce437e174d6e083d18bf326877d. Original finding text is preserved.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Canonical mutation now targets the actual common production request validation in src/accounting/units.rs. The actual canonical binding ran one test with no filter loss and passed: healthy 0/2763 failed, and the ALL-loop control failed exactly accounting::units::<impl accounting::Meter>::charge_units.unwind.0 at src/accounting/units.rs:98:9, description unwinding assertion loop 0. Its remaining 2790 checks are UNDETERMINED, not proved. Strict classifier, complete units.rs source.patch and Kani-only competing-process guard all inspected; ordinary bounded builds/tests remain allowed. Both proof scopes enforce16GiB/swap0/unwind3/Cadical/600s with zero memory events, complete teardown and source integrity. The recorded through-proof-return memory.peak values are 11829903360B and10399846400B; the separate native wrapper sampled263139328B is only a lower bound because final systemd MemoryPeak is unavailable. |
+| FND-002 | fixed | units_injection_cancellation_and_saturation_match_general: only the incorrect borrowed-accessor tag removed; behavioral assertions unchanged and real accounting bindings retained. The separate mixed-prefix test retains its valid meter.cancel identity observation. |
+| FND-003 | fixed | units_boolean_retention_preserves_real_meter_stops: only the incorrect borrowed-accessor tag removed; behavioral assertions unchanged and real accounting bindings retained. The separate mixed-prefix test retains its valid meter.cancel identity observation. |
+| FND-004 | fixed | units_and_adapter_poll_cancel_exactly_once_per_attempt: only the incorrect borrowed-accessor tag removed; behavioral assertions unchanged and real accounting bindings retained. The separate mixed-prefix test retains its valid meter.cancel identity observation. |
+
+## Round 1 verdict
+
+PASS — all four code findings fixed; complete common-core qualification remains held under SR-15255 FND-005 pending the four substantive controls.
+
+Canonical mutation now targets the actual common production request validation in src/accounting/units.rs. The actual canonical binding ran one test with no filter loss and passed: healthy 0/2763 failed, and the ALL-loop control failed exactly accounting::units::<impl accounting::Meter>::charge_units.unwind.0 at src/accounting/units.rs:98:9, description unwinding assertion loop 0. Its remaining 2790 checks are UNDETERMINED, not proved. Strict classifier, complete units.rs source.patch and Kani-only competing-process guard all inspected; ordinary bounded builds/tests remain allowed. Both proof scopes enforce16GiB/swap0/unwind3/Cadical/600s with zero memory events, complete teardown and source integrity. The recorded through-proof-return memory.peak values are 11829903360B and10399846400B; the separate native wrapper sampled263139328B is only a lower bound because final systemd MemoryPeak is unavailable.
+
+All production/helper/proof/manifest/lock dependencies are byte-equal to the five successful healthy496a receipts. Candidate delta is only canonical gate script/tests, trace tags and exact initial review custody. Numerical theorem carry-forward is an explicit dependency-equivalence claim, not a claim of new-head numerical reruns. No Cargo/Kani/gate job was run by reviewer.
+
+## Final evidence checkpoint
+
+PASS at 2bacb3af84debce437e174d6e083d18bf326877d. All four original code findings remain fixed, and all remaining substantive common-core controls now have independently checked actual semantic counterexamples/native failing-restored pairs. No additional code or test issue found. Latest complete evidence closes SR-15255 FND-005; the component is review-mergeable subject only to review custody import and the lead final ordinary aggregate.
+
+Actual control details (all proof settings16GiB/swap0/Cadical/unwind3/600s, zero memory events, complete scopesGone/sourceStable):
+
+| Production control | Proof result | Verification seconds | Final proof peak B | Final native failing/restored peaks B |
+| --- | --- | --- | --- | --- |
+| Wrong field priority | 1/2909 failed; 4 covers | 60.531868 | 9381089280 | 494374912 / 498556928 |
+| Replace first failing duplicate | 1/2909 failed; 4 covers | 61.091534 | 9387487232 | 493977600 / 490311680 |
+| Commit size before cumulative validation | 1/2911 failed; 4 covers | 60.985455 | 9942237184 | 494362624 / 498118656 |
+| Reset nonzero high-water at entry | 1/2541 failed; 4 covers | 61.684925 | 7996887040 | 492990464 / 495222784 |
+
+The native failures reproduce the intended assertions: wrong WorkUnits versus ValueOccurrences at units_proofs.rs102; wrong exact next_charge at105; modified IntegerBits counter at107; reset MAX high-water tozero at212. Each native failure has innerCargo101/outerKani1 and exactly one failed test; each identical restored witness has inner/outer0 and exactly one passed test. No filtered-zero-test result or cover-generated witness is accepted.
+
+The first field-priority native failure was configured with an unused1800-second ordinary wrapper ceiling and completed6.87seconds; the root explicitly carried this deterministic semantic falsification with the deviation retained. It is not claimed as a600-configured native run or backend qualification relaxation. The actual CBMC proof stayed600, and all remaining native playbacks were configured600. Preliminary sampled native peaks were superseded by the final recorded values above. The canonical gate's separate native wrapper sampled263139328B remains only a lower bound; its unavailable final systemd MemoryPeak is not invented.
+
+Production is fully restored to the clean reviewed2bac candidate after all cases. The five healthy proof receipts remain their actual496a execution-head results supported by byte-identical production/proof dependency closure; canonical and mutation receipts retain actual2bac source/provenance, reconstructing deliberate mutations with their source.patch. Pure numerical NativeInteger/Integer/SMT theorems retain their earlier actual heads and only verified unchanged numerical dependency closure; the new public ordering/Meter proof is separately qualified. No proof/ordinary aggregate job was run by the reviewer. No C2 timeout, previous CG917 MemoryExhausted result or sampled peak is relabeled as success.
