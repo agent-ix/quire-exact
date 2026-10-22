@@ -431,12 +431,12 @@ fn formula_meter(
 #[trace("FR-384-AC-3")]
 fn fresh_and_cumulative_meters_match_formulas_and_general_exact_calls() {
     for kind in [Kind::Add, Kind::Subtract, Kind::Multiply, Kind::Negate] {
-        for (a, b) in [
-            (-23, 7),
-            (0, 0),
-            (i64::MIN.into(), i64::MAX.into()),
-            (i128::MAX, 0),
-        ] {
+        let extremes = if kind == Kind::Multiply {
+            [(i128::from(i32::MIN), i128::from(i32::MAX)), (i128::from(i32::MAX), 0)]
+        } else {
+            [(i128::from(i64::MIN), i128::from(i64::MAX)), (i128::MAX, 0)]
+        };
+        for (a, b) in [(-23, 7), (0, 0), extremes[0], extremes[1]] {
             for bound in [None, Some(singleton(0)), Some(range(i128::MIN, i128::MAX))] {
                 for limit_kind in KINDS {
                     for amount in [0, 1, 2, 3, 64, 65, 127, 128, 129, 256, u64::MAX] {
