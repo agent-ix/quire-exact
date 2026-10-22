@@ -295,9 +295,15 @@ fn signed32_interval_sign_pairs_are_exclusive_and_exhaustive() {
     assert_eq!(u8::from(ln) + u8::from(lp) + u8::from(ls), 1);
     assert_eq!(u8::from(rn) + u8::from(rp) + u8::from(rs), 1);
     assert_eq!(
-        u8::from(ln && rn) + u8::from(ln && rp) + u8::from(ln && rs)
-            + u8::from(lp && rn) + u8::from(lp && rp) + u8::from(lp && rs)
-            + u8::from(ls && rn) + u8::from(ls && rp) + u8::from(ls && rs),
+        u8::from(ln && rn)
+            + u8::from(ln && rp)
+            + u8::from(ln && rs)
+            + u8::from(lp && rn)
+            + u8::from(lp && rp)
+            + u8::from(lp && rs)
+            + u8::from(ls && rn)
+            + u8::from(ls && rp)
+            + u8::from(ls && rs),
         1,
         "each valid interval pair belongs to exactly one of the nine cases"
     );
@@ -356,10 +362,7 @@ fn native_multiply_signed32_interval_membership_and_calculation() {
             result, full_result,
             "same production result as the complete signed32 plan"
         );
-        kani::cover!(
-            true,
-            "certified interval calculation completes"
-        );
+        kani::cover!(true, "certified interval calculation completes");
         kani::cover!(
             left.lower < 0 && left.upper > 0 && right.lower < 0 && right.upper > 0,
             "two straddling domains complete"
@@ -382,18 +385,27 @@ fn multiply_capacity_in_sign_case(
     let x: i128 = kani::any();
     let y: i128 = kani::any();
     kani::assume(interval_sign(left) == left_sign && interval_sign(right) == right_sign);
-    let plan = NativeIntegerPlan::new(
-        NativeIntegerOperation::Multiply { left, right }, semantic,
-    ).unwrap();
+    let plan =
+        NativeIntegerPlan::new(NativeIntegerOperation::Multiply { left, right }, semantic).unwrap();
     let admitted = plan.admit(NativeIntegerOperands::Binary {
-        left: NativeInteger::new(x), right: NativeInteger::new(y),
+        left: NativeInteger::new(x),
+        right: NativeInteger::new(y),
     });
     if let Ok(admitted) = admitted {
         let result = admitted.calculate();
-        assert!(result.is_some(), "every interval-admitted calculation completes");
+        assert!(
+            result.is_some(),
+            "every interval-admitted calculation completes"
+        );
         let result = result.unwrap();
-        assert!(plan.capacity.contains(result), "every admitted result belongs to the exact image");
-        kani::cover!(true, "admitted sign-case calculation completes within capacity");
+        assert!(
+            plan.capacity.contains(result),
+            "every admitted result belongs to the exact image"
+        );
+        kani::cover!(
+            true,
+            "admitted sign-case calculation completes within capacity"
+        );
         Some((x, y))
     } else {
         None
@@ -442,7 +454,8 @@ fn native_multiply_straddling_nonnegative_stays_in_capacity() {
 
 #[kani::proof]
 fn native_multiply_straddling_straddling_stays_in_capacity() {
-    let completed = multiply_capacity_in_sign_case(IntervalSign::Straddling, IntervalSign::Straddling);
+    let completed =
+        multiply_capacity_in_sign_case(IntervalSign::Straddling, IntervalSign::Straddling);
     kani::cover!(
         matches!(completed, Some((x, y)) if x == i128::from(i32::MIN) && y == i128::from(i32::MIN)),
         "both-straddling MIN squared completes within capacity"
