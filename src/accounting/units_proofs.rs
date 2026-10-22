@@ -235,6 +235,10 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
     );
     kani::cover!(injected, "exact injected occurrence denies");
     kani::cover!(
+        !cancelled && !injected && !completed && same_point,
+        "ordinary refusal leaves the future injection pending"
+    );
+    kani::cover!(
         !cancelled && same_point && count == u64::MAX && completed,
         "occurrence count saturation still admits"
     );

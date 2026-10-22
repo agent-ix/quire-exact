@@ -91,7 +91,6 @@ fn check(
     }
 }
 
-/// Trace: FR-359-AC-1, FR-359-AC-2, FR-359-AC-5, FR-359-AC-6, FR-359-AC-8
 #[test]
 #[trace(
     "FR-359-AC-1",
@@ -135,7 +134,6 @@ fn units_charge_matches_independent_boundary_model() {
     }
 }
 
-/// Trace: FR-359-AC-6, FR-359-AC-7, FR-359-AC-8
 #[test]
 #[trace("FR-359-AC-6", "FR-359-AC-7", "FR-359-AC-8")]
 fn units_charge_matches_independent_mixed_state_model() {
@@ -161,7 +159,6 @@ fn units_charge_matches_independent_mixed_state_model() {
     }
 }
 
-/// Trace: FR-359-AC-3, FR-359-AC-4, FR-359-AC-8
 #[test]
 #[trace("FR-359-AC-3", "FR-359-AC-4", "FR-359-AC-8")]
 fn units_adapter_keeps_exact_and_unrestricted_fallback() {
@@ -214,7 +211,6 @@ fn units_adapter_keeps_exact_and_unrestricted_fallback() {
     }
 }
 
-/// Trace: FR-359-AC-6, FR-359-AC-8, FR-383-AC-1
 #[test]
 #[trace("FR-359-AC-6", "FR-359-AC-8", "FR-383-AC-1")]
 fn units_injection_cancellation_and_saturation_match_general() {
@@ -276,7 +272,6 @@ fn units_injection_cancellation_and_saturation_match_general() {
     }
 }
 
-/// Trace: FR-359-AC-6, FR-359-AC-8, FR-383-AC-1
 #[test]
 #[trace("FR-359-AC-6", "FR-359-AC-8", "FR-383-AC-1")]
 fn units_boolean_retention_preserves_real_meter_stops() {
@@ -309,7 +304,6 @@ fn units_boolean_retention_preserves_real_meter_stops() {
     }
 }
 
-/// Trace: FR-383-AC-1, FR-359-AC-8
 #[test]
 #[trace("FR-383-AC-1", "FR-359-AC-8")]
 fn units_and_adapter_poll_cancel_exactly_once_per_attempt() {
@@ -335,7 +329,6 @@ fn units_and_adapter_poll_cancel_exactly_once_per_attempt() {
     }
 }
 
-/// Trace: FR-359-AC-6, FR-359-AC-8, FR-359-AC-12, FR-383-AC-1
 #[test]
 #[trace("FR-359-AC-6", "FR-359-AC-8", "FR-359-AC-12", "FR-383-AC-1")]
 fn units_public_and_fallback_share_one_meter_and_pending_denial() {
