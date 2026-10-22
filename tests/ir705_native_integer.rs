@@ -879,3 +879,67 @@ fn ordering_cancellation_precedes_pending_injection_on_fresh_and_charged_meters(
         }
     }
 }
+
+#[test]
+#[trace("FR-384-AC-3")]
+fn native_interval_domain_refusal_preserves_target_and_pending_retain_denial() {
+    for (kind, a, b) in [
+        (Kind::Add, 1, 1),
+        (Kind::Subtract, 3, 1),
+        (Kind::Multiply, 1, 2),
+        (Kind::Negate, -2, 0),
+    ] {
+        for domain in [
+            singleton(i128::MIN),
+            singleton(i128::MAX),
+            range(i128::MIN, 1),
+            range(3, i128::MAX),
+        ] {
+            let denial = InjectedDenial {
+                point: ChargePoint::IntegerArithmeticResultRetain,
+                occurrence: core::num::NonZeroU64::new(1).unwrap(),
+            };
+            let mut actual = Meter::new(limits()).with_injected_denial(denial);
+            let mut expected = Meter::new(limits()).with_injected_denial(denial);
+            let mut normative = Meter::new(limits()).with_injected_denial(denial);
+            assert_eq!(retain_boolean(true, &mut actual), Ok(true));
+            assert_eq!(retain_boolean(true, &mut expected), Ok(true));
+            assert_eq!(retain_boolean(true, &mut normative), Ok(true));
+            let prefix = actual.admission_count();
+            let outcome = abstract_outcome(native(admitted(kind, a, b, Some(domain)), &mut actual));
+            assert_eq!(outcome, general(kind, a, b, Some(domain), &mut expected));
+            assert_eq!(
+                outcome,
+                formula_meter(kind, a, b, Some(domain), &mut normative)
+            );
+            let Outcome::Refused(Refusal::IntegerOutOfDomain { target }) = outcome else {
+                panic!("excluded result must retain its exact semantic domain target");
+            };
+            assert_eq!(target.lower().as_big(), &BigInt::from(domain.lower()));
+            assert_eq!(target.upper().as_big(), &BigInt::from(domain.upper()));
+            assert_eq!(actual.admission_count(), prefix + 2);
+            assert_eq!(actual.consumed(LimitKind::ResultUnits), 1);
+            same_meter(&actual, &expected);
+            same_meter(&actual, &normative);
+
+            // The refused call never attempts retain, so its injection is pending.
+            let next = abstract_outcome(native(admitted(kind, a, b, None), &mut actual));
+            assert_eq!(next, general(kind, a, b, None, &mut expected));
+            assert_eq!(next, formula_meter(kind, a, b, None, &mut normative));
+            assert!(matches!(next, Outcome::Incomplete(ref record)
+                if record.charge_point == ChargePoint::IntegerArithmeticResultRetain));
+            assert_eq!(actual.admission_count(), prefix + 4);
+            assert_eq!(actual.consumed(LimitKind::ResultUnits), 1);
+            same_meter(&actual, &expected);
+            same_meter(&actual, &normative);
+
+            // The injection was consumed only when the unrestricted call reached retain.
+            let completed = abstract_outcome(native(admitted(kind, a, b, None), &mut actual));
+            assert_eq!(completed, Outcome::Completed(Integer::from(2_i128)));
+            assert_eq!(completed, general(kind, a, b, None, &mut expected));
+            assert_eq!(completed, formula_meter(kind, a, b, None, &mut normative));
+            same_meter(&actual, &expected);
+            same_meter(&actual, &normative);
+        }
+    }
+}
