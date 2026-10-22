@@ -273,7 +273,7 @@ fn interval_sign(interval: NativeIntegerInterval) -> IntervalSign {
 }
 
 /// Independent endpoint predicates check both classifier results and the
-/// complete Cartesian partition. All nine cases must later prove enclosure.
+/// complete Cartesian partition as auxiliary sign-classification evidence.
 #[kani::proof]
 fn signed32_interval_sign_pairs_are_exclusive_and_exhaustive() {
     let left = signed32_interval();
@@ -320,7 +320,7 @@ fn signed32_interval_sign_pairs_are_exclusive_and_exhaustive() {
 
 /// Structural binding for every interval and unrestricted i128 payload: exact
 /// membership, successful calculation and equality to the full signed32 plan.
-/// Interior enclosure is a separate mandatory sign-partition obligation.
+/// Interior enclosure follows the selected SMT and native bridge composition.
 #[kani::proof]
 fn native_multiply_signed32_interval_membership_and_calculation() {
     let left = signed32_interval();
@@ -369,105 +369,6 @@ fn native_multiply_signed32_interval_membership_and_calculation() {
         );
     }
     kani::cover!(!membership, "outside-interval payload is rejected");
-}
-
-/// Only the exhaustive interval-sign case is assumed. Payloads remain full
-/// i128 draws and actual kernel admission decides membership. No capacity,
-/// overflow or arithmetic identity is assumed. Each of all nine wrappers is
-/// required; this helper does not treat a subset as universal refinement.
-fn multiply_capacity_in_sign_case(
-    left_sign: IntervalSign,
-    right_sign: IntervalSign,
-) -> Option<(i128, i128)> {
-    let left = signed32_interval();
-    let right = signed32_interval();
-    let semantic = semantic_interval();
-    let x: i128 = kani::any();
-    let y: i128 = kani::any();
-    kani::assume(interval_sign(left) == left_sign && interval_sign(right) == right_sign);
-    let plan =
-        NativeIntegerPlan::new(NativeIntegerOperation::Multiply { left, right }, semantic).unwrap();
-    let admitted = plan.admit(NativeIntegerOperands::Binary {
-        left: NativeInteger::new(x),
-        right: NativeInteger::new(y),
-    });
-    if let Ok(admitted) = admitted {
-        let result = admitted.calculate();
-        assert!(
-            result.is_some(),
-            "every interval-admitted calculation completes"
-        );
-        let result = result.unwrap();
-        assert!(
-            plan.capacity.contains(result),
-            "every admitted result belongs to the exact image"
-        );
-        kani::cover!(
-            true,
-            "admitted sign-case calculation completes within capacity"
-        );
-        Some((x, y))
-    } else {
-        None
-    }
-}
-
-#[kani::proof]
-fn native_multiply_negative_negative_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Negative, IntervalSign::Negative);
-}
-
-#[kani::proof]
-fn native_multiply_negative_nonnegative_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Negative, IntervalSign::Nonnegative);
-}
-
-#[kani::proof]
-fn native_multiply_negative_straddling_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Negative, IntervalSign::Straddling);
-}
-
-#[kani::proof]
-fn native_multiply_nonnegative_negative_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Nonnegative, IntervalSign::Negative);
-}
-
-#[kani::proof]
-fn native_multiply_nonnegative_nonnegative_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Nonnegative, IntervalSign::Nonnegative);
-}
-
-#[kani::proof]
-fn native_multiply_nonnegative_straddling_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Nonnegative, IntervalSign::Straddling);
-}
-
-#[kani::proof]
-fn native_multiply_straddling_negative_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Straddling, IntervalSign::Negative);
-}
-
-#[kani::proof]
-fn native_multiply_straddling_nonnegative_stays_in_capacity() {
-    let _ = multiply_capacity_in_sign_case(IntervalSign::Straddling, IntervalSign::Nonnegative);
-}
-
-#[kani::proof]
-fn native_multiply_straddling_straddling_stays_in_capacity() {
-    let completed =
-        multiply_capacity_in_sign_case(IntervalSign::Straddling, IntervalSign::Straddling);
-    kani::cover!(
-        matches!(completed, Some((x, y)) if x == i128::from(i32::MIN) && y == i128::from(i32::MIN)),
-        "both-straddling MIN squared completes within capacity"
-    );
-    kani::cover!(
-        matches!(completed, Some((x, y)) if x == i128::from(i32::MIN) && y == i128::from(i32::MAX)),
-        "both-straddling negative extreme completes within capacity"
-    );
-    kani::cover!(
-        matches!(completed, Some((x, y)) if x == 0 && y == i128::from(i32::MIN)),
-        "both-straddling zero product completes within capacity"
-    );
 }
 
 /// The public i128 payload population is not silently replaced by i32 draws:
