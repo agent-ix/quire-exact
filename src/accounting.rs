@@ -21,9 +21,9 @@ use core::num::NonZeroU64;
 
 #[cfg(kani)]
 mod kani_proofs;
+mod units;
 #[cfg(kani)]
 mod units_proofs;
-mod units;
 #[cfg(any(test, kani))]
 mod units_reference;
 #[cfg(test)]
