@@ -566,3 +566,54 @@ fn native_multiply_rejects_every_outside_signed32_interval() {
         "right operand capacity checked"
     );
 }
+
+/// Every validated native interval retains both exact general endpoints and
+/// returns through the existing public ingress without changing its domain.
+#[kani::proof]
+fn native_interval_egress_preserves_endpoints_and_public_roundtrip() {
+    let a: i128 = kani::any();
+    let b: i128 = kani::any();
+    let lower = a.min(b);
+    let upper = a.max(b);
+    let interval = NativeIntegerInterval::new(lower, upper).unwrap();
+    let general = interval.to_integer_interval();
+    assert_eq!(
+        general.lower().native(),
+        Some(lower),
+        "exact lower endpoint"
+    );
+    assert_eq!(
+        general.upper().native(),
+        Some(upper),
+        "exact upper endpoint"
+    );
+    assert_eq!(
+        NativeIntegerInterval::try_from(&general),
+        Ok(interval),
+        "public native interval roundtrip preserves the entire domain"
+    );
+    kani::cover!(
+        lower == i128::MIN && upper == i128::MAX,
+        "egress full signed-i128 interval"
+    );
+    kani::cover!(
+        lower == i128::MIN && upper == i128::MIN,
+        "egress singleton signed-i128 MIN"
+    );
+    kani::cover!(
+        lower == i128::MAX && upper == i128::MAX,
+        "egress singleton signed-i128 MAX"
+    );
+    kani::cover!(
+        lower < upper && upper < 0,
+        "egress distinct strictly negative endpoints"
+    );
+    kani::cover!(
+        0 < lower && lower < upper,
+        "egress distinct strictly positive endpoints"
+    );
+    kani::cover!(
+        i128::MIN < lower && lower < 0 && 0 < upper && upper < i128::MAX,
+        "egress interior zero-straddling interval"
+    );
+}
