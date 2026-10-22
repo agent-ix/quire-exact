@@ -191,3 +191,27 @@ fn units_injection_cancellation_and_saturation_match_general() {
         }
     }
 }
+
+/// Trace: FR-359-AC-6, FR-359-AC-8, FR-383-AC-1
+#[test]
+#[trace("FR-359-AC-6", "FR-359-AC-8", "FR-383-AC-1")]
+fn units_boolean_retention_preserves_real_meter_stops() {
+    for limit in [0, 1, 2, u64::MAX] {
+        for consumed in [0, 1, u64::MAX - 1, u64::MAX] {
+            for cancelled in [false, true] {
+                for injected in [false, true] {
+                    let cancel = Cancel::new();
+                    if cancelled { cancel.cancel(crate::CancelCause::Deadline); }
+                    let mut actual = Meter::new(limits([limit; 10])).with_cancel(cancel);
+                    actual.counters.consumed[8] = consumed;
+                    actual.counters.consumed[9] = consumed;
+                    if injected { actual = actual.with_injected_denial(InjectedDenial { point: ChargePoint::BooleanResultRetain, occurrence: NonZeroU64::new(1).unwrap() }); }
+                    let mut reference = actual.clone();
+                    let expected = reference.charge_general(Charge::new(ChargePoint::BooleanResultRetain).results(1)).map(|()| true);
+                    assert_eq!(crate::retain_boolean(true, &mut actual), expected);
+                    assert_eq!(actual, reference);
+                }
+            }
+        }
+    }
+}

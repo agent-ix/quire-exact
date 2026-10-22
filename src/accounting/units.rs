@@ -6,11 +6,11 @@ use super::*;
 
 #[derive(Clone, Copy)]
 pub(crate) struct UnitsCharge {
-    point: ChargePoint,
-    first: Option<(LimitKind, u64)>,
-    second: Option<(LimitKind, u64)>,
-    work: u64,
-    results: u64,
+    pub(super) point: ChargePoint,
+    pub(super) first: Option<(LimitKind, u64)>,
+    pub(super) second: Option<(LimitKind, u64)>,
+    pub(super) work: u64,
+    pub(super) results: u64,
 }
 
 impl UnitsCharge {
