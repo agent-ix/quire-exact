@@ -122,7 +122,7 @@ pub enum NativeIntegerAdmissionError {
         /// The nonrepresentable endpoint.
         endpoint: NativeIntegerEndpoint,
     },
-    /// The complete interval image cannot fit the native carrier.
+    /// The operand domain or complete image exceeds the operation's capacity.
     #[error("native capacity exceeded for {operation:?}")]
     CapacityExceeded {
         /// The rejected operation.
@@ -172,7 +172,7 @@ pub enum NativeIntegerOperation {
         /// Right domain.
         right: NativeIntegerInterval,
     },
-    /// Multiply the two domains, including all four corner products.
+    /// Multiply signed32 operand domains, retaining the signed64 image in i128.
     Multiply {
         /// Left domain.
         left: NativeIntegerInterval,
@@ -206,10 +206,10 @@ impl NativeIntegerOperation {
                 left.upper.checked_sub(right.lower)?,
             ),
             Self::Multiply { left, right } => {
-                let a = checked_product(left.lower, right.lower)?;
-                let b = checked_product(left.lower, right.upper)?;
-                let c = checked_product(left.upper, right.lower)?;
-                let d = checked_product(left.upper, right.upper)?;
+                let a = bounded_product(left.lower, right.lower)?;
+                let b = bounded_product(left.lower, right.upper)?;
+                let c = bounded_product(left.upper, right.lower)?;
+                let d = bounded_product(left.upper, right.upper)?;
                 (a.min(b).min(c).min(d), a.max(b).max(c).max(d))
             }
             Self::Negate { operand } => {
@@ -318,7 +318,7 @@ pub struct AdmittedNativeIntegerOperation {
 }
 
 impl AdmittedNativeIntegerOperation {
-    // This exact production computation is also the subject of the full-width
+    // This exact production computation is also the subject of the full-capacity
     // refinement obligation; it never constructs a general Integer.
     fn calculate(self) -> Option<NativeInteger> {
         let value = match (self.plan.operation, self.operands) {
@@ -332,7 +332,7 @@ impl AdmittedNativeIntegerOperation {
             (
                 NativeIntegerOperation::Multiply { .. },
                 NativeIntegerOperands::Binary { left, right },
-            ) => checked_product(left.0, right.0),
+            ) => bounded_product(left.0, right.0),
             (NativeIntegerOperation::Negate { .. }, NativeIntegerOperands::Unary { operand }) => {
                 operand.0.checked_neg()
             }
@@ -427,20 +427,8 @@ mod kani_proofs;
 #[cfg(any(test, kani))]
 mod reference;
 
-// Contract metadata is opt-in so ordinary consumers execute only this body.
-#[cfg_attr(
-    all(kani, feature = "native-integer-refinement-contracts"),
-    kani::ensures(|result: &Option<i128>| {
-        let expected = reference::MathematicalInteger::evaluate(
-            NativeIntegerOperationKind::Multiply, left, right,
-        );
-        result.is_some() == expected.fits_native()
-            && match *result {
-                Some(value) => reference::MathematicalInteger::from_native(value) == expected,
-                None => true,
-            }
-    })
-)]
-fn checked_product(left: i128, right: i128) -> Option<i128> {
-    left.checked_mul(right)
+fn bounded_product(left: i128, right: i128) -> Option<i128> {
+    let left = i32::try_from(left).ok()?;
+    let right = i32::try_from(right).ok()?;
+    Some(i128::from(i64::from(left) * i64::from(right)))
 }

@@ -229,6 +229,11 @@ fn interval_images_and_results_match_bigint_at_extrema_and_reproducible_domains(
         range(0, 0),
         range(-3, 7),
         range(i64::MIN.into(), i64::MAX.into()),
+        range(i32::MIN.into(), i32::MAX.into()),
+        range(i32::MIN.into(), i32::MIN.into()),
+        range(i32::MAX.into(), i32::MAX.into()),
+        range(i128::from(i32::MIN) - 1, 0),
+        range(0, i128::from(i32::MAX) + 1),
         range(-1, 0),
         range(0, 1),
     ];
@@ -242,6 +247,9 @@ fn interval_images_and_results_match_bigint_at_extrema_and_reproducible_domains(
         seed ^= seed >> 7;
         seed ^= seed << 17;
         let b = i128::from_le_bytes(seed.to_le_bytes());
+        domains.push(range(a.min(b), a.max(b)));
+        let a = i128::from(i32::from_le_bytes(seed.to_le_bytes()[..4].try_into().unwrap()));
+        let b = i128::from(i32::from_le_bytes(seed.to_le_bytes()[4..8].try_into().unwrap()));
         domains.push(range(a.min(b), a.max(b)));
     }
     for kind in [Kind::Add, Kind::Subtract, Kind::Multiply, Kind::Negate] {
@@ -273,6 +281,14 @@ fn interval_images_and_results_match_bigint_at_extrema_and_reproducible_domains(
                 let expected_low = corners.iter().min().unwrap().to_i128();
                 let expected_high = corners.iter().max().unwrap().to_i128();
                 let actual = Plan::new(operation(kind, *left, *right), None);
+                let supported = kind != Kind::Multiply
+                    || [left.lower(), left.upper(), right.lower(), right.upper()]
+                        .into_iter()
+                        .all(|endpoint| (-2147483648..=2147483647).contains(&endpoint));
+                if !supported {
+                    assert_eq!(actual, Err(Error::CapacityExceeded { operation: kind }));
+                    continue;
+                }
                 match (expected_low, expected_high) {
                     (Some(low), Some(high)) => {
                         let plan = actual.unwrap();
@@ -308,6 +324,51 @@ fn interval_images_and_results_match_bigint_at_extrema_and_reproducible_domains(
         }
         assert!(successes > 0, "nonvacuous {kind:?}");
     }
+}
+
+#[test]
+#[trace("FR-384-AC-1", "FR-384-AC-2", "FR-384-AC-3")]
+fn multiply_capacity_checks_whole_signed32_domains_independently_of_results() {
+    let full = range(i32::MIN.into(), i32::MAX.into());
+    let semantic = range(i128::MIN, i128::MAX);
+    let plan = Plan::new(Op::Multiply { left: full, right: full }, Some(semantic)).unwrap();
+    assert_eq!(plan.capacity(), range(-4611686016279904256, 4611686018427387904));
+    for a in [i32::MIN, -1, 0, 1, i32::MAX] {
+        for b in [i32::MIN, -1, 0, 1, i32::MAX] {
+            let (a, b) = (i128::from(a), i128::from(b));
+            let admitted = plan.admit(args(Kind::Multiply, a, b)).unwrap();
+            let mut actual = Meter::new(limits());
+            let mut expected = Meter::new(limits());
+            let result = native(admitted, &mut actual);
+            assert_eq!(abstract_outcome(result.clone()), general(Kind::Multiply, a, b, Some(semantic), &mut expected));
+            same_meter(&actual, &expected);
+            let result = result.completed().unwrap();
+            assert_eq!(BigInt::from(result.value()), BigInt::from(a) * BigInt::from(b));
+        }
+    }
+    for unsupported in [
+        singleton(2147483648), singleton(-2147483649),
+        range(-2147483649, 0), range(0, 2147483648),
+        range(i128::MIN, 0), range(0, i128::MAX),
+    ] {
+        for (left, right) in [(unsupported, singleton(0)), (singleton(0), unsupported)] {
+            for domain in [None, Some(singleton(0)), Some(semantic)] {
+                let actual = Meter::new(limits());
+                assert_eq!(Plan::new(Op::Multiply { left, right }, domain), Err(Error::CapacityExceeded { operation: Kind::Multiply }));
+                same_meter(&actual, &Meter::new(limits()));
+            }
+        }
+    }
+    // A signed-i128 semantic domain is retained even when it excludes every product.
+    let domain = Some(singleton(i128::MAX));
+    let mut actual = Meter::new(limits());
+    let mut expected = Meter::new(limits());
+    assert_eq!(
+        abstract_outcome(native(admitted(Kind::Multiply, -1, 1, domain), &mut actual)),
+        general(Kind::Multiply, -1, 1, domain, &mut expected)
+    );
+    same_meter(&actual, &expected);
+    assert_eq!(actual.admission_count(), 2);
 }
 
 fn formula_meter(

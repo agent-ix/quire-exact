@@ -5,32 +5,7 @@
 use super::reference::MathematicalInteger as Math;
 use super::*;
 
-// Every valid inclusive interval has exactly one of these sign classes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum IntervalSign {
-    Negative,
-    Nonnegative,
-    Straddling,
-}
-
-fn interval_sign(interval: NativeIntegerInterval) -> IntervalSign {
-    if interval.upper < 0 {
-        IntervalSign::Negative
-    } else if interval.lower >= 0 {
-        IntervalSign::Nonnegative
-    } else {
-        IntervalSign::Straddling
-    }
-}
-
 fn refinement(kind: NativeIntegerOperationKind) {
-    refinement_in_partition(kind, None);
-}
-
-fn refinement_in_partition(
-    kind: NativeIntegerOperationKind,
-    partition: Option<(IntervalSign, IntervalSign)>,
-) {
     let a: i128 = kani::any();
     let b: i128 = kani::any();
     let c: i128 = kani::any();
@@ -39,13 +14,6 @@ fn refinement_in_partition(
     let y: i128 = kani::any();
     let left = NativeIntegerInterval::new(a.min(b), a.max(b)).unwrap();
     let right = NativeIntegerInterval::new(c.min(d), c.max(d)).unwrap();
-    if let Some((left_sign, right_sign)) = partition {
-        // These are exhaustive proof partitions, not an admission assumption:
-        // all nine pairs plus interval_sign_partition_is_exhaustive are needed.
-        // In particular no capacity or payload-membership premise is assumed.
-        kani::assume(interval_sign(left) == left_sign);
-        kani::assume(interval_sign(right) == right_sign);
-    }
     let operation = match kind {
         NativeIntegerOperationKind::Add => NativeIntegerOperation::Add { left, right },
         NativeIntegerOperationKind::Subtract => NativeIntegerOperation::Subtract { left, right },
@@ -110,10 +78,6 @@ fn native_subtract_refines_mathematical_integer() {
     refinement(NativeIntegerOperationKind::Subtract)
 }
 #[kani::proof]
-fn native_multiply_refines_mathematical_integer() {
-    refinement(NativeIntegerOperationKind::Multiply)
-}
-#[kani::proof]
 fn native_negate_refines_mathematical_integer() {
     refinement(NativeIntegerOperationKind::Negate)
 }
@@ -176,101 +140,102 @@ fn native_ordering_refines_mathematical_integer() {
     );
 }
 
-/// Establish that the partition guards classify every native interval exactly
-/// once. The predicates here are explicit mathematical endpoint conditions;
-/// they are checked against the function used by the nine proof guards.
+/// Every signed32 pair is admitted by the complete supported domain. The
+/// unchanged two-limb model is independent of the production signed64 product.
 #[kani::proof]
-fn interval_sign_partition_is_exhaustive() {
+fn native_multiply_signed32_payload_refines_mathematical_integer() {
+    let x = i128::from(kani::any::<i32>());
+    let y = i128::from(kani::any::<i32>());
+    let full = NativeIntegerInterval::new(i32::MIN.into(), i32::MAX.into()).unwrap();
+    let plan = NativeIntegerPlan::new(
+        NativeIntegerOperation::Multiply { left: full, right: full }, None,
+    ).unwrap();
+    assert_eq!(plan.capacity.lower, -4611686016279904256);
+    assert_eq!(plan.capacity.upper, 4611686018427387904);
+    let admitted = plan.admit(NativeIntegerOperands::Binary {
+        left: NativeInteger::new(x), right: NativeInteger::new(y),
+    }).unwrap();
+    let result = admitted.calculate();
+    assert!(result.is_some(), "every signed32 pair completes production calculation");
+    let result = result.unwrap();
+    assert_eq!(Math::from_native(result.value()), Math::evaluate(
+        NativeIntegerOperationKind::Multiply, x, y,
+    ), "signed64 production product refines independent exact limb mathematics");
+    assert!(plan.capacity.contains(result));
+    kani::cover!(x == i128::from(i32::MIN) && y == i128::from(i32::MIN), "MIN squared completion");
+    kani::cover!(x == i128::from(i32::MIN) && y == i128::from(i32::MAX), "negative extreme completion");
+    kani::cover!(x == 0 && y == i128::from(i32::MIN), "zero product completion");
+}
+
+/// Sorted arbitrary signed32 endpoints enumerate every supported nonempty
+/// interval. Payloads remain unrestricted i128, so membership rejection is
+/// checked as well as successful evaluation throughout the certified domains.
+#[kani::proof]
+fn native_multiply_signed32_intervals_refine_mathematical_integer() {
+    let a = i128::from(kani::any::<i32>());
+    let b = i128::from(kani::any::<i32>());
+    let c = i128::from(kani::any::<i32>());
+    let d = i128::from(kani::any::<i32>());
+    let x: i128 = kani::any();
+    let y: i128 = kani::any();
+    let left = NativeIntegerInterval::new(a.min(b), a.max(b)).unwrap();
+    let right = NativeIntegerInterval::new(c.min(d), c.max(d)).unwrap();
+    let kind = NativeIntegerOperationKind::Multiply;
+    let p = Math::evaluate(kind, left.lower, right.lower);
+    let q = Math::evaluate(kind, left.lower, right.upper);
+    let r = Math::evaluate(kind, left.upper, right.lower);
+    let s = Math::evaluate(kind, left.upper, right.upper);
+    let low = p.min(q).min(r).min(s);
+    let high = p.max(q).max(r).max(s);
+    let semantic_a: i128 = kani::any();
+    let semantic_b: i128 = kani::any();
+    let semantic = NativeIntegerInterval::new(semantic_a.min(semantic_b), semantic_a.max(semantic_b)).unwrap();
+    let plan = NativeIntegerPlan::new(
+        NativeIntegerOperation::Multiply { left, right }, Some(semantic),
+    ).unwrap();
+    assert_eq!(plan.result_domain, Some(semantic), "semantic i128 endpoints remain independent");
+    assert_eq!(Math::from_native(plan.capacity.lower), low);
+    assert_eq!(Math::from_native(plan.capacity.upper), high);
+    let admitted = plan.admit(NativeIntegerOperands::Binary {
+        left: NativeInteger::new(x), right: NativeInteger::new(y),
+    });
+    let membership = left.contains(NativeInteger::new(x)) && right.contains(NativeInteger::new(y));
+    assert_eq!(admitted.is_ok(), membership, "exact whole-domain payload membership");
+    if let Ok(admitted) = admitted {
+        let result = admitted.calculate().unwrap();
+        assert_eq!(Math::from_native(result.value()), Math::evaluate(kind, x, y));
+        assert!(plan.capacity.contains(result), "every admitted result belongs to the exact image");
+        kani::cover!(true, "certified interval calculation completes");
+    }
+    kani::cover!(!membership, "outside-interval payload is rejected");
+    kani::cover!(left.lower < 0 && left.upper > 0 && right.lower < 0 && right.upper > 0, "two straddling domains admitted");
+}
+
+/// Arbitrary i128 endpoints include every unsupported operand interval, with
+/// arbitrary optional semantic bounds. No multiplication theorem is assumed.
+#[kani::proof]
+fn native_multiply_rejects_every_outside_signed32_interval() {
     let a: i128 = kani::any();
     let b: i128 = kani::any();
-    let interval = NativeIntegerInterval::new(a.min(b), a.max(b)).unwrap();
-    let negative = interval.upper < 0;
-    let nonnegative = interval.lower >= 0;
-    let straddling = interval.lower < 0 && interval.upper >= 0;
-    assert_eq!(
-        u8::from(negative) + u8::from(nonnegative) + u8::from(straddling),
-        1
-    );
-    let classification = interval_sign(interval);
-    assert_eq!(classification == IntervalSign::Negative, negative);
-    assert_eq!(classification == IntervalSign::Nonnegative, nonnegative);
-    assert_eq!(classification == IntervalSign::Straddling, straddling);
-    kani::cover!(negative, "negative interval witness");
-    kani::cover!(nonnegative, "nonnegative interval witness");
-    kani::cover!(straddling, "straddling interval witness");
+    let c: i128 = kani::any();
+    let d: i128 = kani::any();
+    let left = NativeIntegerInterval::new(a.min(b), a.max(b)).unwrap();
+    let right = NativeIntegerInterval::new(c.min(d), c.max(d)).unwrap();
+    let e: i128 = kani::any();
+    let f: i128 = kani::any();
+    let semantic = if kani::any::<bool>() {
+        Some(NativeIntegerInterval::new(e.min(f), e.max(f)).unwrap())
+    } else { None };
+    let supported = left.lower >= -2147483648 && left.upper <= 2147483647
+        && right.lower >= -2147483648 && right.upper <= 2147483647;
+    let plan = NativeIntegerPlan::new(NativeIntegerOperation::Multiply { left, right }, semantic);
+    assert_eq!(plan.is_ok(), supported, "all and only whole signed32 intervals are supported");
+    if !supported {
+        assert_eq!(plan, Err(NativeIntegerAdmissionError::CapacityExceeded {
+            operation: NativeIntegerOperationKind::Multiply,
+        }));
+    }
+    kani::cover!(!supported && right.lower == 0 && right.upper == 0 && left.lower == 2147483648, "zero opposite operand cannot hide high endpoint");
+    kani::cover!(!supported && right.lower == 0 && right.upper == 0 && left.lower == -2147483649 && left.upper == 0 && semantic == Some(NativeIntegerInterval { lower: 0, upper: 0 }), "zero payload and result domain cannot hide low endpoint");
+    kani::cover!(!supported && left.lower == 0 && left.upper == 0 && right.upper == 2147483648, "right operand capacity checked");
 }
-
-#[kani::proof]
-fn native_multiply_negative_negative_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Negative, IntervalSign::Negative)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_negative_nonnegative_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Negative, IntervalSign::Nonnegative)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_negative_straddling_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Negative, IntervalSign::Straddling)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_nonnegative_negative_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Nonnegative, IntervalSign::Negative)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_nonnegative_nonnegative_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Nonnegative, IntervalSign::Nonnegative)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_nonnegative_straddling_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Nonnegative, IntervalSign::Straddling)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_straddling_negative_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Straddling, IntervalSign::Negative)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_straddling_nonnegative_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Straddling, IntervalSign::Nonnegative)),
-    );
-}
-
-#[kani::proof]
-fn native_multiply_straddling_straddling_refines_mathematical_integer() {
-    refinement_in_partition(
-        NativeIntegerOperationKind::Multiply,
-        Some((IntervalSign::Straddling, IntervalSign::Straddling)),
-    );
-}
-
-#[cfg(feature = "native-integer-refinement-contracts")]
-mod contracts;
