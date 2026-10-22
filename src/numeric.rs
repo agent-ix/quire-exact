@@ -425,7 +425,7 @@ pub fn retain_boolean(
     result: bool,
     meter: &mut Meter,
 ) -> Result<bool, crate::accounting::Incomplete> {
-    meter.charge(Charge::new(ChargePoint::BooleanResultRetain).results(1))?;
+    meter.charge_units(crate::accounting::UnitsCharge::new(ChargePoint::BooleanResultRetain).results(1))?;
     Ok(result)
 }
 

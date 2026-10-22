@@ -21,6 +21,13 @@ use core::num::NonZeroU64;
 
 #[cfg(kani)]
 mod kani_proofs;
+mod units;
+#[cfg(any(test, kani))]
+mod units_reference;
+#[cfg(test)]
+mod units_tests;
+
+pub(crate) use units::UnitsCharge;
 
 #[cfg(feature = "test-support")]
 const CHARGE_LOG_CAPACITY: usize = 4096;
@@ -808,20 +815,9 @@ impl Meter {
     /// already consumed, so `limit = consumed = w`: a cancelled handle,
     /// which the operation holding it reports as its
     /// cancellation, and the qualification seam's one exact named charge.
-    fn check_injected(
-        &mut self,
-        point: ChargePoint,
-        work_units: &ChargeAmount,
-    ) -> Result<(), Incomplete> {
+    fn injected_denial(&mut self, point: ChargePoint) -> Option<u64> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {
-            let consumed = self.consumed(LimitKind::WorkUnits);
-            return Err(Incomplete {
-                limit_kind: LimitKind::WorkUnits,
-                limit: consumed,
-                consumed,
-                next_charge: work_units.integer(),
-                charge_point: point,
-            });
+            return Some(self.consumed(LimitKind::WorkUnits));
         }
         match self.counters.denial {
             Some(denial)
@@ -829,17 +825,28 @@ impl Meter {
                     && self.counters.denied_point_admissions.checked_add(1)
                         == Some(denial.occurrence.get()) =>
             {
-                let consumed = self.consumed(LimitKind::WorkUnits);
                 self.counters.denial = None;
-                Err(Incomplete {
-                    limit_kind: LimitKind::WorkUnits,
-                    limit: consumed,
-                    consumed,
-                    next_charge: work_units.integer(),
-                    charge_point: point,
-                })
+                Some(self.consumed(LimitKind::WorkUnits))
             }
-            _ => Ok(()),
+            _ => None,
+        }
+    }
+
+    fn check_injected(
+        &mut self,
+        point: ChargePoint,
+        work_units: &ChargeAmount,
+    ) -> Result<(), Incomplete> {
+        if let Some(consumed) = self.injected_denial(point) {
+            Err(Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: consumed,
+                consumed,
+                next_charge: work_units.integer(),
+                charge_point: point,
+            })
+        } else {
+            Ok(())
         }
     }
 
@@ -850,6 +857,13 @@ impl Meter {
     /// parameter through this method, its one real
     /// cross-crate caller for that purpose.
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
+        match UnitsCharge::from_charge(&charge) {
+            Some(units) => self.charge_units(units),
+            None => self.charge_general(charge),
+        }
+    }
+
+    fn charge_general(&mut self, charge: Charge) -> Result<(), Incomplete> {
         let point = charge.point;
         self.check_injected(point, &charge.work_units)?;
         // Keep validation and per-admission maxima local until every counter
@@ -887,6 +901,25 @@ impl Meter {
         };
         let work = cumulative(LimitKind::WorkUnits, &charge.work_units)?;
         let results = cumulative(LimitKind::ResultUnits, &charge.result_units)?;
+        self.commit_charge(
+            point,
+            sizes,
+            work,
+            results,
+            #[cfg(feature = "test-support")]
+            record,
+        );
+        Ok(())
+    }
+
+    fn commit_charge(
+        &mut self,
+        point: ChargePoint,
+        sizes: [Option<u64>; LimitKind::COUNT],
+        work: u64,
+        results: u64,
+        #[cfg(feature = "test-support")] record: AdmittedCharge,
+    ) {
         // Straight-line writes have no trip count independent of requests. A
         // size request naming a cumulative counter is validated above and
         // then superseded by that counter's own total below.
@@ -929,7 +962,6 @@ impl Meter {
             #[cfg(feature = "test-support")]
             record,
         );
-        Ok(())
     }
 
     fn observe_size(&mut self, kind: LimitKind, amount: Option<u64>) {
