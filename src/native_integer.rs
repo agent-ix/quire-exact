@@ -59,9 +59,7 @@ impl NativeIntegerInterval {
         self.lower <= value.0 && value.0 <= self.upper
     }
     fn to_integer_interval(self) -> IntegerInterval {
-        // The native constructor established endpoint order. `spanning` has no
-        // failure or allocation on these fitting endpoint conversions.
-        IntegerInterval::spanning(Integer::from(self.lower), Integer::from(self.upper))
+        IntegerInterval::from_native_interval(self)
     }
 }
 
