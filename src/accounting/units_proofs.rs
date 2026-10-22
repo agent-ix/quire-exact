@@ -129,6 +129,9 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
     let count: u64 = kani::any();
     let admissions: u64 = kani::any();
     let work_consumed: u64 = kani::any();
+    let result_consumed: u64 = kani::any();
+    let work: u64 = kani::any();
+    let results: u64 = kani::any();
     let cancel = Cancel::new();
     if cancelled {
         cancel.cancel(crate::CancelCause::Requested);
@@ -147,12 +150,14 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
     meter.counters.denied_point_admissions = count;
     meter.counters.admissions = admissions;
     meter.counters.consumed[8] = work_consumed;
+    meter.counters.consumed[9] = result_consumed;
+    let before = meter.counters.consumed;
     let charge = UnitsCharge {
         point,
         first: None,
         second: None,
-        work: 0,
-        results: 0,
+        work,
+        results,
     };
     let actual = meter.charge_units(charge);
     let completed = actual.is_ok();
@@ -162,21 +167,42 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
         assert_eq!(error.limit_kind, LimitKind::WorkUnits);
         assert_eq!(error.limit, work_consumed);
         assert_eq!(error.consumed, work_consumed);
-        assert_eq!(error.next_charge.to_u64(), Some(0));
+        assert_eq!(error.next_charge.to_u64(), Some(work));
         assert_eq!(error.charge_point, point);
         assert_eq!(meter.admission_count(), admissions);
         assert_eq!(meter.counters.denied_point_admissions, count);
+        assert_eq!(meter.counters.consumed[8], work_consumed);
+        assert_eq!(meter.counters.consumed[9], result_consumed);
     } else {
-        assert!(actual.is_ok());
-        assert_eq!(meter.admission_count(), admissions.saturating_add(1));
-        assert_eq!(
-            meter.counters.denied_point_admissions,
-            if same_point {
-                count.saturating_add(1)
-            } else {
-                count
+        let expected =
+            reference::transition([u64::MAX; 10], before, [None, None], work, results, point);
+        match (actual, expected) {
+            (Ok(()), Ok(output)) => {
+                assert_eq!(meter.counters.consumed[8], output[8]);
+                assert_eq!(meter.counters.consumed[9], output[9]);
+                assert_eq!(meter.admission_count(), admissions.saturating_add(1));
+                assert_eq!(
+                    meter.counters.denied_point_admissions,
+                    if same_point {
+                        count.saturating_add(1)
+                    } else {
+                        count
+                    }
+                );
             }
-        );
+            (Err(actual), Err(expected)) => {
+                assert_eq!(actual.limit_kind, expected.kind);
+                assert_eq!(actual.limit, expected.limit);
+                assert_eq!(actual.consumed, expected.consumed);
+                assert_eq!(actual.next_charge.to_u64(), Some(expected.next));
+                assert_eq!(actual.charge_point, expected.point);
+                assert_eq!(meter.counters.consumed[8], work_consumed);
+                assert_eq!(meter.counters.consumed[9], result_consumed);
+                assert_eq!(meter.admission_count(), admissions);
+                assert_eq!(meter.counters.denied_point_admissions, count);
+            }
+            _ => panic!("post-poll accounting disagrees with independent transition"),
+        }
     }
     assert_eq!(
         meter.counters.denial,
@@ -190,8 +216,6 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
             None
         }
     );
-    assert_eq!(meter.counters.consumed[8], work_consumed);
-    assert_eq!(meter.counters.consumed[9], 0);
     kani::cover!(
         cancelled && same_point && count == 0 && occurrence.get() == 1,
         "cancellation precedes pending injection"
