@@ -133,8 +133,9 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
     let occurrence = NonZeroU64::new(kani::any()).unwrap_or(NonZeroU64::MIN);
     let count: u64 = kani::any();
     let admissions: u64 = kani::any();
-    let work_consumed: u64 = kani::any();
-    let result_consumed: u64 = kani::any();
+    let consumed: [u64; 10] = kani::any();
+    let work_consumed = consumed[8];
+    let result_consumed = consumed[9];
     let work: u64 = kani::any();
     let results: u64 = kani::any();
     let cancel = Cancel::new();
@@ -154,9 +155,8 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
         .with_injected_denial(denial);
     meter.counters.denied_point_admissions = count;
     meter.counters.admissions = admissions;
-    meter.counters.consumed[8] = work_consumed;
-    meter.counters.consumed[9] = result_consumed;
-    let before = meter.counters.consumed;
+    meter.counters.consumed = consumed;
+    let before = consumed;
     let charge = UnitsCharge {
         point,
         first: None,
@@ -209,6 +209,14 @@ fn units_injection_cancellation_preserves_occurrence_and_saturation() {
             _ => panic!("post-poll accounting disagrees with independent transition"),
         }
     }
+    assert_eq!(meter.counters.consumed[0], before[0]);
+    assert_eq!(meter.counters.consumed[1], before[1]);
+    assert_eq!(meter.counters.consumed[2], before[2]);
+    assert_eq!(meter.counters.consumed[3], before[3]);
+    assert_eq!(meter.counters.consumed[4], before[4]);
+    assert_eq!(meter.counters.consumed[5], before[5]);
+    assert_eq!(meter.counters.consumed[6], before[6]);
+    assert_eq!(meter.counters.consumed[7], before[7]);
     assert_eq!(
         meter.counters.denial,
         if injected { None } else { Some(denial) }
