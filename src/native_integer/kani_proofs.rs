@@ -239,11 +239,11 @@ fn native_multiply_signed32_corner_image_refines_mathematical_integer() {
     );
     kani::cover!(
         left.lower == i128::from(i32::MIN) && left.upper == i128::from(i32::MAX) && right == left,
-        "full signed32 operand intervals admitted",
+        "full signed32 operand intervals admitted"
     );
     kani::cover!(
         left.lower == 0 && left.upper == 0,
-        "zero interval image admitted",
+        "zero interval image admitted"
     );
     kani::cover!(
         semantic
@@ -251,7 +251,7 @@ fn native_multiply_signed32_corner_image_refines_mathematical_integer() {
                 lower: i128::MIN,
                 upper: i128::MAX
             }),
-        "full signed128 semantic domain retained",
+        "full signed128 semantic domain retained"
     );
 }
 
@@ -310,7 +310,7 @@ fn native_multiply_signed32_interval_calculation_stays_in_capacity() {
         );
         kani::cover!(
             left.lower < 0 && left.upper > 0 && right.lower < 0 && right.upper > 0,
-            "two straddling domains complete within capacity",
+            "two straddling domains complete within capacity"
         );
     }
     kani::cover!(!membership, "outside-interval payload is rejected");
