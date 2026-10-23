@@ -33,3 +33,21 @@ Ticket: STD-418. One spec-review pass over `git diff origin/main...a31caf1e` (ma
 Not mergeable: FND-001 (high) block the PR; FND-002, FND-003 (medium) in the same round.
 
 Merge: yes: origin/main is an ancestor; merge-tree with #76 clean.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-004 | medium | The accepted member vector is written `{"𐀀":1,"\uffff":2}` with the escape `\uffff`, while its parenthetical says the name is 'written as a literal character'. The same AC refuses `"\u00e9"` because JCS writes the literal, so a test author who copies the vector as printed builds a noncanonical payload and the accepted case fails. Fix: print the U+FFFF name as the literal character in the accepted vector, or state that the AC's `\uXXXX` in member names is notation. | spec/functional/FR-385-distinct-native-bytes-and-jsonobject-values.md | missing-requirement |
+
+## Dispositions
+
+Round 1 at fe6d84e4. Round 1 against fe6d84e4. Gate: `quire validate --scope . 'spec/**/*.md'` exit 0 with no failure line. The fix delta changes only FR-385 and TC-934. Bytes ordering and JCS / UTF-16 vectors were derived by hand (see Dispositions). Names: QSpec #408 FR-149 Bytes and JsonObject rows still exist with the cited spelling.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Hand-derived: `02` < `0a` (ASCII '2' 0x32 < 'a' 0x61), `0a` < `0a00` (proper prefix), `0200` < `10` ('0' < '1'); all are even-length lowercase payloads that AC-2 admits. |
+| FND-002 | fixed | FR-385 now says the two spellings are this kernel's names for the classes FR-056 leaves to IR-704, and that IR-704 owns the final variant spellings. |
+| FND-003 | fixed | Hand-derived against RFC 8785: literal `é`, `\n`, `\u001f` (lowercase), `\\`, `\"` and a literal `/` are canonical; `\u00e9`, `\/`, `\u001F`, `\u000a`, an escaped surrogate pair and a lone surrogate are not; U+10000 (D800 DC00) sorts before U+FFFF in UTF-16 order, so the code-point-ordered object is refused. |
+
+Verdict after round 1: Mergeable after FND-004 (medium) is fixed.

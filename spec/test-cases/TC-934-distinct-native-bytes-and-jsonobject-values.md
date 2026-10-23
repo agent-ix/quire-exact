@@ -18,7 +18,8 @@ FR-385-AC-7.
 ## Test Procedure
 
 1. Construct each Bytes payload of FR-385-AC-2 and each JsonObject payload of
-   FR-385-AC-3, admit each constructed value against both native types, and
+   FR-385-AC-3 exactly as printed there (literal characters, including U+10000
+   and U+FFFF in the member names, and no added escapes), admit each constructed value against both native types, and
    offer a Text, Integer, Reference, UUID and Timestamp value to both.
 2. Plan equality over the pairs of FR-385-AC-4, over each native against a
    value of another kind, and call `compare_keys` over the pairs of
