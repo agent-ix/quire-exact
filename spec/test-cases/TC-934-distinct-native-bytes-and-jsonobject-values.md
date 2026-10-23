@@ -28,10 +28,11 @@ FR-385-AC-7.
 
 ## Expected Results
 
-- Step 1: the stated payloads construct, each other payload returns its
+- Step 1: the stated payloads construct, each other payload, including the
+  escaped-string and UTF-16 member-order refusals, returns its
   stated cause with no value, and each value is admitted only by its own type.
 - Step 2: the stated Boolean results, one terminal pair each; the mixed plan
-  returns `ValueKindMismatch`, the mixed key comparison `None`, and `10`
-  sorts before `2`.
+  returns `ValueKindMismatch`, the mixed key comparison `None`, `02`
+  sorts before `0a`, `0a` before `0a00`, and `0200` before `10`.
 - Step 3: four and seven variable bytes, and every existing vector keeps its
   result.
