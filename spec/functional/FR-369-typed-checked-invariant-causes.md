@@ -30,7 +30,7 @@ When the exact kernel, the checked-expression residue in `quire-contract-runtime
 
 ## Behavior
 
-The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-six variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's RT type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
+The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-six variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's semantic-value type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
 
 | Cause | Trigger and owning source on the measured main revisions |
 |---|---|
@@ -56,29 +56,35 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants
 | `EqualityEnumVariantUnresolved` | QSV cannot resolve a checked enum operand's variant in the comparison's captured declaration: `src/declaration.rs:2393-2398`. |
 | `ExpectedIntegerPlacement` | A scale-zero integer quantity placement yields a retained value that is not an integer: RT `src/exact/quantity.rs:541-546`; QSV `src/quantity.rs:795-800`. |
 
-The following distinct causes cover CG's oracle constructors (generated source
-and the pre-check declaration placeholder) on
-quire-contract-codegen main `1b225f4cf25450ee662fa97c91286b2a76f64ff8`.
-They name shared checked-oracle failures, not CG package or model types.
+The following distinct causes specify CG's generated-oracle assignments
+(generated source and the pre-check declaration placeholder). Seven rows have
+current typed checked-invariant constructor sites in CG source, identified
+below by source path and rendering function. The two other rows have no
+reachable current trigger site, as their rows explain. Completion and
+verification of all nine assignments under CG FR-042-AC-1 and TC-057 remain
+PLANNED in IR-709, including the two absent assignments. These causes name
+shared checked-oracle failures, not CG package or model types.
 
-| Cause | Trigger and owning CG source |
+| Cause | Trigger, target assignment and CG source status |
 |---|---|
-| `GeneratedBodyPlaceholderInvoked` | A function declaration's pre-check placeholder body runs, which should be replaced before execution: `src/oracle/function/mod.rs:1045`. |
-| `GeneratedArgumentShapeMismatch` | A generated scalar or equality function body receives the wrong number or shape of arguments: `src/oracle/function/mod.rs:1531,1551`. |
-| `GeneratedOperandKindUnsupported` | A generated equality body receives a left operand outside its classified Boolean/Integer kinds: `src/oracle/function/mod.rs:1555`. |
-| `GeneratedUnexpectedOutcome` | A generated Boolean, scalar or equality body's expected outcome adapter sees another outcome arm: `src/oracle/boolean_v1.rs:846`, `src/oracle/function/mod.rs:1539,1571`. |
-| `GeneratedIntervalInvalid` | A generated native integer bound cannot form a nonempty interval: `src/oracle/boolean_v1.rs:855`. |
-| `GeneratedEnvironmentRejected` | A generated Boolean/equality body cannot form its RT type environment: `src/oracle/boolean_v1.rs:872`, `src/oracle/function/mod.rs:1559`. |
-| `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails RT's `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs:1535,1546`. |
-| `GeneratedEqualityCheckRejected { cause }` | A generated Boolean/equality body or oracle fails RT's `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/boolean_v1.rs:880`, `src/oracle/equality/mod.rs:1555`, `src/oracle/function/mod.rs:1563`. |
-| `GeneratedDescriptorReconstructionFailed` | A generated equality oracle cannot reconstruct one of its authored source/target types: `src/oracle/equality/mod.rs:1527,1530,1538,1541`. |
+| `GeneratedBodyPlaceholderInvoked` | A function declaration's pre-check placeholder body runs, which should be replaced before execution: `src/oracle/function/mod.rs`, `declared_functions` placeholder body. |
+| `GeneratedArgumentShapeMismatch` | A generated scalar or equality function body receives the wrong number or shape of arguments: `src/oracle/function/mod.rs`, `render_body` scalar/equality arms. |
+| `GeneratedOperandKindUnsupported` | A generated equality body receives a left operand outside its classified Boolean/Integer kinds: `src/oracle/function/mod.rs`, `render_body` equality arm. |
+| `GeneratedUnexpectedOutcome` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_CARRY_HELPER` and scalar/equality `render_body` adapters exhaustively match RT `Outcome`'s four arms (`Completed`, `Undefined`, `Refused`, `Incomplete`); there is no unexpected-outcome arm or reachable trigger today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedIntervalInvalid` | A generated native integer bound cannot form a nonempty interval: `src/oracle/boolean_v1.rs`, `NATIVE_BOUND_HELPER`. |
+| `GeneratedEnvironmentRejected` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_EQUALITY_HELPER` calls planned kernel equality without constructing a type environment; the function `render_body` equality arm uses infallible `sv::TypeEnvironment::default()`. The equality oracle's fallible environment construction returns `EnvironmentError::Declaration` instead (`src/oracle/equality/mod.rs`, `environment_{symbol}`); none is a checked-invariant producer for this cause today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails shared semantic-value `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}` type checks. |
+| `GeneratedEqualityCheckRejected { cause }` | A generated equality body or oracle fails shared semantic-value `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}`; `src/oracle/function/mod.rs`, `render_body` equality arm. The Boolean `NATIVE_EQUALITY_HELPER` uses planned kernel equality and carries its stop unchanged. |
+| `GeneratedDescriptorReconstructionFailed` | A generated equality oracle receives a prepared descriptor with the wrong binding, expected package identity or context requirement, or an admitted context with the wrong package identity: `src/oracle/equality/mod.rs`, `oracle_{symbol}` prepared-environment check. Descriptor reconstruction errors while preparing that environment retain their separate typed `EnvironmentError` path. |
 
-The two tables classify the retained production constructors for the target
-contract, measured on quire-exact main
+The two tables assign the retained causes for the target contract. The
+original producer inventory was measured on quire-exact main
 `497c581c9dd14eb70083488209827dd8a5b3e03a`,
 quire-contract-runtime main `4180f0ea135767637b10a981393c5aef22220ace`,
-quire-semantic-value `e0ada80708fe73469923a9d6c2263cfebc0087a0`,
-and the CG revision above. The measured RT revision still has depth-stop
+and quire-semantic-value `e0ada80708fe73469923a9d6c2263cfebc0087a0`.
+The two CG rows without reachable current triggers remain required target
+assignments. FR-042-AC-1 and TC-057 cannot be credited as complete until
+their producer controls pass. The measured RT revision still has depth-stop
 producers; RT FR-273 retires them with explicit frames and `work_units` fuel
 before the closed thirty-cause API is implemented. QSV's
 `src/declaration.rs:2146` uses
