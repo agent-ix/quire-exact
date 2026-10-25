@@ -58,24 +58,24 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants
 
 The following distinct causes specify CG's generated-oracle assignments
 (generated source and the pre-check declaration placeholder). Seven rows have
-current unit-refusal constructor sites in CG source, identified below by
-source path and rendering function; their typed assignments remain PLANNED.
-The two other rows have no reachable current trigger site, as their rows
-explain. CG FR-042-AC-1 still requires all nine typed assignments under
-IR-709. These causes name shared checked-oracle failures, not CG package or
-model types.
+current typed checked-invariant constructor sites in CG source, identified
+below by source path and rendering function. The two other rows have no
+reachable current trigger site, as their rows explain. Completion and
+verification of all nine assignments under CG FR-042-AC-1 and TC-057 remain
+PLANNED in IR-709, including the two absent assignments. These causes name
+shared checked-oracle failures, not CG package or model types.
 
 | Cause | Trigger, target assignment and CG source status |
 |---|---|
 | `GeneratedBodyPlaceholderInvoked` | A function declaration's pre-check placeholder body runs, which should be replaced before execution: `src/oracle/function/mod.rs`, `declared_functions` placeholder body. |
 | `GeneratedArgumentShapeMismatch` | A generated scalar or equality function body receives the wrong number or shape of arguments: `src/oracle/function/mod.rs`, `render_body` scalar/equality arms. |
 | `GeneratedOperandKindUnsupported` | A generated equality body receives a left operand outside its classified Boolean/Integer kinds: `src/oracle/function/mod.rs`, `render_body` equality arm. |
-| `GeneratedUnexpectedOutcome` | PLANNED under CG FR-042-AC-1/IR-709. The current Boolean carry helper and scalar/equality `render_body` adapters have catch-all arms, but RT `Outcome` has only `Completed`, `Undefined`, `Refused` and `Incomplete`, all matched earlier; those arms have no reachable unexpected outcome today. A new outcome arm would require this typed assignment. |
+| `GeneratedUnexpectedOutcome` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_CARRY_HELPER` and scalar/equality `render_body` adapters exhaustively match RT `Outcome`'s four arms (`Completed`, `Undefined`, `Refused`, `Incomplete`); there is no unexpected-outcome arm or reachable trigger today. The named assignment remains required by FR-042-AC-1. |
 | `GeneratedIntervalInvalid` | A generated native integer bound cannot form a nonempty interval: `src/oracle/boolean_v1.rs`, `NATIVE_BOUND_HELPER`. |
-| `GeneratedEnvironmentRejected` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean helper constructs a type environment from empty declarations, and the function generator uses infallible `TypeEnvironment::default()`, so those paths have no reachable environment rejection today. The equality oracle's fallible environment construction returns `EnvironmentError::Declaration` instead (`src/oracle/equality/mod.rs`, `environment_{symbol}`); it is not this checked-invariant producer. |
-| `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails RT's `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}` type checks. |
-| `GeneratedEqualityCheckRejected { cause }` | A generated Boolean/equality body or oracle fails RT's `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/boolean_v1.rs`, `NATIVE_EQUALITY_HELPER`; `src/oracle/equality/mod.rs`, `oracle_{symbol}`; `src/oracle/function/mod.rs`, `render_body` equality arm. |
-| `GeneratedDescriptorReconstructionFailed` | A generated equality oracle cannot reconstruct one of its authored source/target types: `src/oracle/equality/mod.rs`, `oracle_{symbol}` source/target reconstruction. |
+| `GeneratedEnvironmentRejected` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_EQUALITY_HELPER` calls planned kernel equality without constructing a type environment; the function `render_body` equality arm uses infallible `sv::TypeEnvironment::default()`. The equality oracle's fallible environment construction returns `EnvironmentError::Declaration` instead (`src/oracle/equality/mod.rs`, `environment_{symbol}`); none is a checked-invariant producer for this cause today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails shared semantic-value `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}` type checks. |
+| `GeneratedEqualityCheckRejected { cause }` | A generated equality body or oracle fails shared semantic-value `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}`; `src/oracle/function/mod.rs`, `render_body` equality arm. The Boolean `NATIVE_EQUALITY_HELPER` uses planned kernel equality and carries its stop unchanged. |
+| `GeneratedDescriptorReconstructionFailed` | A generated equality oracle receives a prepared descriptor or admitted context whose binding or package identity differs from the oracle's authored selection: `src/oracle/equality/mod.rs`, `oracle_{symbol}` prepared-environment check. Descriptor reconstruction errors while preparing that environment retain their separate typed `EnvironmentError` path. |
 
 The two tables assign the retained causes for the target contract. The
 original producer inventory was measured on quire-exact main
@@ -83,8 +83,8 @@ original producer inventory was measured on quire-exact main
 quire-contract-runtime main `4180f0ea135767637b10a981393c5aef22220ace`,
 and quire-semantic-value `e0ada80708fe73469923a9d6c2263cfebc0087a0`.
 The two CG rows without reachable current triggers remain required target
-assignments and cannot be credited as implemented until CG FR-042's producer
-controls pass. The measured RT revision still has depth-stop
+assignments. FR-042-AC-1 and TC-057 cannot be credited as complete until
+their producer controls pass. The measured RT revision still has depth-stop
 producers; RT FR-273 retires them with explicit frames and `work_units` fuel
 before the closed thirty-cause API is implemented. QSV's
 `src/declaration.rs:2146` uses
