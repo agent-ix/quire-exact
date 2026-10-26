@@ -176,7 +176,12 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
         ),
     ];
     assert_eq!(cases.len(), 32);
+    let mut names = std::collections::BTreeSet::new();
     for (index, (cause, name)) in cases.iter().enumerate() {
+        assert!(
+            names.insert(*name),
+            "duplicate checked-invariant cause name: {name}"
+        );
         assert_eq!(expected_name(*cause), *name);
         let refusal = Refusal::CheckedInvariant { cause: *cause };
         assert_eq!(refusal.code(), None, "{name}");
