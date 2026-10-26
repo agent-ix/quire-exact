@@ -140,6 +140,8 @@ pub enum CheckedInvariantCause {
     ForeignCheckedExpression,
     /// A checked call cannot borrow its shared meter mutably.
     MeterBorrowConflict,
+    /// A checked package was entered again while one of its bodies was active.
+    PackageReentry,
     /// A checked equality schedule received another value shape.
     EqualityScheduleMismatch,
     /// A scheduled comparator refused after checking.
