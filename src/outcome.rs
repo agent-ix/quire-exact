@@ -134,8 +134,6 @@ pub enum CheckedInvariantCause {
     PopulationPair,
     /// Equality reached incompatible value kinds.
     ValueKindMismatch,
-    /// A checked call exhausted its call-depth budget.
-    CallDepthExceeded,
     /// A checked call names no known function.
     UnknownCheckedFunction,
     /// An expression was checked against another package.
