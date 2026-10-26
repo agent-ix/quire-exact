@@ -173,6 +173,7 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             "generated-descriptor",
         ),
     ];
+    assert_eq!(cases.len(), 31);
     for (index, (cause, name)) in cases.iter().enumerate() {
         assert_eq!(expected_name(*cause), *name);
         let refusal = Refusal::CheckedInvariant { cause: *cause };
