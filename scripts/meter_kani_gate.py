@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run TC-931's healthy Meter proof and production ALL-loop control.
+"""Disabled TC-931 Meter proof and production ALL-loop control runner.
 
-Only the Python standard library is used. Each proof gets its own systemd scope,
-Git worktree and target directory; the checked-out crate is never mutated.
+The entry point fails before any proof setup. The preserved implementation below
+must be reviewed and requalified after the disable is lifted.
 """
 
 import argparse
