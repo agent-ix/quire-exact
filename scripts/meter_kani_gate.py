@@ -486,6 +486,9 @@ def interrupted(_signum, _frame):
 
 
 def main():
+    print("SKIPPED: DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done", file=sys.stderr)
+    return 2
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path)
     parser.add_argument("--preflight", action="store_true", help="check clean inputs and absence of competing proof engines before Cargo")

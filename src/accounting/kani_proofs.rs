@@ -181,6 +181,7 @@ fn bits(value: i64) -> u64 {
     u64::from((64 - value.unsigned_abs().leading_zeros()).max(1))
 }
 
+// DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done.
 // FR-359-AC-9 remains unqualified until the healthy proof and both controls pass.
 #[kani::proof]
 fn meter_integer_arithmetic_schedule_matches_reference() {
