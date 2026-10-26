@@ -62,3 +62,20 @@ The brief requires the docs to describe the disabled state accurately, and these
 | FND-002 | medium | README still says the Meter Kani gate "runs the accounting proof and its production-loop mutation control with `make kani-meter-gate`" | README.md:143 |
 | FND-003 | low | Descriptive headers still describe live execution: the test module says "Executable binding for the standalone Meter proof", and the Python docstring says "Run TC-931's healthy Meter proof" | tests/meter_kani_gate.rs:2, scripts/meter_kani_gate.py:2 |
 | FND-004 | low | The retained `kani_proofs.rs` now compiles under no cfg at all, so Meter API drift will break it silently until it is re-enabled; nothing records that it must be rebuilt first | src/accounting.rs:24 |
+
+## New findings (disposition pass 1)
+
+Disposition pass 1 re-checked fixed head 9b186c75b91ff6de838320fbbf361cf7eb1a06c7 (fix commit 9b186c7 over 9c26734). Static checks only. No Kani, no Meter gate, no proof and no Cargo command ran. These checks did run: `rustfmt --check --edition 2021` on `src/accounting/kani_proofs.rs`, `src/accounting.rs` and `tests/meter_kani_gate.rs` (clean); `python3 -m py_compile scripts/meter_kani_gate.py` (passed); `git diff --check 9c26734..HEAD` (clean); `quire matrix --scope . --strict` (exit 1, FR-359-AC-9 `untagged`, symbol `(none)`); and a grep showing no `trace("FR-359-AC-9")` in `src/`, `tests/`, `scripts/` or `Makefile`.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The `scripts/test_meter_kani_gate.py` module docstring still says "the ignored Rust test executes the real proofs"; at this head that test only panics with the DO NOT RUN warning. The file sits outside the PR diff and the review pass missed it, in the same class as FND-003 | scripts/test_meter_kani_gate.py:3 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-359:71 now says "On an earlier revision, IR-810's persistent lane executed..." and "At this head, `make kani-meter-gate` prints the DO NOT RUN warning and fails before starting Kani ... its former `#[trace("FR-359-AC-9")]` binding has been removed. The prior lane receipt is historical". TC-931 step 3 is now conditional on the no-run order being lifted, and it states the current disabled state. The AC-9 row is unchanged |
+| FND-002 | fixed | README:143 now says the gate is disabled by Peter's order, that its target warns and fails before starting Kani, and that FR-359-AC-9 remains unqualified |
+| FND-003 | fixed | tests/meter_kani_gate.rs:2 now reads "Disabled Meter proof binding". The scripts/meter_kani_gate.py:2 docstring now reads "Disabled TC-931 Meter proof ... runner" and says the entry point fails before any proof setup |
+| FND-004 | deferred | The proof can be typechecked only by invoking Kani, because it is `#[kani::proof]` code that uses `kani::` APIs, and Peter's no-run order forbids that until all feature work is done. The fix records rustfmt parse only, which the reviewer re-verified clean. FR-359:73 and TC-931:47 state the condition explicitly: restore the module and binding, compile the harness, run the healthy proof and both controls, and requalify AC-9 before any claim. FR-359-AC-9 stays unqualified and untagged, so drift cannot produce a false pass. Deferring on that concrete condition is honest |

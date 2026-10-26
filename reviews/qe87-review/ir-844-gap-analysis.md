@@ -34,3 +34,18 @@ The diff adds no stubs that claim coverage, no code without an owning requiremen
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | FR-359's evidence paragraph still says `#[trace("FR-359-AC-9")]` on `meter_proof_and_production_all_loop_control` binds the criterion and that the lane passed, but the matrix at head shows AC-9 untagged and the gate disabled | spec/functional/FR-359-cumulative-meter-boundary.md:71 |
+
+## New findings (disposition pass 1)
+
+Disposition pass 1 re-checked fixed head 9b186c75b91ff6de838320fbbf361cf7eb1a06c7. `quire matrix --scope . --strict` (quire 0.36.2, engine 0.50.2) exits 1 and reports 12 untagged criteria and 0 tagged only by ignored tests: FR-359-AC-9, FR-359-AC-10, FR-371-AC-6, FR-383-AC-4, FR-384-AC-5 and FR-385-AC-1..AC-7. FR-359-AC-9 is `untagged` with symbol `(none)`. No live `trace("FR-359-AC-9")` tag exists in src/, tests/ or scripts/. No Kani, proof or Cargo command ran.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | FR-359's "IR-844 baseline evidence" paragraph still ends in the present tense: "the executable local test binding is recorded below". It carries no historical label of its own, and the paragraph below now says that binding was removed | spec/functional/FR-359-cumulative-meter-boundary.md:67 |
+| FND-003 | low | The rewritten "At this head" sentences list the untagged criteria as only AC-9, FR-359-AC-10, FR-371-AC-6 and FR-383-AC-4. The matrix at head shows 12 untagged, adding FR-384-AC-5 and FR-385-AC-1..AC-7 | spec/functional/FR-359-cumulative-meter-boundary.md:73, spec/test-cases/TC-931-single-pass-meter-accounting.md:47 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-359:71 no longer claims a live binding: "its former `#[trace("FR-359-AC-9")]` binding has been removed. The prior lane receipt is historical, not evidence that this disabled head passed." FR-359:73 reads "At this head, Quire reports AC-9 untagged", which matches the computed matrix |
