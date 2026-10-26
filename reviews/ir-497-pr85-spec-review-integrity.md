@@ -31,5 +31,7 @@ Ticket: IR-497. Spec review of the Status edits in PR #85 at f01e3a97c7d9f408a64
 
 ## Dispositions
 
-- FND-001 — fixed: FR-369 adds the native-capacity row and changes the required count to thirty-one, with TC-917 and TC-428 counts reconciled.
-- FND-002 — fixed: FR-369 now states that RT must retire depth stops before pinning the kernel API and identifies downstream QSL fixture work without calling this a spec-only slice.
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head 8340a6f674da35da80eeeea93dd861648d25c2d6: FR-369 Behavior, AC-1 and Status, TC-917 steps 1 and 5 and Status, and TC-428 step 2 and Status all say thirty-one. No bare "thirty" or "twenty-six" remains in spec, src or tests. |
+| FND-002 | fixed | Round 1: line 89 now says RT must retire depth stops "before RT pins the kernel's closed thirty-one-cause API". Dependencies drops "spec-only slice" and names the QSL test-support fixture that must stop constructing `CallDepthExceeded`. |

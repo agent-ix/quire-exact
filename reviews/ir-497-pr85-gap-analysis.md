@@ -33,4 +33,6 @@ Downstream consumers of the removed variant, measured on each repo's `origin/mai
 
 ## Dispositions
 
-- FND-001 — fixed: FR-369-AC-1 and its two-table inventory now include all thirty-one causes. The tagged test enumerates and counts the same closed set. QSL-1111 tracks the QSL fixture consumer before its pin advances.
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head 8340a6f674da35da80eeeea93dd861648d25c2d6: AC-1 now names the thirty-one table rows, the table set equals the enum set, and the tagged test counts 31 cases and passes (3/3). The QSL consumer is recorded in FR-369 Dependencies. In Linear, QSL-1111 `blocks` IR-497 and matches the measured `family.rs:1914,1957` references. |

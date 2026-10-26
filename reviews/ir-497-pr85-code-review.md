@@ -33,4 +33,6 @@ Focused gates run: `cargo fmt --check` passed; `cargo clippy --all-targets -- -D
 
 ## Dispositions
 
-- FND-001 — fixed: FR-369 now includes the genuine `NativeIntegerCapacityBreach` kernel producer and requires the full thirty-one-cause set; the exhaustive carrier test asserts that count. The enum retains all genuine causes and excludes `CallDepthExceeded`.
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, head 8340a6f674da35da80eeeea93dd861648d25c2d6: FR-369 adds the `NativeIntegerCapacityBreach` row. Its two tables' 31 cause names equal the 31 `CheckedInvariantCause` variants (set diff empty). AC-1 and Behavior now say thirty-one, with twenty-seven unit variants, and the carrier test asserts `cases.len() == 31`. `src/` is unchanged and `CallDepthExceeded` is still absent. |
