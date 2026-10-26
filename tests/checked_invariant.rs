@@ -17,6 +17,7 @@ fn expected_name(cause: CheckedInvariantCause) -> &'static str {
         CheckedInvariantCause::UnknownCheckedFunction => "unknown-function",
         CheckedInvariantCause::ForeignCheckedExpression => "foreign-expression",
         CheckedInvariantCause::MeterBorrowConflict => "meter-borrow",
+        CheckedInvariantCause::PackageReentry => "package-reentry",
         CheckedInvariantCause::EqualityScheduleMismatch => "equality-schedule",
         CheckedInvariantCause::ScheduledComparisonRefused { .. } => "scheduled-comparison",
         CheckedInvariantCause::EqualityOperandSourceNotAdmitted => "equality-source-admission",
@@ -84,6 +85,7 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             "foreign-expression",
         ),
         (CheckedInvariantCause::MeterBorrowConflict, "meter-borrow"),
+        (CheckedInvariantCause::PackageReentry, "package-reentry"),
         (
             CheckedInvariantCause::EqualityScheduleMismatch,
             "equality-schedule",
@@ -173,7 +175,7 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             "generated-descriptor",
         ),
     ];
-    assert_eq!(cases.len(), 31);
+    assert_eq!(cases.len(), 32);
     for (index, (cause, name)) in cases.iter().enumerate() {
         assert_eq!(expected_name(*cause), *name);
         let refusal = Refusal::CheckedInvariant { cause: *cause };

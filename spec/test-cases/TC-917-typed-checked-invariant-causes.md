@@ -18,7 +18,7 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
 
 ## Test Procedure
 
-1. Exhaustively match `CheckedInvariantCause` against thirty-one independently
+1. Exhaustively match `CheckedInvariantCause` against thirty-two independently
    named expectations, including `ScheduledComparisonRefused`,
    `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and
    `GeneratedEqualityCheckRejected` with
@@ -46,7 +46,7 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
    composites of different declarations do not, they give `false` under TC-924). Assert `CollectionKindMismatch`,
    `PopulationPair`, `ValueKindMismatch`, and `ValueKindMismatch` respectively.
    Check the pair is refused without a completed Boolean.
-5. For each of the thirty-one public cause variants, construct the typed
+5. For each of the thirty-two public cause variants, construct the typed
    `CheckedInvariant` and assert both catalog methods return `None` and that
    refusals with different causes compare unequal. Re-run FR-096's ordinary
    refusal table unchanged so the new path cannot erase a catalog code.
@@ -61,7 +61,7 @@ planned until their own tagged tests and inspection run.
 
 ## Status
 
-`tests/checked_invariant.rs` exhaustively tests the target thirty-one-cause enum,
+`tests/checked_invariant.rs` exhaustively tests the target thirty-two-cause enum,
 checks that `CallDepthExceeded` cannot be constructed, and tests the kernel
 carrier behavior. The RT explicit-frame/work-fuel cutover and external
 producer and mapping controls remain at their owning repositories.

@@ -16,7 +16,7 @@ The shared cause carrier and kernel producers are owned here. The producer contr
 
 ## Description
 
-When the exact kernel, the checked-expression residue in `quire-contract-runtime`, the shared `quire-semantic-value` leaf, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish each condition in the tables below, including a re-entrant meter borrow, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results. Runtime-managed calls use explicit frames and `work_units` execution fuel under RT FR-273; exhausted fuel returns `Incomplete` with `limit_kind: work_units`, and no call-depth ceiling or `CallDepthExceeded` checked-invariant cause decides an outcome.
+When the exact kernel, the checked-expression residue in `quire-contract-runtime`, the shared `quire-semantic-value` leaf, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish each condition in the tables below, including a re-entrant meter borrow and a nested entry into an already-active checked package, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results. Runtime-managed calls use explicit frames and `work_units` execution fuel under RT FR-273; exhausted fuel returns `Incomplete` with `limit_kind: work_units`, and no call-depth ceiling or `CallDepthExceeded` checked-invariant cause decides an outcome.
 
 ## Inputs
 
@@ -30,7 +30,7 @@ When the exact kernel, the checked-expression residue in `quire-contract-runtime
 
 ## Behavior
 
-The public `CheckedInvariantCause` SHALL be a closed enum of the thirty-one variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-seven variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's semantic-value type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
+The public `CheckedInvariantCause` SHALL be a closed enum of the thirty-two variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-eight variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's semantic-value type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
 
 | Cause | Trigger and owning source on the measured main revisions |
 |---|---|
@@ -45,6 +45,7 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the thirty-one vari
 | `UnknownCheckedFunction` | RT `run_call` or `Frame::call` finds no named function after checking: `src/exact/expression.rs:802,922`. |
 | `ForeignCheckedExpression` | RT `plan_evaluation` finds an expression checked against another package: `src/exact/expression.rs:829-834`. |
 | `MeterBorrowConflict` | RT `Frame::call` or `Frame::meter` cannot acquire its shared mutable meter borrow: `src/exact/expression.rs:925-934,956-960`. |
+| `PackageReentry` | RT `CheckedPackage::call` or `CheckedPackage::evaluate` enters an already-active package from a host body before a nested charge: `src/exact/expression.rs`, `CheckedPackage::begin`. This is distinct from a shared meter borrow and a generated outcome adapter mismatch. |
 | `EqualityScheduleMismatch` | RT or QSV's checked text/enum/quantity schedule receives values of another shape: RT `src/exact/equality.rs:167-185`; QSV `src/declaration.rs:2412-2416`. |
 | `ScheduledComparisonRefused { cause }` | RT or QSV's selected text/enum/quantity comparator returns `IllTyped { cause }` after a successful checked schedule: RT `src/exact/equality.rs:167-192`; QSV `src/declaration.rs:2418`; the kernel-owned `IllTypedCause` is retained. |
 | `EqualityOperandSourceNotAdmitted` | A completed equality operand fails its checked source type's admission: RT `src/exact/equality.rs:432-433`; QSV `src/declaration.rs:2532-2537`. |
@@ -89,7 +90,7 @@ current triggers remain required target assignments. FR-042-AC-1 and TC-057
 cannot be credited as complete until
 their producer controls pass. The measured RT revision still has depth-stop
 producers; RT FR-273 must retire them with explicit frames and `work_units`
-fuel before RT pins the kernel's closed thirty-one-cause API. QSV's
+fuel before RT pins the kernel's closed thirty-two-cause API. QSV's
 `src/declaration.rs:2146` uses
 `DeferredResultNotAdmitted`. At each call site of its shared `invariant()`
 helper at line 2422, QSV SHALL select the corresponding typed cause: enum
@@ -159,7 +160,7 @@ states this narrow boundary.
 
 | ID | Criteria | Verification |
 |---|---|---|
-| FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty-one table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
+| FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty-two table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
 | FR-369-AC-2 | Every kernel producer in collection, value, division and equality returns exactly its table cause; two population values return `PopulationPair`, a population paired with another kind returns `ValueKindMismatch`, and unlike collection kinds return `CollectionKindMismatch`. Two composites of different declarations return `false` and a composite paired with a non-composite returns `ValueKindMismatch` (FR-376-AC-1, FR-376-AC-6). | Test |
 | FR-369-AC-5 | For every typed checked-invariant cause, `Refusal::code()` and `Refusal::cause()` return `None`, and `Eq` distinguishes otherwise equal refusals whose causes differ. Ordinary kernel refusal codes and causes are unchanged. | Test |
 | FR-369-AC-6 | Every received typed cause follows QSL's existing internal-fault path: no refusal record or `Evaluation`, `runtime_invariant`/`S6a`/`checked-program-invariant` at S6a, `CallFailure::Fault` at the public call, and `Failed` with unavailable basis for an internal replay fault. It never becomes an ordinary replay refusal, `Inconclusive`, `Incomplete(Cancelled)`, a proved result or a certification rejection; an unknown received cause retains fault provenance. | Inspection |
@@ -168,7 +169,7 @@ states this narrow boundary.
 ## Status
 
 The kernel carrier and kernel producer tests exist. `src/outcome.rs` exports
-the target thirty-one-cause enum without `CallDepthExceeded`, and the tagged
+the target thirty-two-cause enum without `CallDepthExceeded`, and the tagged
 `tests/checked_invariant.rs` controls cover the target shape. The RT FR-273
 explicit-frame/work-fuel cutover must remove its depth-stop producers before
 it pins this kernel API. IR-712 owns QSV producers, IR-709 owns CG producers
