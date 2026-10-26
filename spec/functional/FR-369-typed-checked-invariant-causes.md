@@ -164,16 +164,14 @@ states this narrow boundary.
 
 ## Status
 
-Target contract planned. The current `src/outcome.rs` still exports
-`CallDepthExceeded`, and `tests/checked_invariant.rs` still enumerates it;
-this amendment does not remove that Rust variant or change any producer or
-test. The kernel carrier and kernel producer tests exist; IR-708's RT typed
-producer migration is in progress. The enum removal and
-tagged test changes must wait for the IR-497 coordinated code cutover with
-RT's IR-512 explicit-frame/work-fuel behavior. IR-712 owns QSV producers,
-IR-709 owns CG producers and consumers, and QSL's direct constructor
-migration is required before it pins the new kernel API. No target runtime
-behavior is claimed by this spec-only change.
+The kernel carrier and kernel producer tests exist. `src/outcome.rs` exports
+the target thirty-cause enum without `CallDepthExceeded`, and the tagged
+`tests/checked_invariant.rs` controls cover the target shape. The RT FR-273
+explicit-frame/work-fuel cutover must remove its depth-stop producers before
+it pins this kernel API. IR-712 owns QSV producers, IR-709 owns CG producers
+and consumers, and QSL's direct constructor migration is required before it
+pins this API. This carrier change alone does not establish the downstream
+producer and mapping criteria.
 
 ## Dependencies
 

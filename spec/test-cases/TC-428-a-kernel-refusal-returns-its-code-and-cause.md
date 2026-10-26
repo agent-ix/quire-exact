@@ -32,7 +32,6 @@ Scope: FR-096-AC-8.
 
 The existing `src/outcome.rs` test, tagged `#[trace("TC-428",
 "FR-096-AC-8")]`, covers the ordinary table. The current
-`tests/checked_invariant.rs` test covers thirty-one typed causes, including
-`CallDepthExceeded`, and their `None` mapping. The target thirty-cause step 2
-awaits the IR-497 coordinated enum and tagged-test cutover; this target count
-is not a claim about the current Rust enum.
+`tests/checked_invariant.rs` covers the target thirty typed causes and their
+`None` mapping. Its compile-fail control rejects the removed
+`CallDepthExceeded` variant.

@@ -14,7 +14,6 @@ fn expected_name(cause: CheckedInvariantCause) -> &'static str {
         CheckedInvariantCause::CollectionKindMismatch => "collection-kind",
         CheckedInvariantCause::PopulationPair => "population-pair",
         CheckedInvariantCause::ValueKindMismatch => "value-kind",
-        CheckedInvariantCause::CallDepthExceeded => "call-depth",
         CheckedInvariantCause::UnknownCheckedFunction => "unknown-function",
         CheckedInvariantCause::ForeignCheckedExpression => "foreign-expression",
         CheckedInvariantCause::MeterBorrowConflict => "meter-borrow",
@@ -76,7 +75,6 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
         ),
         (CheckedInvariantCause::PopulationPair, "population-pair"),
         (CheckedInvariantCause::ValueKindMismatch, "value-kind"),
-        (CheckedInvariantCause::CallDepthExceeded, "call-depth"),
         (
             CheckedInvariantCause::UnknownCheckedFunction,
             "unknown-function",
@@ -232,7 +230,7 @@ fn comparison_payloads_retain_the_original_typed_cause() {
 
 /// Trace: FR-369-AC-1, FR-369-AC-5
 #[test]
-fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
+fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cause() {
     use std::{fs, process::Command};
 
     let executable = std::env::current_exe().expect("integration test executable");
@@ -296,6 +294,18 @@ fn rust_compiler_rejects_unit_constructor_and_an_unhandled_new_cause() {
     assert!(!invalid.status.success());
     assert!(
         error.contains("E0533") && error.contains("CheckedInvariant"),
+        "{error}"
+    );
+    let removed = compile(
+        "removed_depth_cause",
+        "use quire_exact::CheckedInvariantCause;\n\
+         pub fn cause() -> CheckedInvariantCause { CheckedInvariantCause::CallDepthExceeded }",
+        false,
+    );
+    let error = String::from_utf8_lossy(&removed.stderr);
+    assert!(!removed.status.success());
+    assert!(
+        error.contains("E0599") && error.contains("CallDepthExceeded"),
         "{error}"
     );
 
