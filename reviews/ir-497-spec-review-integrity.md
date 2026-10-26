@@ -40,3 +40,9 @@ Ticket: IR-497. This is a completeness and consistency check of the PR #86 spec 
 | FND-001 | low | The `PackageReentry` row states a current RT trigger at `CheckedPackage::begin` under a header reading "on the measured main revisions", but that function exists only on unmerged RT PR #161. RT main 48a11b1 has no re-entry refusal and only bounds re-entrant depth with `CallDepthExceeded` (lines 804, 866, 935), and unlike the two trigger-less CG rows the row is not marked pending | spec/functional/FR-369-typed-checked-invariant-causes.md:48 |
 
 FND-001 detail: the row's status is the issue, not a stale SHA. FR-369 marks causes with no current producer as `PLANNED` (the `GeneratedUnexpectedOutcome` and `GeneratedEnvironmentRejected` rows), and it records the later kernel producer `NativeIntegerCapacityBreach` explicitly (lines 87-88). An FR-369-AC-8 inspector reading RT main would not find this row's producer. Lines 91-93 only say RT must retire depth-stop producers before pinning. Options: add "pending RT FR-273 cutover (quire-contract-runtime#161)" to the row, or add one sentence beside the `NativeIntegerCapacityBreach` note.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Disposition round 1 at 7ae6cd74ccbee2b5b7508c260dc14fabe3bd89fa: the FR-369 `PackageReentry` row (line 48) now opens "PLANNED on the measured RT main" and attributes the `CheckedPackage::begin` producer to RT #161. It no longer claims a current trigger, which matches the PLANNED convention of the CG rows. No regression: the counts (32 variants, 28 unit), the distinction from `MeterBorrowConflict`/`GeneratedUnexpectedOutcome`, and TC-917/TC-428 are unchanged. |

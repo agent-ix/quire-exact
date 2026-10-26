@@ -45,3 +45,9 @@ No `AssuranceProfile` exists under `spec/` (the only `spec/assurance/` documents
 | FND-001 | low | The 32-row case table cannot detect a unit cause replaced by a second instance of a payload variant: a variant could be dropped while length, name and pairwise-`Eq` checks still pass, because names are not checked for uniqueness | tests/checked_invariant.rs:178-192 |
 
 FND-001 detail: the test checks that `cases.len() == 32`, that each row's `expected_name` matches, and that rows are pairwise unequal under `Eq`. Suppose the `(PackageReentry, "package-reentry")` row (or any unit row) were replaced by `(ScheduledComparisonRefused { cause: IllTypedCause::DistinctUnits }, "scheduled-comparison")`. All three checks would still pass, because the two `ScheduledComparisonRefused` rows carry different `IllTypedCause` payloads. The dropped variant would then skip the per-cause AC-5 `code()`/`cause()` assertions. The compile-time `expected_name` match still forces the enum itself to match exactly, so this weakens AC-5's "every cause" coverage, not AC-1's variant-set check. The pattern predates this PR, but the PR edits the table. One fix is to assert that the 32 names are distinct (for example, collect them into a set and check its length).
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Disposition round 1 at 7ae6cd74ccbee2b5b7508c260dc14fabe3bd89fa: `tests/checked_invariant.rs:179-184` now inserts each row's name into a `BTreeSet` and asserts insertion succeeds. The 32 `expected_name` arms map to 32 distinct strings, so with `cases.len() == 32`, unique names and `expected_name(*cause) == *name`, every variant must appear in exactly one row; the unit-replaced-by-payload substitution now fails. No regression: the `std::` path matches the file's existing fully qualified idiom, and the vertical `assert!` layout matches rustfmt's default `fn_call_width`. |
