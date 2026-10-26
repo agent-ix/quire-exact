@@ -1,6 +1,7 @@
 """Focused operational checks for the gate's fail-closed verdict classifier.
 
-These do not bind FR-359-AC-9: the ignored Rust test executes the real proofs.
+These do not bind FR-359-AC-9. The ignored Rust test is disabled and fails
+with the DO NOT RUN warning if explicitly selected.
 """
 
 from pathlib import Path

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run TC-931's healthy Meter proof and production ALL-loop control.
+"""Disabled TC-931 Meter proof and production ALL-loop control runner.
 
-Only the Python standard library is used. Each proof gets its own systemd scope,
-Git worktree and target directory; the checked-out crate is never mutated.
+The entry point fails before any proof setup. The preserved implementation below
+must be reviewed and requalified after the disable is lifted.
 """
 
 import argparse
@@ -486,6 +486,9 @@ def interrupted(_signum, _frame):
 
 
 def main():
+    print("SKIPPED: DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done", file=sys.stderr)
+    return 2
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path)
     parser.add_argument("--preflight", action="store_true", help="check clean inputs and absence of competing proof engines before Cargo")

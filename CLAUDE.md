@@ -4,6 +4,8 @@ The exact-value kernel: checked identity, outcome and refusal, provenance and bo
 
 ## Commands
 
+DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done. `make kani-meter-gate`, the Python and shell runners, and the ignored native test print this warning; the Kani harness is excluded from compilation. FR-359-AC-9 remains unqualified.
+
 ```bash
 make fmt            # format with rustfmt
 make fmt-check      # verify formatting (CI gate)

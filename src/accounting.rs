@@ -19,7 +19,9 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::num::NonZeroU64;
 
-#[cfg(kani)]
+// DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done.
+// Keep the proof source, but exclude its module even when Kani selects a harness directly.
+#[cfg(all(kani, any()))]
 mod kani_proofs;
 mod units;
 #[cfg(kani)]
