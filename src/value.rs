@@ -54,7 +54,7 @@ use crate::ieee::{FloatType, IeeeValue};
 use crate::integer::{Integer, IntegerInterval};
 use crate::node::{Identifier, NodeKey};
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
-use crate::quantity::Quantity;
+use crate::quantity::{BoundedQuantityType, Quantity};
 use crate::rational::{Rational, RationalDomain};
 use crate::reference::ObjectReference;
 use crate::text::{Text, TextType};
@@ -383,6 +383,8 @@ pub enum ValueType {
     /// A map type `Map<Text, V>[min, max]`, or the unbounded
     /// `Map<Text, V>`: the key type is always `Text`.
     Map(Arc<MapType>),
+    /// A bounded quantity type `Quantity<U>[min, max]`.
+    BoundedQuantity(Arc<BoundedQuantityType>),
     /// `Reference<T>` to an object of the object type with this effective
     /// identity.
     Reference(EffectiveId),
@@ -396,6 +398,11 @@ impl ValueType {
     /// `K<element>[bound]`.
     pub fn collection(collection_type: CollectionType) -> Self {
         Self::Collection(Arc::new(collection_type))
+    }
+
+    /// `Quantity<U>[min, max]`.
+    pub fn bounded_quantity(bounded: BoundedQuantityType) -> Self {
+        Self::BoundedQuantity(Arc::new(bounded))
     }
 
     /// `Map<Text, values>[bound]`.
@@ -431,6 +438,7 @@ impl ValueType {
             (Self::Decimal(declared), Value::Decimal(decimal)) => declared.contains(decimal),
             (Self::Float(declared), Value::Float(float)) => float.width() == declared.width(),
             (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == *unit,
+            (Self::BoundedQuantity(bounded), Value::Quantity(quantity)) => bounded.admits(quantity),
             (Self::Text(declared), Value::Text(text)) => text.text_type() == declared,
             (Self::String, Value::String(_)) => true,
             (Self::Uuid, Value::Uuid(_)) | (Self::Timestamp, Value::Timestamp(_)) => true,
@@ -473,6 +481,7 @@ impl ValueType {
                 | Self::Composite(_)
                 | Self::Collection(_)
                 | Self::Map(_)
+                | Self::BoundedQuantity(_)
                 | Self::Reference(_)
                 | Self::Population(_),
                 Value::Boolean(_)
