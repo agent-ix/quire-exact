@@ -310,11 +310,15 @@ pub enum ChargePoint {
     ModelNavigate,
     /// `temporal.visit`: one caller-owned temporal operator visit.
     TemporalVisit,
+    /// `frame.write`: one caller-owned operation-frame field write.
+    FrameWrite,
+    /// `frame.redefines-link`: one caller-owned `redefines` link traversal.
+    FrameRedefinesLink,
 }
 
 impl ChargePoint {
     /// Every named point, grouped by family in normative order.
-    pub const ALL: [Self; 63] = [
+    pub const ALL: [Self; 65] = [
         Self::DecimalOperands,
         Self::DecimalScaleExpansion,
         Self::DecimalArithmetic,
@@ -378,6 +382,8 @@ impl ChargePoint {
         Self::ModelDeref,
         Self::ModelNavigate,
         Self::TemporalVisit,
+        Self::FrameWrite,
+        Self::FrameRedefinesLink,
     ];
 
     /// Normative identifier.
@@ -446,6 +452,8 @@ impl ChargePoint {
             Self::ModelDeref => "model.deref",
             Self::ModelNavigate => "model.navigate",
             Self::TemporalVisit => "temporal.visit",
+            Self::FrameWrite => "frame.write",
+            Self::FrameRedefinesLink => "frame.redefines-link",
         }
     }
 
