@@ -348,7 +348,7 @@ fn meter_uses_field_order_and_all_counters_are_queryable() {
     );
 }
 
-#[trace("TC-916", "FR-368-AC-1")]
+#[trace("TC-916", "FR-368-AC-1", "FR-368-AC-3")]
 #[test]
 fn charge_point_vocabulary_is_unique_and_round_trips() {
     const _: () = {
@@ -544,6 +544,11 @@ fn charge_point_vocabulary_is_unique_and_round_trips() {
         assert!(matches!(ChargePoint::ALL[60], ChargePoint::ModelDeref));
         assert!(matches!(ChargePoint::ALL[61], ChargePoint::ModelNavigate));
         assert!(matches!(ChargePoint::ALL[62], ChargePoint::TemporalVisit));
+        assert!(matches!(ChargePoint::ALL[63], ChargePoint::FrameWrite));
+        assert!(matches!(
+            ChargePoint::ALL[64],
+            ChargePoint::FrameRedefinesLink
+        ));
     };
     let mut seen = HashSet::new();
     for point in ChargePoint::ALL {
@@ -611,12 +616,30 @@ fn charge_point_vocabulary_is_unique_and_round_trips() {
             ChargePoint::ModelDeref => "model.deref",
             ChargePoint::ModelNavigate => "model.navigate",
             ChargePoint::TemporalVisit => "temporal.visit",
+            ChargePoint::FrameWrite => "frame.write",
+            ChargePoint::FrameRedefinesLink => "frame.redefines-link",
         };
         assert!(seen.insert(point), "duplicate {point:?}");
         assert_eq!(point.as_str(), name);
         assert_eq!(ChargePoint::from_code(name), Some(point));
     }
-    assert_eq!(seen.len(), 63);
+    assert_eq!(seen.len(), 65);
+    assert_eq!(ChargePoint::ALL.len(), 65);
+    assert_eq!(ChargePoint::FrameWrite.as_str(), "frame.write");
+    assert_eq!(
+        ChargePoint::FrameRedefinesLink.as_str(),
+        "frame.redefines-link"
+    );
+    assert_eq!(
+        ChargePoint::from_code("frame.write"),
+        Some(ChargePoint::FrameWrite)
+    );
+    assert_eq!(
+        ChargePoint::from_code("frame.redefines-link"),
+        Some(ChargePoint::FrameRedefinesLink)
+    );
+    assert_eq!(ChargePoint::from_code("frame.writes"), None);
+    assert_eq!(ChargePoint::from_code("frame.redefine-link"), None);
     assert_eq!(ChargePoint::from_code("not-a-charge"), None);
 }
 
