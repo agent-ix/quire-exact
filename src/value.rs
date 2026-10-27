@@ -47,7 +47,7 @@ use alloc::{boxed::Box, string::String, vec, vec::Vec};
 use core::fmt;
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
-use crate::collection::{CollectionType, CollectionValue};
+use crate::collection::{CollectionType, CollectionValue, MapType};
 use crate::decimal::{Decimal, DecimalType};
 use crate::identity::{EffectiveId, MemberId, PopulationId, UnitId, VariantId};
 use crate::ieee::{FloatType, IeeeValue};
@@ -380,6 +380,9 @@ pub enum ValueType {
     Composite(NodeKey),
     /// A collection type `K<T>[min, max]`, or the unbounded `K<T>`.
     Collection(Arc<CollectionType>),
+    /// A map type `Map<Text, V>[min, max]`, or the unbounded
+    /// `Map<Text, V>`: the key type is always `Text`.
+    Map(Arc<MapType>),
     /// `Reference<T>` to an object of the object type with this effective
     /// identity.
     Reference(EffectiveId),
@@ -393,6 +396,11 @@ impl ValueType {
     /// `K<element>[bound]`.
     pub fn collection(collection_type: CollectionType) -> Self {
         Self::Collection(Arc::new(collection_type))
+    }
+
+    /// `Map<Text, values>[bound]`.
+    pub fn map(map_type: MapType) -> Self {
+        Self::Map(Arc::new(map_type))
     }
 
     /// `Option<payload>`.
@@ -412,7 +420,9 @@ impl ValueType {
     /// type; their contents were admitted at construction. An `Enum` shape
     /// admits a `Value::Enum` exactly when the shape's own ranked list agrees
     /// with the member's claimed rank for its variant: a
-    /// pure lookup against the shape, no declaration lookup needed.
+    /// pure lookup against the shape, no declaration lookup needed. A
+    /// [`ValueType::Map`] admits no value: the kernel has no map value, so
+    /// the map type is type identity only (FR-386).
     pub fn admits(&self, value: &Value) -> bool {
         match (self, value) {
             (Self::Boolean, Value::Boolean(_)) | (Self::Integer, Value::Integer(_)) => true,
@@ -462,6 +472,7 @@ impl ValueType {
                 | Self::Option(_)
                 | Self::Composite(_)
                 | Self::Collection(_)
+                | Self::Map(_)
                 | Self::Reference(_)
                 | Self::Population(_),
                 Value::Boolean(_)
@@ -736,6 +747,7 @@ enum Step<'a> {
     Union(&'a UnionValue),
     Type(&'a ValueType),
     CollectionType(&'a CollectionType),
+    MapType(&'a MapType),
     Slot(&'a FieldValue),
     Payload(Option<&'a Value>),
     /// A whole list, brackets included.
@@ -780,6 +792,7 @@ impl<'f, 'g> DebugWriter<'f, 'g> {
                 Step::CollectionType(collection_type) => {
                     value_type::schedule_collection_type(&mut steps, collection_type)
                 }
+                Step::MapType(map_type) => value_type::schedule_map_type(&mut steps, map_type),
                 Step::Slot(FieldValue::Present(value)) => {
                     schedule(&mut steps, tuple_steps("Present", Step::Value(value)))
                 }
