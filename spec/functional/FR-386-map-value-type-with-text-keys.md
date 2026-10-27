@@ -50,6 +50,7 @@ A package map type `Map<Text, Timer>[0, 2]` is a field of an object type. The ch
 | FR-386-AC-4 | On a thread with a 512 KiB stack, a `ValueType` of 100,000 nested `Map` links around `Boolean`, and one of 100,000 links cycling `Map`, `Option` and `Sequence`, clone, compare equal to their clones, hash equal to their clones, format for debug with balanced brackets, and drop. Two chains differing only at the innermost link are unequal. | Test (TC-935) |
 | FR-386-AC-5 | `Debug` of `Map<Text, Boolean>` and of a bounded `Map<Text, Option<Boolean>>[1, 3]` prints exactly `Map(MapType { values: Boolean, bound: None })` and `Map(MapType { values: Option(Boolean), bound: Some(CardinalityBound { minimum: 1, maximum: 3 }) })`. | Test (TC-935) |
 | FR-386-AC-6 | `ValueType::admits` on a `Map` type returns `false` for a collection value, a text value and an option value. | Test (TC-935) |
+| FR-386-AC-7 | `Debug` in alternate mode (`{:#?}`) of `Map<Text, Boolean>` and of the bounded `Map<Text, Option<Boolean>>[1, 3]` prints exactly what `#[derive(Debug)]` pretty-printing prints: `Map(\n    MapType {\n        values: Boolean,\n        bound: None,\n    },\n)` and the same nesting, four spaces per level with a trailing comma on every field, for the bounded type. | Test (TC-935) |
 
 ## Status
 

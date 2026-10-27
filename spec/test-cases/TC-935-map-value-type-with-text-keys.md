@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify [FR-386](../functional/FR-386-map-value-type-with-text-keys.md) through the public `ValueType::map`, `MapType`, `ValueType::admits` and the traits of `ValueType`. Scope: FR-386-AC-1 through FR-386-AC-6.
+Verify [FR-386](../functional/FR-386-map-value-type-with-text-keys.md) through the public `ValueType::map`, `MapType`, `ValueType::admits` and the traits of `ValueType`. Scope: FR-386-AC-1 through FR-386-AC-7.
 
 ## Test Procedure
 
@@ -21,6 +21,7 @@ Verify [FR-386](../functional/FR-386-map-value-type-with-text-keys.md) through t
 4. On a 512 KiB stack thread build the two 100,000-link chains of FR-386-AC-4, clone, compare, hash, format and drop them.
 5. Format the two types of FR-386-AC-5 in compact mode.
 6. Call `admits` on a `Map` type with a collection, a text and an option value.
+7. Format the two types of FR-386-AC-5 in alternate mode (`{:#?}`).
 
 ## Expected Results
 
@@ -30,3 +31,4 @@ Verify [FR-386](../functional/FR-386-map-value-type-with-text-keys.md) through t
 4. Every operation completes with no stack overflow; balanced brackets; the innermost difference is unequal.
 5. The exact strings of FR-386-AC-5.
 6. `false` each time.
+7. The exact pretty-printed strings of FR-386-AC-7.
