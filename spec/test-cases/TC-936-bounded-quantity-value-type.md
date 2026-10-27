@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify [FR-387](../functional/FR-387-bounded-quantity-value-type.md) through the public `BoundedQuantityType::new`, `ValueType::bounded_quantity`, `ValueType::admits` and the traits of `ValueType`. Scope: FR-387-AC-1 through FR-387-AC-8.
+Verify [FR-387](../functional/FR-387-bounded-quantity-value-type.md) through the public `BoundedQuantityType::new`, `ValueType::bounded_quantity`, `ValueType::admits` and the traits of `ValueType`. Scope: FR-387-AC-1 through FR-387-AC-9.
 
 ## Test Procedure
 
@@ -23,6 +23,7 @@ Verify [FR-387](../functional/FR-387-bounded-quantity-value-type.md) through the
 6. Format the `[0, 100]` and `[None, None]` types in compact and alternate (`{:#?}`) mode.
 7. Call `admits` on `[0, 100]`, `[1, 100]`, `[0, None]` and `[None, 100]` with the magnitudes of FR-387-AC-7.
 8. Call `admits` on a `[0, 100]` type with a magnitude 50 quantity in another unit, a `Text` value, a `Boolean` value and an `Option` value; call `admits` on `ValueType::Quantity(U)` with magnitude 101.
+9. Build `[0, 100]` and `[0, 50]` types over `U` and a `[0, 100]` type from effective bounds folded from two different caller chains; compare them and read the accessors; observe the error cause of every refused construction in step 2.
 
 ## Expected Results
 
@@ -32,5 +33,6 @@ Verify [FR-387](../functional/FR-387-bounded-quantity-value-type.md) through the
 4. Differing innermost bounds make the chains unequal; equal chains hash equal.
 5. Every operation completes with no stack overflow; balanced brackets; the innermost difference is unequal.
 6. The exact `#[derive(Debug)]` strings in both modes.
-7. `true` for 0, 50, 100 on `[0, 100]`; `false` for -1, 101 and `1/2` on `[1, 100]`; `[0, None]` and `[None, 100]` as FR-387-AC-7.
+7. `true` (admitted) for 0, 50, 100 on `[0, 100]`; `false` (not admitted) for -1, 101 and `1/2` on `[1, 100]`; `[0, None]` and `[None, 100]` as FR-387-AC-7.
 8. `false` for the four values on the bounded type; `true` on `Quantity(U)` for 101.
+9. The only cause seen is `MalformedBoundedQuantityType`; no other cause exists on the constructor; equal effective bounds give equal types regardless of origin; `[0, 50]` is unequal to `[0, 100]` though it refines it.
