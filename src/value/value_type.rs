@@ -1,7 +1,7 @@
 //! `ValueType`'s structural traits, walked without native recursion.
 //!
-//! A `ValueType` nests through exactly two variants, `Option` and
-//! `Collection`, and each holds one nested type behind an `Arc`, so a type
+//! A `ValueType` nests through exactly three variants, `Option`,
+//! `Collection` and `Map`, and each holds one nested type behind an `Arc`, so a type
 //! is a chain whose links are shared: `Clone` is one `Arc` increment and a
 //! value of any depth keeps one node per level, not one copy of the chain
 //! below it. `PartialEq` and `Hash` follow the chain with a cursor and need
@@ -19,7 +19,9 @@ use alloc::{sync::Arc, vec::Vec};
 use core::fmt;
 use core::hash::{Hash, Hasher};
 
-use super::{schedule, tuple_steps, Bracket, CollectionType, DebugWriter, Step, ValueType};
+use super::{
+    schedule, tuple_steps, Bracket, CollectionType, DebugWriter, MapType, Step, ValueType,
+};
 
 impl ValueType {
     /// The one type nested directly in this type, if any.
@@ -27,6 +29,7 @@ impl ValueType {
         match self {
             Self::Option(payload) => Some(payload),
             Self::Collection(collection) => Some(collection.element()),
+            Self::Map(map) => Some(map.values()),
             Self::Boolean
             | Self::Integer
             | Self::Uuid
@@ -56,6 +59,7 @@ impl ValueType {
             Self::Collection(collection) => {
                 Arc::get_mut(collection).map(|owned| take_type(owned.element_mut()))
             }
+            Self::Map(map) => Arc::get_mut(map).map(|owned| take_type(owned.values_mut())),
             Self::Boolean
             | Self::Integer
             | Self::Uuid
@@ -95,6 +99,7 @@ impl ValueType {
             (Self::Collection(left), Self::Collection(right)) => {
                 left.kind() == right.kind() && left.bound() == right.bound()
             }
+            (Self::Map(left), Self::Map(right)) => left.bound() == right.bound(),
             (Self::Reference(left), Self::Reference(right)) => left == right,
             (Self::Population(left), Self::Population(right)) => left == right,
             (
@@ -113,6 +118,7 @@ impl ValueType {
                 | Self::Option(_)
                 | Self::Composite(_)
                 | Self::Collection(_)
+                | Self::Map(_)
                 | Self::Reference(_)
                 | Self::Population(_),
                 _,
@@ -143,6 +149,7 @@ impl ValueType {
                 collection.kind().hash(state);
                 collection.bound().hash(state);
             }
+            Self::Map(map) => map.bound().hash(state),
             Self::Reference(object_type) => object_type.hash(state),
             Self::Population(maximum) => maximum.hash(state),
         }
@@ -169,6 +176,7 @@ impl Clone for ValueType {
             Self::Option(payload) => Self::Option(Arc::clone(payload)),
             Self::Composite(declaration) => Self::Composite(*declaration),
             Self::Collection(collection) => Self::Collection(Arc::clone(collection)),
+            Self::Map(map) => Self::Map(Arc::clone(map)),
             Self::Reference(object_type) => Self::Reference(*object_type),
             Self::Population(maximum) => Self::Population(*maximum),
         }
@@ -258,6 +266,9 @@ pub(super) fn schedule_type<'a>(stack: &mut Vec<Step<'a>>, value_type: &'a Value
                 tuple_steps("Collection", Step::CollectionType(collection)),
             );
         }
+        ValueType::Map(map) => {
+            return schedule(stack, tuple_steps("Map", Step::MapType(map)));
+        }
         ValueType::Int(leaf) => ("Int", leaf),
         ValueType::Rational(leaf) => ("Rational", leaf),
         ValueType::Decimal(leaf) => ("Decimal", leaf),
@@ -289,6 +300,25 @@ pub(super) fn schedule_collection_type<'a>(
             Step::Next,
             Step::Text("element: "),
             Step::Type(element),
+            Step::Next,
+            Step::Text("bound: "),
+            Step::Leaf(bound),
+            Step::Close(Bracket::Brace),
+        ],
+    );
+}
+
+/// Push `MapType { values: .., bound: .. }`, the derived layout, with the
+/// value type as a `Step::Type`.
+pub(super) fn schedule_map_type<'a>(stack: &mut Vec<Step<'a>>, map_type: &'a MapType) {
+    let (values, bound) = map_type.debug_fields();
+    schedule(
+        stack,
+        [
+            Step::Text("MapType"),
+            Step::Open(Bracket::Brace),
+            Step::Text("values: "),
+            Step::Type(values),
             Step::Next,
             Step::Text("bound: "),
             Step::Leaf(bound),
