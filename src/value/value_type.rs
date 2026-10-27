@@ -40,6 +40,7 @@ impl ValueType {
             | Self::Decimal(_)
             | Self::Float(_)
             | Self::Quantity(_)
+            | Self::BoundedQuantity(_)
             | Self::Text(_)
             | Self::Enum(_)
             | Self::Composite(_)
@@ -70,6 +71,7 @@ impl ValueType {
             | Self::Decimal(_)
             | Self::Float(_)
             | Self::Quantity(_)
+            | Self::BoundedQuantity(_)
             | Self::Text(_)
             | Self::Enum(_)
             | Self::Composite(_)
@@ -93,6 +95,7 @@ impl ValueType {
             (Self::Decimal(left), Self::Decimal(right)) => left == right,
             (Self::Float(left), Self::Float(right)) => left == right,
             (Self::Quantity(left), Self::Quantity(right)) => left == right,
+            (Self::BoundedQuantity(left), Self::BoundedQuantity(right)) => left == right,
             (Self::Text(left), Self::Text(right)) => left == right,
             (Self::Enum(left), Self::Enum(right)) => left == right,
             (Self::Composite(left), Self::Composite(right)) => left == right,
@@ -112,6 +115,7 @@ impl ValueType {
                 | Self::Decimal(_)
                 | Self::Float(_)
                 | Self::Quantity(_)
+                | Self::BoundedQuantity(_)
                 | Self::Text(_)
                 | Self::String
                 | Self::Enum(_)
@@ -142,6 +146,7 @@ impl ValueType {
             Self::Decimal(declared) => declared.hash(state),
             Self::Float(declared) => declared.hash(state),
             Self::Quantity(unit) => unit.hash(state),
+            Self::BoundedQuantity(bounded) => bounded.hash(state),
             Self::Text(declared) => declared.hash(state),
             Self::Enum(shape) => shape.hash(state),
             Self::Composite(declaration) => declaration.hash(state),
@@ -171,6 +176,7 @@ impl Clone for ValueType {
             Self::Decimal(declared) => Self::Decimal(declared.clone()),
             Self::Float(declared) => Self::Float(*declared),
             Self::Quantity(unit) => Self::Quantity(*unit),
+            Self::BoundedQuantity(bounded) => Self::BoundedQuantity(Arc::clone(bounded)),
             Self::Text(declared) => Self::Text(*declared),
             Self::Enum(shape) => Self::Enum(shape.clone()),
             Self::Option(payload) => Self::Option(Arc::clone(payload)),
@@ -274,6 +280,7 @@ pub(super) fn schedule_type<'a>(stack: &mut Vec<Step<'a>>, value_type: &'a Value
         ValueType::Decimal(leaf) => ("Decimal", leaf),
         ValueType::Float(leaf) => ("Float", leaf),
         ValueType::Quantity(leaf) => ("Quantity", leaf),
+        ValueType::BoundedQuantity(leaf) => ("BoundedQuantity", leaf),
         ValueType::Text(leaf) => ("Text", leaf),
         ValueType::Enum(leaf) => ("Enum", leaf),
         ValueType::Composite(leaf) => ("Composite", leaf),

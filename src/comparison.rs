@@ -100,6 +100,9 @@ pub enum IllTypedCause {
     /// A `Decimal[lo, hi; smin, smax; mode]` declaration has `lo > hi`,
     /// `smin > smax` or `smax > u32::MAX`.
     MalformedDecimalType,
+    /// A `Quantity<U>[min, max]` declaration has a bound in a unit other
+    /// than `U`.
+    MalformedBoundedQuantityType,
     /// IEEE operands have different widths and no explicit width conversion
     /// was selected.
     DistinctIeeeWidths,
@@ -135,6 +138,7 @@ impl IllTypedCause {
             | Self::AffineUnitArithmetic
             | Self::DistinctUnits
             | Self::MalformedDecimalType
+            | Self::MalformedBoundedQuantityType
             | Self::DistinctIeeeWidths
             | Self::IeeeWithExactOperand
             | Self::IeeeToNonRationalExact => None,

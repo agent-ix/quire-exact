@@ -155,7 +155,10 @@ pub use numeric_type_equality::{NumericTypeEndpoint, NumericTypeEqualityFailure}
 pub use outcome::{
     BoundViolation, CheckedInvariantCause, InexactTarget, Outcome, Refusal, Undefined,
 };
-pub use quantity::{compare_quantity, evaluate_quantity_arithmetic, Quantity, QuantityArithmetic};
+pub use quantity::{
+    compare_quantity, evaluate_quantity_arithmetic, BoundedQuantityType, Quantity,
+    QuantityArithmetic,
+};
 pub use rational::{NonPositiveDenominatorBound, Rational, RationalDomain, ZeroDenominator};
 pub use reference::ObjectReference;
 pub use text::{
