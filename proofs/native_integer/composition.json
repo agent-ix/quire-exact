@@ -1,0 +1,81 @@
+{
+  "license": "AGPL-3.0-or-later",
+  "requirement": "FR-384-AC-2",
+  "method": "SMT mathematical interval enclosure composed with actual production Rust bridges",
+  "qualification_rule": "All listed obligations and controls must have source-bound successful receipts and independently reviewed composition. An SMT UNSAT result alone does not qualify native execution; no Kani C2 PASS is implied.",
+  "interpretation": {
+    "native_value": "The exact signed mathematical integer denoted by the retained Rust i128 payload. No custom MathematicalInteger decoder is required for the direct wide bridges.",
+    "signed32_embedding": "Rust i32 -> i128 widening preserves the signed integer. Every actual admitted public i128 payload must losslessly roundtrip through i32.",
+    "wide_product": "Rust i128::checked_mul returning Some denotes exact signed mathematical multiplication without overflow. Its signed64 roundtrip is separately asserted.",
+    "order": "Rust primitive signed i128 comparison denotes the order of these exact mathematical signed integers. The actual NativeIntegerInterval method is machine-bound to this predicate.",
+    "real_embedding": "SMT-LIB to_real embeds mathematical Int into Real. The embedding query checks product, order, min and max preservation without bounds or assumed identities.",
+    "semantic_bounds": "Independent optional signed-i128 semantic result bounds do not narrow operand intervals, payloads, or the numerical capacity theorem."
+  },
+  "obligations": [
+    {
+      "role": "entire supported domain and outside refusal",
+      "subject": "native_multiply_rejects_every_outside_signed32_interval",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "exact per-plan membership, successful calculation, equality to full signed32 plan",
+      "subject": "native_multiply_signed32_interval_membership_and_calculation",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "every admitted i128 payload roundtrips i32 and retains original plan/payload association",
+      "subject": "native_multiply_admitted_payloads_roundtrip_signed32",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "actual universal plan calculation Some equals exact checked wide product; signed64 roundtrip",
+      "subject": "native_multiply_signed32_matches_checked_wide_product",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "actual interval capacity is min/max of all four exact checked wide products",
+      "subject": "native_multiply_capacity_matches_checked_wide_corners",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "actual full-i128 contains iff exact signed lower<=value<=upper",
+      "subject": "native_interval_contains_matches_signed_wide_order",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "independent mathematical refinement retained separately",
+      "subject": "native_multiply_signed32_payload_refines_mathematical_integer",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "independent exact four-corner mathematical image retained separately",
+      "subject": "native_multiply_signed32_corner_image_refines_mathematical_integer",
+      "source": "src/native_integer/kani_proofs.rs"
+    },
+    {
+      "role": "unbounded real interval enclosure, negation UNSAT",
+      "source": "proofs/native_integer/interval_enclosure.smt2"
+    },
+    {
+      "role": "unbounded mathematical Int to Real product/order/min/max embedding, negation UNSAT",
+      "source": "proofs/native_integer/integer_real_embedding.smt2"
+    }
+  ],
+  "composition": [
+    "Actual plan admission establishes original operand interval membership; the signed32 roundtrip bridge establishes that the universal signed32 product theorem applies to every actual admitted i128 payload.",
+    "The actual per-plan calculation equals the universal full-domain production calculation, which the direct wide bridge identifies with the exact mathematical signed product x*y, with no overflow and no promotion.",
+    "The wide corner bridge identifies the actual checked plan endpoints with the exact min/max of a*c,a*d,b*c,b*d for the original complete intervals.",
+    "Lossless integer-to-real embedding transfers exact endpoint order, payload membership and products to the universally checked real theorem; no native width, sign case or sampled interval narrows that theorem.",
+    "UNSAT of a product below all four corners or above all four corners implies min(corners)<=x*y<=max(corners). Embedding order preservation returns these inequalities to signed mathematical Int.",
+    "The direct contains bridge maps these exact signed inequalities back to the actual production capacity.contains(result), closing the no-false-capacity-breach obligation by explicit composition."
+  ],
+  "protocol_controls": {
+    "healthy": "UNSAT of the exact negated unbounded Real enclosure statement; schema rejects extra premises or omitted endpoints.",
+    "positive": "SAT base nonvacuity, all nine interval-sign cases, full signed32 MIN squared / negative extreme / zero witnesses. Returned exact rational models must be integral signed32 values and satisfy independently calculated premises, products and four-corner image.",
+    "mutants": "Weakened upper image omits b*d; Add replaces payload product; missing lower membership premise. Each must produce an actual SAT countermodel independently validated against the mutated and original statements.",
+    "contradictions": "Contradictory membership and contradictory sign predicates must be UNSAT as negative controls; these controls cannot supply a theorem or qualification result.",
+    "scope": "Only SAT controls search the full original signed32 integer population. The healthy enclosure and Int-to-Real embedding theorems remain unbounded.",
+    "classification": "Unknown, timeout, compile/tool error, malformed result/model, missing control or bridge is inconclusive. The script never reports native qualification or Kani C2 verification."
+  },
+  "consumer_boundary": "Genuine TC-025/TC-027/IR-917/IR-948 production profiles retain their original inputs, domains, assertions, covers, Cadical and resource settings. This internal proof method does not replace those runs."
+}

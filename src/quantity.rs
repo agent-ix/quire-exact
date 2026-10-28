@@ -21,7 +21,7 @@ use crate::outcome::{Outcome, Stop};
 use crate::rational::Rational;
 
 /// A quantity value: a magnitude in exactly one unit.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Quantity {
     magnitude: Rational,
     unit: UnitId,
@@ -41,6 +41,70 @@ impl Quantity {
     /// The unit.
     pub fn unit(&self) -> UnitId {
         self.unit
+    }
+}
+
+/// A bounded quantity type `Quantity<U>[min, max]`, or the unbounded
+/// `Quantity<U>` spelled as a bounded type with no bounds.
+///
+/// The bounds are the caller's folded effective bounds, each an exact
+/// inclusive `Quantity` in `U`. Inverted bounds (`min > max`) are a valid
+/// empty type that admits nothing; the kernel does not normalise empty
+/// types, so `[5, 3]` and `[4, 2]` are different types. Type identity is
+/// the unit plus both bounds, and bound presence is part of it.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct BoundedQuantityType {
+    unit: UnitId,
+    min: Option<Quantity>,
+    max: Option<Quantity>,
+}
+
+impl BoundedQuantityType {
+    /// `Quantity<unit>[min, max]`. Refused with
+    /// [`IllTypedCause::MalformedBoundedQuantityType`] only when a present
+    /// bound is a quantity in a unit other than `unit`.
+    pub fn new(
+        unit: UnitId,
+        min: Option<Quantity>,
+        max: Option<Quantity>,
+    ) -> Result<Self, IllTyped> {
+        let in_unit = |bound: &Option<Quantity>| bound.as_ref().is_none_or(|b| b.unit == unit);
+        if in_unit(&min) && in_unit(&max) {
+            Ok(Self { unit, min, max })
+        } else {
+            Err(IllTyped {
+                cause: IllTypedCause::MalformedBoundedQuantityType,
+            })
+        }
+    }
+
+    /// The unit.
+    pub fn unit(&self) -> UnitId {
+        self.unit
+    }
+
+    /// The inclusive lower bound, if any.
+    pub fn min(&self) -> Option<&Quantity> {
+        self.min.as_ref()
+    }
+
+    /// The inclusive upper bound, if any.
+    pub fn max(&self) -> Option<&Quantity> {
+        self.max.as_ref()
+    }
+
+    /// Whether `quantity` is in this type's unit with a magnitude inside
+    /// the bounds. An empty type admits nothing.
+    pub(crate) fn admits(&self, quantity: &Quantity) -> bool {
+        quantity.unit == self.unit
+            && self
+                .min
+                .as_ref()
+                .is_none_or(|min| min.magnitude <= quantity.magnitude)
+            && self
+                .max
+                .as_ref()
+                .is_none_or(|max| quantity.magnitude <= max.magnitude)
     }
 }
 

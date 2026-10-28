@@ -78,7 +78,7 @@ impl Integer {
         }
     }
 
-    fn native(&self) -> Option<i128> {
+    pub(crate) fn native(&self) -> Option<i128> {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Some(i128::from(*value)),
             IntegerRepr::Small128 { value, .. } => Some(*value),
@@ -737,6 +737,16 @@ impl IntegerInterval {
         Ok(Self { lower, upper })
     }
 
+    /// Retain the ordered endpoints certified by the native interval constructor.
+    pub(crate) fn from_native_interval(
+        interval: crate::native_integer::NativeIntegerInterval,
+    ) -> Self {
+        Self {
+            lower: Integer::from(interval.lower()),
+            upper: Integer::from(interval.upper()),
+        }
+    }
+
     /// The smallest interval containing both `a` and `b`, in either order.
     pub fn spanning(a: Integer, b: Integer) -> Self {
         if a <= b {
@@ -917,6 +927,53 @@ mod tests {
         let fitting = large.add(&Integer::from(42_i64)).sub(&large);
         assert_small128(&fitting);
         assert_eq!(fitting.as_big(), &BigInt::from(42_i64));
+    }
+
+    #[test]
+    #[trace("FR-384-AC-1", "FR-384-AC-4", "FR-371-AC-2")]
+    fn native_interval_egress_preserves_exact_endpoints_and_stable_borrows() {
+        let mut endpoints = std::vec![
+            i128::MIN,
+            i128::MIN + 1,
+            i64::MIN.into(),
+            -1,
+            0,
+            1,
+            i64::MAX.into(),
+            i128::MAX - 1,
+            i128::MAX,
+        ];
+        let mut state = 0x7053_8400_0000_0001_u128;
+        for _ in 0..64 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            endpoints.push(i128::from_le_bytes(state.to_le_bytes()));
+        }
+        for &lower in &endpoints {
+            for &upper in &endpoints {
+                let Ok(native) = crate::NativeIntegerInterval::new(lower, upper) else {
+                    continue;
+                };
+                let actual = IntegerInterval::from_native_interval(native);
+                assert_eq!(actual.lower().native(), Some(lower));
+                assert_eq!(actual.upper().native(), Some(upper));
+                for (value, expected) in [(actual.lower(), lower), (actual.upper(), upper)] {
+                    assert_small128(value);
+                    assert_empty_inline_cache(value);
+                    let borrowed = value.as_big();
+                    assert_eq!(borrowed, &BigInt::from(expected));
+                    assert!(core::ptr::eq(borrowed, value.as_big()));
+                    let cloned = value.clone();
+                    assert_empty_inline_cache(&cloned);
+                    assert_eq!(cloned.as_big(), borrowed);
+                }
+                assert_eq!(
+                    actual,
+                    IntegerInterval::spanning(Integer::from(lower), Integer::from(upper))
+                );
+            }
+        }
     }
 
     #[test]

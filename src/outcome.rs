@@ -118,6 +118,8 @@ pub enum Undefined {
 /// These are never catalog refusal codes or caller-supplied messages.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CheckedInvariantCause {
+    /// An opaque admitted native operation breached its certified capacity.
+    NativeIntegerCapacityBreach,
     /// An evaluated collection element is outside its declared type.
     CollectionElementNotAdmitted,
     /// A deferred composite result is outside its declared type.
@@ -132,14 +134,14 @@ pub enum CheckedInvariantCause {
     PopulationPair,
     /// Equality reached incompatible value kinds.
     ValueKindMismatch,
-    /// A checked call exhausted its call-depth budget.
-    CallDepthExceeded,
     /// A checked call names no known function.
     UnknownCheckedFunction,
     /// An expression was checked against another package.
     ForeignCheckedExpression,
     /// A checked call cannot borrow its shared meter mutably.
     MeterBorrowConflict,
+    /// A checked package was entered again while one of its bodies was active.
+    PackageReentry,
     /// A checked equality schedule received another value shape.
     EqualityScheduleMismatch,
     /// A scheduled comparator refused after checking.

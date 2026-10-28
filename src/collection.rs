@@ -189,6 +189,52 @@ impl CollectionType {
     }
 }
 
+/// A map type `Map<Text, V>[min, max]`, or the unbounded `Map<Text, V>`.
+///
+/// The key type is always `Text`, so the type carries only its value type
+/// and an optional bound. A map is not a [`CollectionKind`]: a kind's
+/// element is the member, while a map's keys are `Text` and its declared
+/// element is the value. Two map types are the same type exactly when the
+/// value type and the bound are equal, and bound presence is part of that
+/// identity, as for [`CollectionType`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MapType {
+    values: ValueType,
+    bound: Option<CardinalityBound>,
+}
+
+impl MapType {
+    /// `Map<Text, values>[bound]`, or the unbounded `Map<Text, values>`
+    /// for `None`.
+    pub fn new(values: ValueType, bound: Option<CardinalityBound>) -> Self {
+        Self { values, bound }
+    }
+
+    /// The value type.
+    pub fn values(&self) -> &ValueType {
+        &self.values
+    }
+
+    /// The value type, for `ValueType`'s iterative walks to take or
+    /// replace in place.
+    pub(crate) fn values_mut(&mut self) -> &mut ValueType {
+        &mut self.values
+    }
+
+    /// Every field, for `ValueType`'s `Debug` to print in the derived
+    /// layout. Destructured whole, so a new field is a compile error until
+    /// `Debug` prints it.
+    pub(crate) fn debug_fields(&self) -> (&ValueType, &Option<CardinalityBound>) {
+        let Self { values, bound } = self;
+        (values, bound)
+    }
+
+    /// The declared bound; `None` for an unbounded map type.
+    pub fn bound(&self) -> Option<CardinalityBound> {
+        self.bound
+    }
+}
+
 /// A completed collection value.
 #[derive(Clone, Debug)]
 pub struct CollectionValue {

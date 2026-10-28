@@ -1,0 +1,380 @@
+<!-- reviewer repo=agent-ix/quire-exact visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15236 method=spec-review/ears-conformance lang=spec pr=quire-exact#77 model=gpt-6.1-sol run=4b119908-a416-4dda-a539-d3df60a80f87 -->
+
+No design findings in the examined scope. Implementation and qualification remain prospective.
+
++++ [reviewer data]
+
+```yaml
+clean: true
+scope:
+- id: FR-371-AC-1
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: Primitive construction, canonical parsing, from_big and Add/Subtract/Multiply/Negate
+    preserve the exact value for fixed boundaries and reproducibly sampled inputs.
+    Fixed cases include i128 MIN/MAX, -1, 0, 1, i64 MIN squared, MAX+1, MIN-1, negated
+    MIN and large cancellation into the native range. MIN has magnitude bit length
+    128; its negation is positive 2^127 through genuine arbitrary-precision continuation.
+    Compare fitting operations with independent checked i128 arithmetic; compare non-fitting
+    results with independently authored decimal literals. Reject malformed/noncanonical
+    spellings as be
+- id: FR-371-AC-2
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: Equal mathematical values constructed by primitive, parse, from_big and
+    arithmetic routes remain equal, identically ordered, identically hashed with the
+    same hasher and identically formatted before and after BigInt access and cloning.
+    A borrowed as_big reports the exact value throughout concurrent read-only accesses;
+    all accesses to one retained materialization observe the same object. Clone/drop
+    do not invalidate surviving permitted borrows or introduce a cache-state value.
+- id: FR-371-AC-3
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: Every public metered integer arithmetic operation preserves the FR-362
+    schedule and counters on native, native-overflow and arbitrary-size cases. Test
+    sufficient limits, independently calculated exact/one-less bit and work boundaries,
+    denial injected at every named point, and outside-domain results. Compare all
+    completed/refused/incomplete fields and admitted prefixes with the independent
+    normative formulas. No representation transition manufactures a FunctionCall or
+    other charge.
+- id: FR-371-AC-4
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: For primitive inputs and result fitting i128, inspection identifies native
+    Add/Subtract/Multiply/Negate, magnitude, to_u64 and interval paths without BigInt
+    construction/materialization. A safe external allocator observer around standalone
+    Integer calls confirms no allocation on that native path, including clone after
+    cache access. Inline magnitude-stream controls cover zero, 32-bit limb crossings
+    and i128 MIN/MAX, compare independently prepared expected limbs, observe no stream
+    allocation and confirm that initially empty caches remain empty. Observation of
+    public metered calls separately iden
+- id: FR-371-AC-5
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: 'Public signatures and all existing Integer methods remain available, except
+    that the divisor parameters of Integer::exact_div, Integer::div_rem_truncating
+    and Integer::div_mod_floor preserve the admitted NonZeroInteger signatures defined
+    by [FR-374](./FR-374-nonzero-integer-divisor-admission.md), replacing only their
+    former plain &Integer parameters. Their existing nonzero results and infallible
+    return types remain preserved; every other public signature and Integer method
+    retains its existing preservation guarantee. Trait checks preserve Send/Sync and
+    current panic-unwind traits. Default and '
+- id: FR-371-AC-6
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: Genuine consumer healthy TC027, its bound mutant, and TC025 arithmetic
+    mutant retain the original input/domain bounds, oracle, unwind3, Cadical, 600-second
+    native ceiling, 16GiB memory ceiling, completion cover and counterexample checks.
+    Healthy verification and both substantive falsifications are required. Existing
+    all-four-operation, accounting/denial and refinement obligations remain required.
+    A compiler error, MemoryExhausted, timeout, missing mutation execution or missing
+    teardown is inconclusive and does not satisfy this criterion.
+- id: FR-371-AC-7
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: context_only
+  excerpt: Private mechanism checks distinguish Small64 and Small128 construction,
+    normalization and clone routes according to AD-003 without exposing a public tag
+    API. Source inspection identifies storage matching before native-value extraction
+    for Small64 Add/Subtract/Multiply/Negate, widening before ordinary arithmetic,
+    Small128 result construction and no BigInt continuation inside those arms. Check
+    all other inline pair classes, failed numeric-width guards, genuine i128 overflow
+    and Large cancellation; a small Small128 result remains Small128 on chaining.
+    Confirm both inline MIN magnitude streams and
+- id: FR-384-AC-1
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Admission accepts valid finite Add/Subtract/Multiply/Negate domains and
+    rejects reversed ranges, nonrepresentable endpoints and overflowing intermediate
+    result intervals with distinct typed reasons. Boundaries cover native MIN/MAX,
+    zero, -1, singleton domains and multiplication sign combinations. A narrowing
+    final domain does not conceal an unrepresentable intermediate. Public clients
+    cannot forge or widen certificates.
+- id: FR-384-AC-2
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: A machine-checked refinement against an independently expressed mathematical
+    abstraction of the actual BigInt semantics covers every admitted native payload/operation
+    and its abstraction to mathematical Integer/BigInt. Independent BigInt differential
+    tests exercise extrema, cancellation, products and negation plus reproducibly
+    sampled accepted domains; deliberate arithmetic and admission-bound mutants falsify
+    the relevant property. Evidence states exactly which obligation each method establishes.
+- id: FR-384-AC-3
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Fresh and cumulative real Meter comparisons against the normative formulas
+    and general exact calls agree on completed values, domain refusal, cancellation,
+    every named injected denial, all counters, admitted prefix and complete incomplete
+    fields at sufficient, exact and one-less limits. Every operation and Boolean/comparison
+    consumer used by the genuine profiles is exercised; arithmetic equivalence alone
+    does not satisfy accounting refinement.
+- id: FR-384-AC-4
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Source inspection and ordinary generated-client execution demonstrate native
+    carriers persist through a multi-operation expression without successful-path
+    BigInt/cache/general Integer construction. Input/output conversions are identified
+    separately. Default and test-support checks, required no_std target and existing
+    borrowed as_big regression checks pass without local unsafe or verification-only
+    implementation.
+- id: FR-384-AC-5
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Genuine CG TC-027 healthy, TC-027 bound mutant, TC-025 arithmetic mutant,
+    IR-917 clause implication and IR-948 V2 contract profiles execute the reviewed
+    production admitted API over their original inputs, domains and assertions. Healthy
+    cases verify with their final completion covers at 16 GiB; each required substantive
+    mutant falsifies with original-domain native playback. The IR-948 impossible-precondition
+    control must complete as CoverUnsatisfied at the same ceiling, not resource exhaustion
+    or a vacuous Verified. Unwind3, Cadical and existing 600-second ceilings remain
+    unchanged where speci
+- id: AD-003:paragraph-3
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: The additive admitted native API decision below supersedes the earlier
+    prohibition on a public narrowed API only for the explicitly selected new facility.
+    The general Integer representation, arbitrary-precision continuation and borrowed
+    as_big obligations above remain in force. Existing retrospective experiment descriptions
+    do not establish current proof qualification.
+- id: AD-003:paragraph-12
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: Every newly constructed inline value starts with an empty cache; observing
+    a retained value does not reset its cache. This table specifies the listed construction
+    and normalization boundaries; it does not redesign the other public integer operations.
+    Their existing exact mathematical behavior, refusal behavior, and admitted signatures
+    remain required.
+- id: AD-003:paragraph-22
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: '### Admitted native execution view (IR-705 option 2)'
+- id: AD-003:paragraph-23
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: Peter authorized the additive kernel-owned bounded-native API. Its controlling
+    requirement is [FR-384](../functional/FR-384-admitted-native-integer-refinement.md).
+    The separate carrier has native payload storage and no BigInt or borrowed-image
+    cache. Kernel admission checks conservative whole-operation domains and every
+    reachable intermediate before exposing an execution capability. A result-domain
+    restriction never stands in for a storage-capacity proof. Generated clients use
+    this same production API in native and proof builds.
+- id: AD-003:paragraph-24
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: The native mathematical abstraction and each admitted arithmetic transition
+    must refine arbitrary-precision Integer/BigInt over every accepted operand. Composition
+    preserves the abstraction through an entire expression, including comparisons,
+    Boolean decisions and error propagation. Public production Meter accounting remains
+    real and ordered. This is an explicit additive capability with an admission contract,
+    rather than an optimization that relies on CBMC discovering unreachable branches
+    of general Integer.
+- id: AD-003:paragraph-25
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: 'The general Integer API remains the fallback for consumers whose domains
+    cannot be admitted. The bounded route has no successful implicit promotion to
+    BigInt: the certificate prevents capacity overflow for admitted inputs. A malformed
+    or insufficient certificate is refused before successful native execution; a caller
+    cannot mask it by adding an assumption, shrinking input domains or classifying
+    an inconclusive proof as verified.'
+- id: AD-003:paragraph-27
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: '| Decision | Choice | Alternatives and trade-off |
+
+    |---|---|---|
+
+    | Additive admitted native API | Select a separately admitted kernel-owned native
+    carrier and operation capability under FR-384, leaving general Integer unchanged.
+    | Further private storage/charge tuning preserves fewer APIs but has not produced
+    a healthy 16 GiB verdict. Copying an evaluator into CG loses the single kernel
+    ownership and is rejected. A narrowed capability requires explicit admission and
+    full-capacity refinement evidence. |
+
+    | Integer value representation | Three private variants Small64, Small128 and
+    Large, with on'
+- id: AD-003:paragraph-37
+  path: spec/assurance/AD-003-bounded-integer-representation.md
+  role: examined
+  excerpt: '### Option-2 qualification boundary'
+- id: FR-371:paragraph-35
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: '| ID | Criteria | Verification |
+
+    | --- | --- | --- |
+
+    | FR-371-AC-1 | Primitive construction, canonical parsing, from_big and Add/Subtract/Multiply/Negate
+    preserve the exact value for fixed boundaries and reproducibly sampled inputs.
+    Fixed cases include i128 MIN/MAX, -1, 0, 1, i64 MIN squared, MAX+1, MIN-1, negated
+    MIN and large cancellation into the native range. MIN has magnitude bit length
+    128; its negation is positive 2^127 through genuine arbitrary-precision continuation.
+    Compare fitting operations with independent checked i128 arithmetic; compare non-fitting
+    results with independently aut'
+- id: FR-371:paragraph-40
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: '## Additive admitted execution boundary'
+- id: FR-371:paragraph-41
+  path: spec/functional/FR-371-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: '[FR-384](./FR-384-admitted-native-integer-refinement.md) adds a distinct
+    explicitly admitted production API; it does not weaken this requirement on general
+    Integer or borrowed as_big. For AC-6, adoption of that reviewed API may change
+    generated source and authoritative kernel call expressions, recorded as changed
+    artifacts, while retaining the original semantic input/domain bounds, selected
+    claim, independent oracle, assertions, completion cover, ceilings and substantive
+    mutation controls. Source-byte identity with the superseded general-only route
+    is not an acceptance condition. Healthy verif'
+- id: FR-384:statement-2
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Where a caller selects the additive admitted native integer API, the kernel
+    SHALL evaluate only certified finite integer operations and preserve the mathematical
+    result, real Meter accounting and refusal semantics of its arbitrary-precision
+    API.
+- id: FR-384:statement-6
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: The kernel SHALL own construction of the admitted execution capability
+    and native value carrier. The native carrier SHALL be Copy and contain an i128
+    payload, with no general Integer, BigInt or lazy cache. Its mathematical interpretation
+    is the exact signed i128 payload. A caller cannot construct an unchecked capability,
+    widen its certified domain, or relabel another operation's certificate through
+    public fields.
+- id: FR-384:statement-7
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Before execution, the kernel SHALL check the requested finite operand domains
+    and each operation's entire mathematical result interval against its native capacity.
+    Admission SHALL include every reachable intermediate, rather than only the expression's
+    final result domain. Add, Subtract, Multiply and Negate use exact conservative
+    interval transfer; Multiply includes all four endpoint products. An input domain
+    is distinct from an optional result-domain restriction. Admission SHALL NOT narrow
+    the requested input population, invent a result-domain restriction or add a harness
+    assumption.
+- id: FR-384:statement-8
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: The kernel SHALL derive one checked operation plan from the requested operand
+    intervals, operation and optional semantic result domain. Add/Subtract compute
+    endpoint sums/differences, Multiply computes the minimum/maximum of all four endpoint
+    products, and Negate reverses/negates endpoints with checked i128 arithmetic.
+    When a calculation cannot be represented, admission SHALL refuse rather than narrow.
+    For each evaluation, the plan SHALL check operand membership and return an opaque
+    Copy admitted operation that retains the checked plan association. Only that admitted
+    operation is accepted by t
+- id: FR-384:statement-9
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: A capacity failure SHALL return a typed admission refusal identifying the
+    offending operation or domain. It SHALL NOT become an arithmetic domain refusal,
+    a Meter denial, a successful truncated result, or a proof result. When bounded
+    admission is unavailable, an existing general exact route remains available subject
+    to the caller's existing capability policy; callers cannot report that route verified
+    merely because admission failed.
+- id: FR-384:statement-11
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: 'The public contract SHALL expose these distinct roles (concrete enum variant
+    names may follow repository conventions):'
+- id: FR-384:statement-13
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: The native interval constructors, checked plan constructor and per-call
+    operand admission SHALL use only bounded native arithmetic and storage on their
+    successful paths. A general Integer/BigInt interval conversion is an explicit
+    ingress operation outside that execution path; moving the general representation
+    or cache into plan construction does not meet this contract. Emitted clients may
+    reconstruct plans from native constant endpoints through the same checked production
+    constructor, rather than an unchecked public certificate constructor.
+- id: FR-384:statement-16
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: For an admitted operation and values within its certified input domains,
+    the kernel SHALL produce the same mathematical completed value as the general
+    exact operation. Native overflow SHALL never wrap or saturate. A runtime breach
+    of a certified carrier/domain invariant SHALL be a typed failure, without a fabricated
+    completed value or BigInt approximation.
+- id: FR-384:statement-17
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: For a valid admitted operation, native evaluation SHALL return the ordinary
+    Outcome with the native carrier as its completed payload. A semantic result-domain
+    refusal SHALL retain the existing typed IntegerOutOfDomain target payload and
+    occur after the arithmetic charge and before result-retain, even though that refusal
+    may allocate an ordinary target representation.
+- id: FR-384:statement-18
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: The admitted API SHALL use the public production `Meter`, its actual counters,
+    cancellation checks and charge mechanism. It SHALL preserve the operands, arithmetic
+    and result-retain sequence and exact amounts of [FR-362](./FR-362-exact-scalar-arithmetic-and-atom-charges.md),
+    including cumulative work/results, semantic-size maxima, cancellation and injected-denial
+    precedence. A declared result domain excluding the exact result SHALL return the
+    same domain refusal after the same admitted prefix. The carrier's representation
+    capacity is not that declared domain. Admission work is a separate ingre
+- id: FR-384:statement-19
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Chained admitted operations SHALL retain the native carrier without conversion
+    through `Integer`, BigInt, a lazy cache or a general representation discriminator
+    on the successful evaluation path. Explicit ingress/egress conversion at the caller
+    boundary is permitted and SHALL preserve value. The carrier SHALL NOT expose an
+    `as_big` borrow requiring hidden retained allocation. The existing `Integer::as_big`
+    signature and borrow lifetime remain unchanged.
+- id: FR-384:statement-20
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: Boolean and comparison consumers SHALL use kernel-owned operations over
+    the admitted native values, with the same comparison/Boolean charge and refusal
+    contracts as their general counterparts. A generator cannot copy arithmetic, Meter
+    logic or comparison semantics into a private evaluator. A separately authored
+    native expectation used only as a test oracle is not a production evaluator.
+- id: FR-384:statement-22
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: The implementation SHALL establish a compositional refinement from every
+    admitted carrier and operation to the general mathematical Integer/BigInt semantics.
+    The proof obligation quantifies over the complete accepted native capacity and
+    certified operand domains; fixed examples, the small IR-917 fixture range, or
+    a narrower test-only constructor cannot supply that obligation. Meter refinement
+    SHALL cover all counters, each refusal point and complete observable incomplete
+    records, including cumulative execution on the same actual Meter.
+- id: FR-384:statement-23
+  path: spec/functional/FR-384-admitted-native-integer-refinement.md
+  role: examined
+  excerpt: The implementation SHALL retain default/test-support and no_std plus alloc
+    compatibility and the local unsafe prohibition. It SHALL introduce no cfg(kani)
+    replacement arithmetic, assumed arithmetic identity, copied kernel, skipped healthy
+    proof, or success classification for unknown/resource-exhausted evidence.
+- id: TC-919:paragraph-4
+  path: spec/test-cases/TC-919-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: 1. For AC-1, construct each fixed boundary through primitive, canonical
+    decimal and from_big routes where available. Calculate fitting Add/Subtract/Multiply/Negate
+    results through independent checked i128 arithmetic and non-fitting results from
+    independent decimal literals. Include i64 MIN/MAX pairs for all four operations,
+    mixed signs, zero and cancellation, plus inputs immediately outside i64 on both
+    sides that still fit i128. Exercise every inline storage pair and the direct Small64
+    arithmetic boundaries; retain numeric-guard and failed-guard full-i128/genuine
+    BigInt continuation checks for
+- id: TC-919:paragraph-12
+  path: spec/test-cases/TC-919-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: '## Admitted native API extension'
+- id: TC-919:paragraph-13
+  path: spec/test-cases/TC-919-bounded-integer-representation-refinement.md
+  role: examined
+  excerpt: For [FR-384](../functional/FR-384-admitted-native-integer-refinement.md),
+    separately test certificate admission, complete native-capacity operation refinement
+    and chained real-Meter behavior before consumer qualification. Use independently
+    calculated BigInt interval endpoints and results, exact/one-less limits, cancellation
+    and injected denials. Deliberately weaken a capacity check and deliberately change
+    an arithmetic operator; each control must fail the relevant independent obligation.
+    Record the accepted domain of every symbolic refinement obligation and identify
+    any residual gap rather tha
+findings: []
+bindings: []
+```
+
++++

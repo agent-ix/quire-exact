@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Enforce the native wrapper's ceiling before it can start Cargo.
+# DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done.
 set -euo pipefail
+echo "SKIPPED: DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done" >&2
+exit 2
+# Archived gate implementation below is unreachable while the proof is disabled.
 cgroup="/sys/fs/cgroup$(awk -F: '$1 == "0" {print $3}' /proc/self/cgroup)"
 [[ "$(cat "$cgroup/memory.max")" == 17179869184 ]]
 [[ "$(cat "$cgroup/memory.swap.max")" == 0 ]]

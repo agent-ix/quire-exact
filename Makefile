@@ -14,7 +14,7 @@ help:
 	@echo "  make fmt-check        - Verify formatting (CI gate)"
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
-	@echo "  make kani-meter-gate  - Standalone Meter proof + production ALL-loop control"
+	@echo "  make kani-meter-gate  - Disabled Meter proof; prints Peter's warning"
 	@echo "  make build-no-std     - Build for $(NO_STD_TARGET)"
 	@echo "  make build            - Release build"
 	@echo "  make clean            - cargo clean"
@@ -88,7 +88,8 @@ docs:
 .PHONY: ci
 ci: fmt-check lint test build-no-std deny docs
 
-# Explicit proof lane; intentionally separate from make ci.
+# Disabled proof lane; intentionally separate from make ci.
 .PHONY: kani-meter-gate
 kani-meter-gate:
-	systemd-run --user --scope -p MemoryMax=16G -p MemorySwapMax=0 bash scripts/meter_kani_scope.sh "$(CARGO)"
+	@echo "SKIPPED: DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done" >&2
+	@exit 2

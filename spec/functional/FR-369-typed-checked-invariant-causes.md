@@ -16,7 +16,7 @@ The shared cause carrier and kernel producers are owned here. The producer contr
 
 ## Description
 
-When the exact kernel, the checked-expression residue in `quire-contract-runtime`, the shared `quire-semantic-value` leaf, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish each condition in the tables below, including a re-entrant meter borrow, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results. Runtime-managed calls use explicit frames and `work_units` execution fuel under RT FR-273; exhausted fuel returns `Incomplete` with `limit_kind: work_units`, and no call-depth ceiling or `CallDepthExceeded` checked-invariant cause decides an outcome.
+When the exact kernel, the checked-expression residue in `quire-contract-runtime`, the shared `quire-semantic-value` leaf, or a generated CG oracle detects a checked-program invariant failure, the shared `quire-exact::Refusal` SHALL carry the failure's closed, typed cause. A caller SHALL distinguish each condition in the tables below, including a re-entrant meter borrow and a nested entry into an already-active checked package, by matching that cause without inspecting a message or guessing from a location. These failures remain internal faults, not catalog refusals or proof results. Runtime-managed calls use explicit frames and `work_units` execution fuel under RT FR-273; exhausted fuel returns `Incomplete` with `limit_kind: work_units`, and no call-depth ceiling or `CallDepthExceeded` checked-invariant cause decides an outcome.
 
 ## Inputs
 
@@ -30,10 +30,11 @@ When the exact kernel, the checked-expression residue in `quire-contract-runtime
 
 ## Behavior
 
-The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-six variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's RT type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
+The public `CheckedInvariantCause` SHALL be a closed enum of the thirty-two variants in the two tables. `ScheduledComparisonRefused`, `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and `GeneratedEqualityCheckRejected` each SHALL carry `{ cause: IllTypedCause }`; the other twenty-eight variants are unit variants. The existing typed refusal returned by a scheduled comparator, an equality quantity conversion, or CG's semantic-value type/equality check SHALL be retained in that payload without string conversion. `IllTypedCause` is already owned and exported by `quire-exact::comparison`, which RT origin/main imports from the kernel; no kernel-to-RT or kernel-to-QSV dependency or duplicate type is introduced. The enum SHALL support `Copy`, `Clone`, `Debug`, `Eq`, `Hash` and `PartialEq` so a caller can compare and retain a cause without retaining a value or allocating a message. The existing `Refusal` remains `Clone`, `Debug`, `Eq` and `PartialEq`.
 
 | Cause | Trigger and owning source on the measured main revisions |
 |---|---|
+| `NativeIntegerCapacityBreach` | An admitted native integer operation exceeds its certified capacity: kernel `src/native_integer.rs`, `native_arithmetic`. |
 | `CollectionElementNotAdmitted` | An evaluated element is outside its declared collection element type: kernel `src/collection.rs:285-286`; RT `src/exact/collection.rs:136-137`. |
 | `DeferredResultNotAdmitted` | A deferred composite field/result is outside its declared value type: kernel `src/value.rs:1059-1064`; RT `src/exact/composite.rs:1507-1512`; QSV `src/declaration.rs:2141-2146`. |
 | `CanonicalKeyUnavailable` | Collection ordering cannot obtain the canonical key of a member (a pair `compare_keys` has no key for; two composites of different declarations have one, [FR-377](./FR-377-composite-canonical-key-across-declarations.md)): kernel `sort_by_key` in `src/collection.rs`; RT `src/exact/collection.rs:301-310`. |
@@ -44,6 +45,7 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants
 | `UnknownCheckedFunction` | RT `run_call` or `Frame::call` finds no named function after checking: `src/exact/expression.rs:802,922`. |
 | `ForeignCheckedExpression` | RT `plan_evaluation` finds an expression checked against another package: `src/exact/expression.rs:829-834`. |
 | `MeterBorrowConflict` | RT `Frame::call` or `Frame::meter` cannot acquire its shared mutable meter borrow: `src/exact/expression.rs:925-934,956-960`. |
+| `PackageReentry` | PLANNED on the measured RT main; RT #161 adds the producer in `CheckedPackage::begin` for `CheckedPackage::call` or `CheckedPackage::evaluate` entering an already-active package from a host body before a nested charge. This is distinct from a shared meter borrow and a generated outcome adapter mismatch. |
 | `EqualityScheduleMismatch` | RT or QSV's checked text/enum/quantity schedule receives values of another shape: RT `src/exact/equality.rs:167-185`; QSV `src/declaration.rs:2412-2416`. |
 | `ScheduledComparisonRefused { cause }` | RT or QSV's selected text/enum/quantity comparator returns `IllTyped { cause }` after a successful checked schedule: RT `src/exact/equality.rs:167-192`; QSV `src/declaration.rs:2418`; the kernel-owned `IllTypedCause` is retained. |
 | `EqualityOperandSourceNotAdmitted` | A completed equality operand fails its checked source type's admission: RT `src/exact/equality.rs:432-433`; QSV `src/declaration.rs:2532-2537`. |
@@ -56,31 +58,39 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the thirty variants
 | `EqualityEnumVariantUnresolved` | QSV cannot resolve a checked enum operand's variant in the comparison's captured declaration: `src/declaration.rs:2393-2398`. |
 | `ExpectedIntegerPlacement` | A scale-zero integer quantity placement yields a retained value that is not an integer: RT `src/exact/quantity.rs:541-546`; QSV `src/quantity.rs:795-800`. |
 
-The following distinct causes cover CG's oracle constructors (generated source
-and the pre-check declaration placeholder) on
-quire-contract-codegen main `1b225f4cf25450ee662fa97c91286b2a76f64ff8`.
-They name shared checked-oracle failures, not CG package or model types.
+The following distinct causes specify CG's generated-oracle assignments
+(generated source and the pre-check declaration placeholder). Seven rows have
+current typed checked-invariant constructor sites in CG source, identified
+below by source path and rendering function. The two other rows have no
+reachable current trigger site, as their rows explain. Completion and
+verification of all nine assignments under CG FR-042-AC-1 and TC-057 remain
+PLANNED in IR-709, including the two absent assignments. These causes name
+shared checked-oracle failures, not CG package or model types.
 
-| Cause | Trigger and owning CG source |
+| Cause | Trigger, target assignment and CG source status |
 |---|---|
-| `GeneratedBodyPlaceholderInvoked` | A function declaration's pre-check placeholder body runs, which should be replaced before execution: `src/oracle/function/mod.rs:1045`. |
-| `GeneratedArgumentShapeMismatch` | A generated scalar or equality function body receives the wrong number or shape of arguments: `src/oracle/function/mod.rs:1531,1551`. |
-| `GeneratedOperandKindUnsupported` | A generated equality body receives a left operand outside its classified Boolean/Integer kinds: `src/oracle/function/mod.rs:1555`. |
-| `GeneratedUnexpectedOutcome` | A generated Boolean, scalar or equality body's expected outcome adapter sees another outcome arm: `src/oracle/boolean_v1.rs:846`, `src/oracle/function/mod.rs:1539,1571`. |
-| `GeneratedIntervalInvalid` | A generated native integer bound cannot form a nonempty interval: `src/oracle/boolean_v1.rs:855`. |
-| `GeneratedEnvironmentRejected` | A generated Boolean/equality body cannot form its RT type environment: `src/oracle/boolean_v1.rs:872`, `src/oracle/function/mod.rs:1559`. |
-| `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails RT's `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs:1535,1546`. |
-| `GeneratedEqualityCheckRejected { cause }` | A generated Boolean/equality body or oracle fails RT's `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/boolean_v1.rs:880`, `src/oracle/equality/mod.rs:1555`, `src/oracle/function/mod.rs:1563`. |
-| `GeneratedDescriptorReconstructionFailed` | A generated equality oracle cannot reconstruct one of its authored source/target types: `src/oracle/equality/mod.rs:1527,1530,1538,1541`. |
+| `GeneratedBodyPlaceholderInvoked` | A function declaration's pre-check placeholder body runs, which should be replaced before execution: `src/oracle/function/mod.rs`, `declared_functions` placeholder body. |
+| `GeneratedArgumentShapeMismatch` | A generated scalar or equality function body receives the wrong number or shape of arguments: `src/oracle/function/mod.rs`, `render_body` scalar/equality arms. |
+| `GeneratedOperandKindUnsupported` | A generated equality body receives a left operand outside its classified Boolean/Integer kinds: `src/oracle/function/mod.rs`, `render_body` equality arm. |
+| `GeneratedUnexpectedOutcome` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_CARRY_HELPER` and scalar/equality `render_body` adapters exhaustively match RT `Outcome`'s four arms (`Completed`, `Undefined`, `Refused`, `Incomplete`); there is no unexpected-outcome arm or reachable trigger today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedIntervalInvalid` | A generated native integer bound cannot form a nonempty interval: `src/oracle/boolean_v1.rs`, `NATIVE_BOUND_HELPER`. |
+| `GeneratedEnvironmentRejected` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_EQUALITY_HELPER` calls planned kernel equality without constructing a type environment; the function `render_body` equality arm uses infallible `sv::TypeEnvironment::default()`. The equality oracle's fallible environment construction returns `EnvironmentError::Declaration` instead (`src/oracle/equality/mod.rs`, `environment_{symbol}`); none is a checked-invariant producer for this cause today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails shared semantic-value `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}` type checks. |
+| `GeneratedEqualityCheckRejected { cause }` | A generated equality body or oracle fails shared semantic-value `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}`; `src/oracle/function/mod.rs`, `render_body` equality arm. The Boolean `NATIVE_EQUALITY_HELPER` uses planned kernel equality and carries its stop unchanged. |
+| `GeneratedDescriptorReconstructionFailed` | A generated equality oracle receives a prepared descriptor with the wrong binding, expected package identity or context requirement, or an admitted context with the wrong package identity: `src/oracle/equality/mod.rs`, `oracle_{symbol}` prepared-environment check. Descriptor reconstruction errors while preparing that environment retain their separate typed `EnvironmentError` path. |
 
-The two tables classify the retained production constructors for the target
-contract, measured on quire-exact main
+The two tables assign the retained causes for the target contract. The
+original producer inventory was measured on quire-exact main
 `497c581c9dd14eb70083488209827dd8a5b3e03a`,
 quire-contract-runtime main `4180f0ea135767637b10a981393c5aef22220ace`,
-quire-semantic-value `e0ada80708fe73469923a9d6c2263cfebc0087a0`,
-and the CG revision above. The measured RT revision still has depth-stop
-producers; RT FR-273 retires them with explicit frames and `work_units` fuel
-before the closed thirty-cause API is implemented. QSV's
+and quire-semantic-value `e0ada80708fe73469923a9d6c2263cfebc0087a0`.
+The `NativeIntegerCapacityBreach` row records the later kernel producer added
+by IR-705 in `src/native_integer.rs`. The two CG rows without reachable
+current triggers remain required target assignments. FR-042-AC-1 and TC-057
+cannot be credited as complete until
+their producer controls pass. The measured RT revision still has depth-stop
+producers; RT FR-273 must retire them with explicit frames and `work_units`
+fuel before RT pins the kernel's closed thirty-two-cause API. QSV's
 `src/declaration.rs:2146` uses
 `DeferredResultNotAdmitted`. At each call site of its shared `invariant()`
 helper at line 2422, QSV SHALL select the corresponding typed cause: enum
@@ -150,7 +160,7 @@ states this narrow boundary.
 
 | ID | Criteria | Verification |
 |---|---|---|
-| FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
+| FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty-two table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
 | FR-369-AC-2 | Every kernel producer in collection, value, division and equality returns exactly its table cause; two population values return `PopulationPair`, a population paired with another kind returns `ValueKindMismatch`, and unlike collection kinds return `CollectionKindMismatch`. Two composites of different declarations return `false` and a composite paired with a non-composite returns `ValueKindMismatch` (FR-376-AC-1, FR-376-AC-6). | Test |
 | FR-369-AC-5 | For every typed checked-invariant cause, `Refusal::code()` and `Refusal::cause()` return `None`, and `Eq` distinguishes otherwise equal refusals whose causes differ. Ordinary kernel refusal codes and causes are unchanged. | Test |
 | FR-369-AC-6 | Every received typed cause follows QSL's existing internal-fault path: no refusal record or `Evaluation`, `runtime_invariant`/`S6a`/`checked-program-invariant` at S6a, `CallFailure::Fault` at the public call, and `Failed` with unavailable basis for an internal replay fault. It never becomes an ordinary replay refusal, `Inconclusive`, `Incomplete(Cancelled)`, a proved result or a certification rejection; an unknown received cause retains fault provenance. | Inspection |
@@ -158,16 +168,14 @@ states this narrow boundary.
 
 ## Status
 
-Target contract planned. The current `src/outcome.rs` still exports
-`CallDepthExceeded`, and `tests/checked_invariant.rs` still enumerates it;
-this amendment does not remove that Rust variant or change any producer or
-test. The kernel carrier and kernel producer tests exist; IR-708's RT typed
-producer migration is in progress. The enum removal and
-tagged test changes must wait for the IR-497 coordinated code cutover with
-RT's IR-512 explicit-frame/work-fuel behavior. IR-712 owns QSV producers,
-IR-709 owns CG producers and consumers, and QSL's direct constructor
-migration is required before it pins the new kernel API. No target runtime
-behavior is claimed by this spec-only change.
+The kernel carrier and kernel producer tests exist. `src/outcome.rs` exports
+the target thirty-two-cause enum without `CallDepthExceeded`, and the tagged
+`tests/checked_invariant.rs` controls cover the target shape. The RT FR-273
+explicit-frame/work-fuel cutover must remove its depth-stop producers before
+it pins this kernel API. IR-712 owns QSV producers, IR-709 owns CG producers
+and consumers, and QSL's direct constructor migration is required before it
+pins this API. This carrier change alone does not establish the downstream
+producer and mapping criteria.
 
 ## Dependencies
 
@@ -185,5 +193,7 @@ behavior is claimed by this spec-only change.
   CG FR-018/FR-021 must migrate generated constructors and replay consumers;
   QSpec/QSL FR-096/FR-100 must migrate unit matches. QSL's two production
   constructor sites additionally need a QSL-owned typed-cause/family-fault
-  ruling *before* the QSL lock pins the kernel API. These are downstream
-  code/spec changes, not code claims of this spec-only slice.
+  ruling *before* the QSL lock pins the kernel API. The QSL test-support
+  fixture in `qsl-semantics/src/check/family.rs` must also stop constructing
+  `CallDepthExceeded` before its kernel pin advances. These are downstream
+  code/spec changes outside this kernel carrier slice.

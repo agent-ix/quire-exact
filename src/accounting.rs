@@ -19,8 +19,19 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::num::NonZeroU64;
 
-#[cfg(kani)]
+// DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done.
+// Keep the proof source, but exclude its module even when Kani selects a harness directly.
+#[cfg(all(kani, any()))]
 mod kani_proofs;
+mod units;
+#[cfg(kani)]
+mod units_proofs;
+#[cfg(any(test, kani))]
+mod units_reference;
+#[cfg(test)]
+mod units_tests;
+
+pub(crate) use units::UnitsCharge;
 
 #[cfg(feature = "test-support")]
 const CHARGE_LOG_CAPACITY: usize = 4096;
@@ -299,11 +310,15 @@ pub enum ChargePoint {
     ModelNavigate,
     /// `temporal.visit`: one caller-owned temporal operator visit.
     TemporalVisit,
+    /// `frame.write`: one caller-owned operation-frame field write.
+    FrameWrite,
+    /// `frame.redefines-link`: one caller-owned `redefines` link traversal.
+    FrameRedefinesLink,
 }
 
 impl ChargePoint {
     /// Every named point, grouped by family in normative order.
-    pub const ALL: [Self; 63] = [
+    pub const ALL: [Self; 65] = [
         Self::DecimalOperands,
         Self::DecimalScaleExpansion,
         Self::DecimalArithmetic,
@@ -367,6 +382,8 @@ impl ChargePoint {
         Self::ModelDeref,
         Self::ModelNavigate,
         Self::TemporalVisit,
+        Self::FrameWrite,
+        Self::FrameRedefinesLink,
     ];
 
     /// Normative identifier.
@@ -435,6 +452,8 @@ impl ChargePoint {
             Self::ModelDeref => "model.deref",
             Self::ModelNavigate => "model.navigate",
             Self::TemporalVisit => "temporal.visit",
+            Self::FrameWrite => "frame.write",
+            Self::FrameRedefinesLink => "frame.redefines-link",
         }
     }
 
@@ -593,30 +612,6 @@ impl fmt::Debug for Charge {
     }
 }
 
-// Admission is shared, but its common instantiation receives only u64 values.
-trait MeterAmount: Copy {
-    fn units(self) -> Option<u64>;
-    fn integer(self) -> Integer;
-}
-
-impl MeterAmount for u64 {
-    fn units(self) -> Option<u64> {
-        Some(self)
-    }
-    fn integer(self) -> Integer {
-        Integer::from(self)
-    }
-}
-
-impl MeterAmount for &ChargeAmount {
-    fn units(self) -> Option<u64> {
-        ChargeAmount::units(self)
-    }
-    fn integer(self) -> Integer {
-        ChargeAmount::integer(self)
-    }
-}
-
 /// Amounts admissible under a `u64` limit stay in machine width. An exact
 /// amount outside that domain is retained out of line only for refusal.
 #[derive(Clone, Eq, PartialEq)]
@@ -674,7 +669,7 @@ impl InlineSizes {
         }
     }
 
-    fn iter(&self) -> impl Iterator<Item = &(LimitKind, ChargeAmount)> + Clone {
+    fn iter(&self) -> impl Iterator<Item = &(LimitKind, ChargeAmount)> {
         self.first
             .iter()
             .chain(self.second.iter())
@@ -1005,20 +1000,9 @@ impl Meter {
     /// already consumed, so `limit = consumed = w`: a cancelled handle,
     /// which the operation holding it reports as its
     /// cancellation, and the qualification seam's one exact named charge.
-    fn check_injected<A: MeterAmount>(
-        &mut self,
-        point: ChargePoint,
-        work_units: A,
-    ) -> Result<(), Incomplete> {
+    fn injected_denial(&mut self, point: ChargePoint) -> Option<u64> {
         if self.cancel.as_ref().is_some_and(Cancel::poll) {
-            let consumed = self.consumed(LimitKind::WorkUnits);
-            return Err(Incomplete {
-                limit_kind: LimitKind::WorkUnits,
-                limit: consumed,
-                consumed,
-                next_charge: work_units.integer(),
-                charge_point: point,
-            });
+            return Some(self.consumed(LimitKind::WorkUnits));
         }
         match self.counters.denial {
             Some(denial)
@@ -1026,17 +1010,28 @@ impl Meter {
                     && self.counters.denied_point_admissions.checked_add(1)
                         == Some(denial.occurrence.get()) =>
             {
-                let consumed = self.consumed(LimitKind::WorkUnits);
                 self.counters.denial = None;
-                Err(Incomplete {
-                    limit_kind: LimitKind::WorkUnits,
-                    limit: consumed,
-                    consumed,
-                    next_charge: work_units.integer(),
-                    charge_point: point,
-                })
+                Some(self.consumed(LimitKind::WorkUnits))
             }
-            _ => Ok(()),
+            _ => None,
+        }
+    }
+
+    fn check_injected(
+        &mut self,
+        point: ChargePoint,
+        work_units: &ChargeAmount,
+    ) -> Result<(), Incomplete> {
+        if let Some(consumed) = self.injected_denial(point) {
+            Err(Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: consumed,
+                consumed,
+                next_charge: work_units.integer(),
+                charge_point: point,
+            })
+        } else {
+            Ok(())
         }
     }
 
@@ -1047,38 +1042,24 @@ impl Meter {
     /// parameter through this method, its one real
     /// cross-crate caller for that purpose.
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
-        match charge.storage {
-            ChargeStorage::Common(common) => self.charge_fields(
-                charge.point,
-                common.sizes,
-                common.work_units,
-                common.result_units,
-            ),
-            ChargeStorage::General(general) => self.charge_fields(
-                charge.point,
-                general.sizes.iter().map(|(kind, amount)| (*kind, amount)),
-                &general.work_units,
-                &general.result_units,
-            ),
+        match UnitsCharge::from_charge(&charge) {
+            Some(units) => self.charge_units(units),
+            None => self.charge_general(charge),
         }
     }
 
-    fn charge_fields<A: MeterAmount>(
-        &mut self,
-        point: ChargePoint,
-        requests: impl Iterator<Item = (LimitKind, A)> + Clone,
-        work_units: A,
-        result_units: A,
-    ) -> Result<(), Incomplete> {
-        self.check_injected(point, work_units)?;
+    fn charge_general(&mut self, charge: Charge) -> Result<(), Incomplete> {
+        let point = charge.point;
+        let general = charge.into_general();
+        self.check_injected(point, &general.work_units)?;
         // Keep validation and per-admission maxima local until every counter
         // is known to fit. An earlier field wins even when requested later;
         // an equal field keeps its first failing request.
         let mut sizes = [None; LimitKind::COUNT];
-        let mut first_fail: Option<(LimitKind, A)> = None;
+        let mut first_fail: Option<(LimitKind, &ChargeAmount)> = None;
         #[cfg(feature = "test-support")]
         let mut record = AdmittedCharge::new(point);
-        for (kind, amount) in requests {
+        for (kind, amount) in general.sizes.iter() {
             let valid = amount
                 .units()
                 .filter(|amount| *amount <= kind.limit(&self.counters.limits));
@@ -1086,26 +1067,45 @@ impl Meter {
                 let slot = &mut sizes[kind.index()];
                 *slot = Some(slot.map_or(amount, |previous: u64| previous.max(amount)));
                 #[cfg(feature = "test-support")]
-                record.observe(kind, amount);
+                record.observe(*kind, amount);
             } else if first_fail
                 .as_ref()
                 .is_none_or(|(first_kind, _)| kind.index() < first_kind.index())
             {
-                first_fail = Some((kind, amount));
+                first_fail = Some((*kind, amount));
             }
         }
         if let Some((kind, amount)) = first_fail {
             return Err(self.incomplete(kind, amount.integer(), point));
         }
-        let cumulative = |kind: LimitKind, amount: A| {
+        let cumulative = |kind: LimitKind, amount: &ChargeAmount| {
             amount
                 .units()
                 .and_then(|addition| self.consumed(kind).checked_add(addition))
                 .filter(|total| *total <= kind.limit(&self.counters.limits))
                 .ok_or_else(|| self.incomplete(kind, amount.integer(), point))
         };
-        let work = cumulative(LimitKind::WorkUnits, work_units)?;
-        let results = cumulative(LimitKind::ResultUnits, result_units)?;
+        let work = cumulative(LimitKind::WorkUnits, &general.work_units)?;
+        let results = cumulative(LimitKind::ResultUnits, &general.result_units)?;
+        self.commit_charge(
+            point,
+            sizes,
+            work,
+            results,
+            #[cfg(feature = "test-support")]
+            record,
+        );
+        Ok(())
+    }
+
+    fn commit_charge(
+        &mut self,
+        point: ChargePoint,
+        sizes: [Option<u64>; LimitKind::COUNT],
+        work: u64,
+        results: u64,
+        #[cfg(feature = "test-support")] record: AdmittedCharge,
+    ) {
         // Straight-line writes have no trip count independent of requests. A
         // size request naming a cumulative counter is validated above and
         // then superseded by that counter's own total below.
@@ -1148,7 +1148,6 @@ impl Meter {
             #[cfg(feature = "test-support")]
             record,
         );
-        Ok(())
     }
 
     fn observe_size(&mut self, kind: LimitKind, amount: Option<u64>) {
@@ -1224,8 +1223,6 @@ impl Meter {
 
 #[cfg(test)]
 mod tests {
-    use ix_trace_rs::trace;
-
     use super::*;
 
     fn assert_unchanged(before: &Meter, after: &Meter) {
@@ -1400,7 +1397,7 @@ mod tests {
         assert_eq!(meter.consumed(LimitKind::WorkUnits), 2);
     }
 
-    #[trace("FR-359-AC-8")]
+    #[ix_trace_rs::trace("FR-359-AC-8")]
     #[test]
     fn charge_size_requests_keep_two_inline_and_overflow_in_order() {
         fn require_copy<T: Copy>() {}
@@ -1445,7 +1442,7 @@ mod tests {
         );
     }
 
-    #[trace("FR-359-AC-8")]
+    #[ix_trace_rs::trace("FR-359-AC-8")]
     #[test]
     fn common_cursor_keeps_request_order_and_clones_the_remaining_prefix() {
         for second in [None, Some((LimitKind::IntegerBits, 0))] {
@@ -1465,7 +1462,7 @@ mod tests {
         assert_eq!(empty.next(), None);
     }
 
-    #[trace("FR-359-AC-8")]
+    #[ix_trace_rs::trace("FR-359-AC-8")]
     #[test]
     fn common_and_promoted_builder_histories_have_identical_observations() {
         let point = ChargePoint::FunctionCall;

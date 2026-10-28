@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run TC-931's healthy Meter proof and production ALL-loop control.
+"""Disabled TC-931 Meter proof and production ALL-loop control runner.
 
-Only the Python standard library is used. Each proof gets its own systemd scope,
-Git worktree and target directory; the checked-out crate is never mutated.
+The entry point fails before any proof setup. The preserved implementation below
+must be reviewed and requalified after the disable is lifted.
 """
 
 import argparse
@@ -26,6 +26,10 @@ COMMAND = [
     "--solver", "cadical", "--output-format", "regular", "--jobs", "1",
 ]
 CRATE_FILES = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml")
+MUTANT_FILE = "src/accounting/units.rs"
+MUTANT_FUNCTION = "accounting::units::<impl accounting::Meter>::charge_units"
+MUTANT_LOOP = 0
+
 
 
 class GateError(Exception):
@@ -57,16 +61,17 @@ def require_clean(root):
     return git(root, "rev-parse", "HEAD")
 
 
-def reject_unrelated_heavy_processes():
-    """The native test and its Cargo ancestors belong to this same gate job."""
+def unrelated_proof_processes():
+    """Find competing proof engines; ordinary builds and native tests may overlap."""
     ancestors = set()
     current = os.getpid()
     while current > 0:
         ancestors.add(current)
         status = Path(f"/proc/{current}/status").read_text()
         current = int(re.search(r"^PPid:\s+(\d+)$", status, re.MULTILINE)[1])
-    heavy = {"cargo", "kani", "cargo-kani", "kani-driver", "kani-compiler", "rustc",
-             "clippy-driver", "rustfmt", "cbmc", "goto-instrument", "goto-cc"}
+    engines = {"kani", "cargo-kani", "kani-driver", "kani-compiler", "cbmc",
+               "goto-instrument", "goto-cc", "goto-analyzer"}
+    competing = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit() or int(entry.name) in ancestors:
             continue
@@ -80,34 +85,31 @@ def reject_unrelated_heavy_processes():
             names.add(executable.name)
         except (FileNotFoundError, PermissionError, ProcessLookupError):
             executable = None
-        if names & heavy or (executable and "target" in executable.parts and "deps" in executable.parts):
-            raise GateError(f"unrelated heavy process {entry.name} ({command}); reserve the host first")
+        if names & engines:
+            competing.append((int(entry.name), command))
+    return competing
+
+
+def reject_unrelated_heavy_processes():
+    for pid, command in unrelated_proof_processes():
+        raise GateError(f"competing proof process {pid} ({command}); serialize Kani/CBMC jobs")
 
 
 def mutate_all_loop(root):
-    """Wrap the actual request validation in a ten-kind production traversal."""
-    path = root / "src/accounting.rs"
+    """Mutate the common validation selected by the original Meter schedule."""
+    path = root / MUTANT_FILE
     source = path.read_text()
-    start_marker = "        for (kind, amount) in requests {\n"
-    end_marker = "        if let Some((kind, amount)) = first_fail {\n"
-    if source.count(start_marker) != 1 or source.count(end_marker) != 1:
-        raise GateError("production request loop changed; review the ALL-loop mutation")
-    start = source.index(start_marker)
-    end = source.index(end_marker, start)
-    original = source[start:end]
-    if not original.endswith("        }\n"):
-        raise GateError("cannot locate the production request-loop boundary")
-    nested = "".join("    " + line if line.strip() else line for line in original.splitlines(True))
-    nested = nested.replace(
-        "            for (kind, amount) in requests {\n",
-        "            for (kind, amount) in requests.clone() {\n"
-        "                if kind != requested_kind {\n"
-        "                    continue;\n"
-        "                }\n",
-        1,
+    original = "        observe(charge.first);\n        observe(charge.second);\n"
+    if source.count(original) != 1:
+        raise GateError("common production validation changed; review the ALL-loop mutation")
+    start = source.index(original)
+    replacement = (
+        "        for requested_kind in LimitKind::ALL {\n"
+        "            observe(charge.first.filter(|(kind, _)| *kind == requested_kind));\n"
+        "            observe(charge.second.filter(|(kind, _)| *kind == requested_kind));\n"
+        "        }\n"
     )
-    replacement = "        for requested_kind in LimitKind::ALL {\n" + nested + "        }\n"
-    path.write_text(source[:start] + replacement + source[end:])
+    path.write_text(source.replace(original, replacement, 1))
     return source[:start].count("\n") + 1
 
 
@@ -139,21 +141,14 @@ def classify(log, returncode, mutant_line=None):
         verdict = "Verified"
         marker = "VERIFICATION:- SUCCESSFUL"
     else:
-        if returncode != 1 or statuses - {"SUCCESS", "UNREACHABLE", "FAILURE"}:
+        if returncode != 1 or statuses - {"SUCCESS", "UNREACHABLE", "UNDETERMINED", "FAILURE"}:
             raise GateError("ALL-loop control was inconclusive")
         if len(failures) != 1:
             raise GateError("ALL-loop control must fail exactly one assertion")
         _, name, _, description, location = failures[0]
-        function = name.removesuffix(".unwind.1")
-        shared = "accounting::Meter::charge_fields"
-        # Bind the exact production function/loop/line and its same named
-        # monomorphization in both property and source location.
-        if (not name.endswith(".unwind.1")
-                or not (function == shared or
-                        (function.startswith(shared + "::<") and function.endswith(">")))
-                or description != "unwinding assertion loop 1"
-                or not location.startswith(f"src/accounting.rs:{mutant_line}:")
-                or not location.endswith(" in function " + function)):
+        if (name != f"{MUTANT_FUNCTION}.unwind.{MUTANT_LOOP}"
+                or description != f"unwinding assertion loop {MUTANT_LOOP}"
+                or location != f"{MUTANT_FILE}:{mutant_line}:9 in function {MUTANT_FUNCTION}"):
             raise GateError("control did not fail at the mutated production ALL loop")
         expected = "Complete - 0 successfully verified harnesses, 1 failures, 1 total."
         verdict = "ExpectedProductionUnwindFailure"
@@ -433,7 +428,7 @@ def run_gate(args):
                 mutant_line = mutate_all_loop(fixture) if name == "all-loop" else None
                 lane = args.report / name
                 lane.mkdir()
-                (lane / "source.patch").write_text(git(fixture, "diff", "--", "src/accounting.rs") + "\n")
+                (lane / "source.patch").write_text(git(fixture, "diff", "--binary") + "\n")
                 unit = "meter-kani-" + uuid.uuid4().hex
                 command = [
                     "systemd-run", "--user", "--scope", "--quiet", "--unit=" + unit,
@@ -491,9 +486,12 @@ def interrupted(_signum, _frame):
 
 
 def main():
+    print("SKIPPED: DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done", file=sys.stderr)
+    return 2
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path)
-    parser.add_argument("--preflight", action="store_true", help="check clean inputs and exclusive host before Cargo")
+    parser.add_argument("--preflight", action="store_true", help="check clean inputs and absence of competing proof engines before Cargo")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--fixture", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--mutant-line", type=int, help=argparse.SUPPRESS)
