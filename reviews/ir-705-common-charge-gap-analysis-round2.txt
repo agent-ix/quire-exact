@@ -1,0 +1,67 @@
+<!-- reviewer-dispositions repo=agent-ix/quire-exact visibility=public quoin=0.28.4 module=spec-artifacts-process@b82e42e893612b4b4ee94127714b4577ee893502 id=SR-15258 round=2 model=unavailable run=7d3bc658-d8ac-44b4-bd60-1747ff75af96 -->
+
+| Result | Status |
+| --- | --- |
+| New round2 findings | None |
+| Prior outcomes | Retained unchanged; no reopened finding |
+| Code/Rust | PASS |
+| Full gap | FAIL; four inherited gaps deferred |
+| Merge | Blocked pending actual aggregate/persistent gate |
+
+Same sole reviewer, PR76 disposition/source review round2. New exact clean frozen headcbe9e680a5a6574858e27bca8b6d86180bf72c10; source baseaf4abc4acfdb28f69e29679fc290b8056d3260f3 (round1 source546eadb4 plus byte-exact review custody). Only src/accounting.rs source changes65insertions/26deletions. Original source review/findings and entire round1 artifacts remain byte-unchanged as a prefix. No new finding; no previously resolved/deferred finding reopened. Their prior outcomes remain current; dispositions is empty because no FND had latest still-open or lacked an outcome before this pass.
+
+Latest code/Rust source verdict: PASS. Full repository gap verdict: FAIL, four inherited local discrepancies still DEFERRED under actual root decisione437a3cc and existing IR810 / IR17+IR705 / IR705 / IR895 owners. Original code FND001/002 and gapFND005 stay FIXED, and stricter status classifier/false-tag fixes are byte-unchanged.
+
+The new private CommonRequests has named first/second Option<(LimitKind,u64)> slots and derives Copy/Clone/Eq. next takes first when present, otherwise second; each take clears exactly that slot. Zero/one/two requests, same-kind duplicates, explicit zero, repeated exhaustion and copying the remaining cursor preserve ordered values. No caller-mutated state/aliasing, new allocation, indexed search, owned-array IntoIter/Flatten or additional production loop appears. The new test directly exercises order, duplicate zero, exhausted state and an independently copied remaining cursor and truthfully binds FR359AC8.
+
+Builder storage invariants remain first-then-second; an admitted iterator consumes its owned copy, never a retained builder. push_units now assigns the named empty slot directly; third request still promotes and appends. Common-to-general promotion maps both Option slots in place to ChargeAmount::Units and empty overflow Vec, preserving request count/order/multiplicity, zeros, native work/results and exact subsequent spill without a loop. Manual Eq/Clone/Debug still normalize to identical general contents, including overwritten exceptional work/results. General path and borrowed iterator are unchanged. Private cursor implements the existing Clone request bound with no baseline runtime clone. The ONE charge_fields body/check_injected/first-failure/cumulative/allten atomic commit/admitted log is unchanged; cancellation/injection before traversal and exact negative/above-u64/duplicate refusal behavior remain unchanged. No new public API, Integer/as_big, representation/domain, real arithmetic, proof/model or budget change.
+
+Cargo.toml/lock, complete original kani_proofs.rs, both gate scripts, public literal-oracle test and all other production files byte-compare toaf4. The unique mutation anchor for (kind, amount) in requests remains in sharedcharge_fields. Actual future backend specialization/loop mapping is still unconfirmed; unchanged strict parser/source-anchor tests are not backend evidence or permission to accept a different failure.
+
+Fresh complete explicit-scope quire matrix0.36.2/engine0.50.2 plus quoin matrix0.28.4 compared with a separately Git-extractedaf4base: all189criterion ids/statements/methods/static statuses identical (167tagged/18Inspection-method-without-symbol/3untagged/1ignored-only). Bindings280→281, exactly one correct FR359AC8 binding on common_cursor_keeps_request_order_and_clones_the_remaining_prefix; no removed binding, no return of false AC13. This281count differs in membership from initiale141's281: wrongAC13 remains removed and truthful cursorAC8 is added. Quoin static/no-run-evidence is not a new proof result. Fullgap stays FAIL; original four local owned gaps remain deferred with no newly introduced gap or stale trace.
+
+Reverse changed-code check maps named native storage/iterator/promotion to FR359AC8 and existing FR358/359 semantic requests, denials and log obligations; no new unowned behavior, stub or copied second Meter. Whole-source/requirements inventory remains as previously reviewed because only this private accounting surface changed. No spec/plan changes or new profile: spec-base/subanalyses remain inapplicable; no optional broad semantic fanout.
+
+Inspected actual fix-round2 receipts: fmt/fmt-check/lint(default/support/thumb) exit0, accounting27/29, public integration18/23 and four VerdictTests PASS. Scope enforced16GiB/swap0/jobs1/QSPECfd7; actual peak534257664bytes, memoryevents0; hierarchy gone/TENexactguards empty/targetretained at explicit release. No reviewer Cargo/fmt/metadata/native/Python-test/backend/goto/Kani/aggregate ran. These native receipts do not measure proof fit.
+
+Actual root commentb432fea4-7813-492a-b71b-6cb84dea5b28 records prioraf4 aggregate PASS then real persistent healthy OOM at16GiB exact terminal peak17179869184bytes, no logical verdict; ALL never started. That failure remains a merge blocker, not a waived local binder issue. Removing array/search encoding is a confined option1 hypothesis, not causal attribution or accepted tractability. Currentcbe9 aggregate, actual persistent healthy plus ALL/refusal-order controls and exact property mapping must pass at reviewed/custody head before merge; only after publication unchanged genuineIR91716GiB qualification can support fit. No option2/public admitted API or domain/model/solver/memory weakening is authorized.
+
+Plan completion: not assessed
+
++++ [reviewer data]
+
+```yaml
+dispositions: []
+retained_outcomes:
+  FND-001: deferred
+  FND-002: deferred
+  FND-003: deferred
+  FND-004: deferred
+  FND-005: fixed
+new_findings: []
+scope:
+- id: CommonRequests::next
+  path: src/accounting.rs
+  role: examined
+  excerpt: "if let Some(request) = self.first.take() {\n            Some(request)\n\
+    \        } else {\n            self.second.take()\n        }"
+- id: CommonCharge::into_general
+  path: src/accounting.rs
+  role: examined
+  excerpt: "first: self\n                    .sizes\n                    .first\n\
+    \                    .map(|(kind, amount)| (kind, ChargeAmount::Units(amount))),"
+- id: FR-359-AC-8
+  path: spec/functional/FR-359-cumulative-meter-boundary.md
+  role: examined
+  excerpt: Zero, one, two and larger request counts gain no request-count denial.
+bindings:
+- test_id: src/accounting.rs::tests::common_cursor_keeps_request_order_and_clones_the_remaining_prefix
+  ac_id: FR-359-AC-8
+  trace: correct
+reviewed_head: cbe9e680a5a6574858e27bca8b6d86180bf72c10
+code_verdict: PASS
+full_gap_verdict: FAIL
+required_gate_status: PENDING; prioraf4 healthy OOM blocks merge
+```
+
++++

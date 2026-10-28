@@ -49,20 +49,16 @@ impl UnitsCharge {
     }
 
     pub(super) fn from_charge(charge: &Charge) -> Option<Self> {
-        if !charge.sizes.overflow.is_empty() {
-            return None;
+        match &charge.storage {
+            ChargeStorage::Common(common) => Some(Self {
+                point: charge.point,
+                first: common.sizes.first,
+                second: common.sizes.second,
+                work: common.work_units,
+                results: common.result_units,
+            }),
+            ChargeStorage::General(_) => None,
         }
-        let request = |slot: &Option<(LimitKind, ChargeAmount)>| match slot {
-            Some((kind, amount)) => Some(Some((*kind, amount.units()?))),
-            None => Some(None),
-        };
-        Some(Self {
-            point: charge.point,
-            first: request(&charge.sizes.first)?,
-            second: request(&charge.sizes.second)?,
-            work: charge.work_units.units()?,
-            results: charge.result_units.units()?,
-        })
     }
 }
 
