@@ -36,6 +36,7 @@ satisfies FR-383-AC-3, and the `make build-no-std` gate satisfies FR-383-AC-4.
 ## Status
 
 AC-1 and AC-2 have implemented Trace bindings in `tests/ir895_meter_cancel.rs`.
-AC-3 is verified by inspection and AC-4 by `make build-no-std`; neither has a
-source Trace binding. The computed `quire matrix` reports AC-1 and AC-2 as
-tagged, AC-3 as method-without-symbol, and AC-4 as untagged.
+AC-3 is verified by inspection. AC-4 has a Trace-bound public signature probe
+and is verified in the `no_std` + `alloc` build by `make build-no-std`. The
+computed `quire matrix` reports AC-1, AC-2, and AC-4 as tagged, and AC-3 as
+method-without-symbol.

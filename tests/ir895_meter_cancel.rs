@@ -41,6 +41,16 @@ fn accessor_reports_only_the_installed_handle() {
     assert_ne!(meter.cancel(), Some(&independent));
 }
 
+#[trace("TC-933", "FR-383-AC-4")]
+#[test]
+fn public_accessor_has_the_borrowed_cancel_signature() {
+    let accessor: for<'a> fn(&'a Meter) -> Option<&'a Cancel> = Meter::cancel;
+    let handle = Cancel::new();
+    let meter = Meter::new(limits()).with_cancel(handle.clone());
+
+    assert_eq!(accessor(&meter), Some(&handle));
+}
+
 #[trace("TC-933", "FR-383-AC-2")]
 #[test]
 fn accessor_handle_cancels_the_next_charge_without_changing_accounting() {
