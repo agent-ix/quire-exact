@@ -31,3 +31,23 @@ Ticket: IR-1132. Static Rust review of PR #96. The new reader searches the exist
 ## Evidence limits
 
 `git diff --check origin/main...HEAD` passed. Source inspection proves the sole success path returns the matching member of `ALL`. The QSpec-owned vector is pending IR-1131; full-vocabulary equality is outside this code review's clean verdict.
+
+## Delta review at 01be6621
+
+The confined IR-1105 delta from 58b98ea removes `rust-toolchain.toml` and the redundant `clippy.toml` `msrv = "1.98"` line. `Cargo.toml` still declares `rust-version = "1.98"`; `.github/workflows/ci.yml` still installs stable Rust, rustfmt, Clippy and `thumbv7em-none-eabi`, so the diff does not narrow the declared CI jobs or the no_std target. `git diff --check 58b98ea..HEAD` passed. No build or lint was run in this review.
+
+The original static code verdict applies to the reader at this head. The config delta has the documentation finding below. Peter's no-docs scope instruction keeps the documentation correction separate; this artifact reports the mismatch rather than silently treating the prose as current.
+
+**Delta verdict: CONDITIONAL** — the compiler configuration itself has no static defect; the documentation claim is stale and remains an IR-1105 residual.
+
+## New findings (round 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | README and CLAUDE.md still say the repository pins Rust 1.98.1 and the no_std target in the deleted rust-toolchain.toml | README.md:120; CLAUDE.md:24,27 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-002 | deferred | IR-1105 owns the stale compiler-pin prose. Peter's no-docs scope instruction excludes these docs from this PR; do not count the mismatch as corrected. The config delta otherwise preserves Cargo's numeric floor and the CI target installation. |
