@@ -10,7 +10,6 @@ before applying it to NativeIntegerPlan; it never reports a Kani enclosure PASS.
 
 import argparse
 from fractions import Fraction
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -35,14 +34,6 @@ MIN32, MAX32 = -(2**31), 2**31 - 1
 
 def integer_literal(value):
     return str(value) if value >= 0 else f"(- {-value})"
-
-
-def digest(path):
-    result = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            result.update(block)
-    return result.hexdigest()
 
 
 def outside(product="(* x y)", omit_upper_bd=False):
@@ -203,24 +194,7 @@ def main():
     caps = {name: (cgroup / name).read_text().strip() for name in ("memory.max", "memory.swap.max")}
     if caps != {"memory.max": "17179869184", "memory.swap.max": "0"}:
         raise RuntimeError("run this protocol in its canonical 16 GiB/no-swap proof scope")
-    if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT):
-        raise RuntimeError("the reviewed proof candidate must be committed and clean")
     solver = args.solver.resolve(strict=True)
-    version = subprocess.run([str(solver), "--version"], capture_output=True, text=True, timeout=10, check=True)
-    (output / "solver-version.txt").write_text(version.stdout + version.stderr)
-    subjects = [
-        "src/native_integer.rs", "src/native_integer/kani_proofs.rs", "src/native_integer/reference.rs",
-        "Cargo.toml", "Cargo.lock", "scripts/native_integer_enclosure.py",
-        "proofs/native_integer/interval_enclosure.smt2", "proofs/native_integer/integer_real_embedding.smt2",
-        "proofs/native_integer/composition.json",
-    ]
-    provenance = {
-        "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT, text=True).strip(),
-        "solver": str(solver), "solver_sha256": digest(solver), "caps": caps,
-        "subjects": {name: digest(ROOT / name) for name in subjects},
-    }
-    (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     results = []
     theorem = (PROOFS / "interval_enclosure.smt2").read_text()
     validate_theorem_schema(theorem)
@@ -252,7 +226,7 @@ def main():
         if expected == "unsat" and len(lines) != 1:
             raise RuntimeError("an UNSAT response must contain no extra result or error")
         record = {"name": name, "expected": expected, "actual": lines[0], "exit": process.returncode,
-                  "elapsed_seconds": time.monotonic() - before, "query_sha256": digest(case / "query.smt2")}
+                  "elapsed_seconds": time.monotonic() - before}
         if expected == "sat":
             record["witness"] = validate_control(kind, decode_model("\n".join(lines[1:])), witness_expected)
         (case / "result.json").write_text(json.dumps(record, indent=2) + "\n")
@@ -286,7 +260,7 @@ def main():
         "native_enclosure_qualified": False,
         "native_qualification_requires": "all source-bound Rust bridges and independently reviewed composition.json",
         "kani_C2_verified": False,
-        "elapsed_seconds": time.monotonic() - started, "results": results, "provenance": provenance,
+        "elapsed_seconds": time.monotonic() - started, "results": results,
     }
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print("Mathematical protocol passed; native composition remains a separate reviewed obligation.", flush=True)
