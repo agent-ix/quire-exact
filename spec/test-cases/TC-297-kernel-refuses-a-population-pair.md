@@ -10,13 +10,13 @@ relationships:
 
 ## Description
 
-Verify FR-089-AC-6: the kernel refuses every population pair. It catches a kernel `admits` that admits every `Value::Population` under any `ValueType::Population` (widening the type with no declared maximum checked), a `plan_pairs` that compares two population identities structurally as equality operands, and a `compare_keys` that orders population identities by digest.
+Verify FR-089-AC-6: the kernel refuses every population pair. It catches a kernel `admits` that admits every `Value::Population` under any `ValueType::Population` (widening the type with no declared maximum checked), a `plan_pairs` that compares two population identities structurally as equality operands, and a `compare_keys` that orders population identities by their admitted identities.
 
 Scope: FR-089-AC-6.
 
 ## Test Procedure
 
-1. Check `ValueType::Population(Some(5)).admits(&Value::Population(id))` for a `PopulationId` built with `PopulationId::from_digest`.
+1. Check `ValueType::Population(Some(5)).admits(&Value::Population(id))` for a caller-admitted `PopulationId`.
 2. Call `plan_pairs` on two `Value::Population` operands with distinct `PopulationId`s.
 3. Call `compare_keys` on two `Value::Population` values with distinct `PopulationId`s.
 

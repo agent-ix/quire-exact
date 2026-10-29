@@ -20,7 +20,7 @@ Scope: FR-088-AC-11.
 2. Repeat with the unordered enum, whose canonical list is `a`, `b`, `c`.
 3. Build a value that pairs `a`'s `VariantId` with a rank other than its own and admit it against the shape.
 4. Compare the ranks and the visiting order of two shapes whose variants differ in identity but not in rank or order.
-5. Compare two members of one shape with `compare_keys`, the variant with the larger digest holding the lower rank.
+5. Compare two members of one shape with `compare_keys`, the variant with the later admitted identity holding the lower rank. Also try a foreign variant at that rank in the shape's admission check.
 
 ## Expected Results
 
@@ -28,7 +28,7 @@ Scope: FR-088-AC-11.
 - Step 2: the ranks are `a` 0, `b` 1, `c` 2, and the set visits `a`, `b`, `c`.
 - Step 3: admission refuses the value.
 - Step 4: the ranks and the visiting order are equal.
-- Step 5: the lower rank orders first, whatever the digests.
+- Step 5: the lower rank orders first, regardless of admitted identity order; the foreign variant is refused even at the matching rank.
 
 ## Status
 

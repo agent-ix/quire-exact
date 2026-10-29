@@ -16,7 +16,7 @@ A caller admits a population argument. The kernel never admits it on its own; th
 
 ## Behavior
 
-1. **Opaque identity.** `Value::Population` carries a `PopulationId` and nothing else; the crate depends on no crate that owns a population binding.
+1. **Opaque identity.** `Value::Population` carries a caller-admitted `PopulationId` and nothing else; the crate depends on no crate that owns a population binding and neither derives nor checks a digest for the identity.
 2. **Refused pair.** `ValueType::admits` returns false for every population pair, `equality::plan_pairs` refuses two population operands with `Refusal::CheckedInvariant { cause: PopulationPair }` under [FR-369](./FR-369-typed-checked-invariant-causes.md), and `key::compare_keys` returns `None` for two population values.
 
 ## Acceptance Criteria
