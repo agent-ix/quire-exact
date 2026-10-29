@@ -30,6 +30,22 @@ A caller builds a set of enum values and a quantity over a declared and a compou
 
 Implemented.
 
+## Planned identity representation review
+
+The following replacement work is **Planned**. It is not an executable claim and does not change
+FR-088-AC-11 or FR-088-AC-12, their tests, or the current digest-shaped kernel API.
+
+| Candidate | Required behavior before replacement | Upstream decision needed |
+| --- | --- | --- |
+| `VariantId` and `UnitId` representation | Preserve refusal of a variant from another declaration even when its rank matches; preserve inequality between declared and compound units even when their payload bytes match. | QSpec and the QSL identity producer must define the replacement identity values, their domains, and how admitted declarations and compound units mint them. |
+| Related kernel identities (`NodeKey`, `EffectiveId`, `UniverseId`, `MemberId`, and `PopulationId`) | Preserve distinct checked nodes within one package, distinct effective declarations, foreign reference universes, and member/population ownership; preserve the existing comparison and refusal behavior for those distinctions. | QSpec and QSL must define one admitted representation and producer for each identity before the kernel changes its carried types. |
+
+The replacement contract must identify the same-declaration and foreign-declaration cases that
+remain equal or unequal, the admission boundary, and the ordering used by canonical keys. A
+content-identity requirement does not by itself require a frozen 32-byte digest representation.
+No constructor, decoder, comparison, or refusal check is removed while those upstream contracts
+remain unsettled.
+
 ## Dependencies
 
 - None. The caller's behaviour under the same id lives in `agent-ix/quire-spec-language`.
