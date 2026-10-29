@@ -492,15 +492,42 @@ mod tests {
     /// `Debug` exposes the value-bearing fields and nested structure without
     /// depending on any particular identity bytes.
     #[test]
-    #[trace("TC-735", "FR-262-AC-2")]
-    fn tc_735_value_type_debug_preserves_structure_and_fields() {
+    fn value_type_debug_preserves_structure_and_fields() {
         let samples = samples();
         assert_eq!(format!("{:?}", samples[0]), "Boolean");
         assert_eq!(format!("{:?}", samples[1]), "Integer");
+        let int = format!("{:?}", samples[2]);
+        assert!(int.starts_with("Int(IntegerInterval {"));
+        assert!(int.contains("lower: Integer(-2), upper: Integer(7)"));
+        let rational = format!("{:?}", samples[3]);
+        assert!(rational.starts_with("Rational(RationalDomain {"));
+        assert!(rational
+            .contains("numerator: IntegerInterval { lower: Integer(0), upper: Integer(4) }"));
+        assert!(rational
+            .contains("denominator: IntegerInterval { lower: Integer(1), upper: Integer(8) }"));
+        let decimal = format!("{:?}", samples[4]);
+        assert!(decimal.starts_with("Decimal(DecimalType {"));
+        assert!(decimal.contains("lower: Integer(0), upper: Integer(100)"));
+        assert!(decimal.contains("min_scale: 0, max_scale: 2, rounding: Exact"));
+        assert_eq!(
+            format!("{:?}", samples[5]),
+            "Float(FloatType { width: Binary64, rounding: Exact })"
+        );
         assert!(format!("{:?}", samples[6]).starts_with("Quantity(UnitId("));
+        assert_eq!(
+            format!("{:?}", samples[7]),
+            "Text(TextType { min: 0, max: 10, profile: UnicodeScalars })"
+        );
+        assert_eq!(format!("{:?}", samples[8]), "String");
         assert!(format!("{:?}", samples[9]).contains("ordered: false, variants: [VariantId("));
         assert!(format!("{:?}", samples[10]).starts_with("Composite(NodeKey("));
         assert!(format!("{:?}", samples[11]).starts_with("Reference(EffectiveId("));
+        assert_eq!(format!("{:?}", samples[12]), "Population(Some(5))");
+        assert_eq!(format!("{:?}", samples[13]), "Population(None)");
+        assert_eq!(
+            format!("{:?}", samples[14]),
+            "Collection(CollectionType { kind: Sequence, element: Boolean, bound: None })"
+        );
 
         let nested = samples.last().expect("samples");
         let compact = format!("{nested:?}");

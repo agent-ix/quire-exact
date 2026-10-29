@@ -2350,7 +2350,6 @@ mod tests {
     /// `Debug` retains nesting, slot order and value-bearing fields without
     /// freezing opaque identity bytes in a whole-output snapshot.
     #[test]
-    #[trace("TC-735", "FR-262-AC-2")]
     fn value_debug_preserves_structure_and_fields() {
         let [composite, option] = debug_samples();
         let compact = format!("{composite:?}");
