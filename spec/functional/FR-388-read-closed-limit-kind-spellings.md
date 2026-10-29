@@ -32,6 +32,7 @@ typed limit kind without inventing another spelling vocabulary.
 | FR-388-AC-1 | For every member of `LimitKind::ALL`, the public reader returns `Some(kind)` for `kind.as_str()`; each member maps back to itself, including the first and last members. | Test |
 | FR-388-AC-2 | The public reader returns `None` for an empty string, an unknown name, a case-changed member name, a member name with leading or trailing whitespace, and a member name with a malformed separator; no input in this control set maps to another valid kind. | Test |
 | FR-388-AC-3 | Against the authoritative QSpec `ScalarLimitsV1` full-vocabulary vector, `LimitKind::ALL` has exactly the same members in the same field order; each vector spelling is returned by `as_str()` and accepted by `from_code`, and at least one undeclared vector control is refused. | Test |
+| FR-388-AC-4 | Inspection of every successful `from_code` return path shows that it returns `Some(kind)` only after the input exactly equals `kind.as_str()` for a member of `LimitKind::ALL`; there is no catch-all success path, normalization, alias or unchecked conversion. | Inspection |
 
 ## Status
 

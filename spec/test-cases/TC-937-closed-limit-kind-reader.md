@@ -10,8 +10,9 @@ relationships:
 
 ## Description
 
-Verify the public `LimitKind::from_code` reader's round trip, refusal and
-independent vocabulary completeness against FR-388-AC-1 through AC-3.
+Verify the public `LimitKind::from_code` reader's round trip, refusal,
+independent vocabulary completeness and closed success paths against
+FR-388-AC-1 through AC-4.
 
 ## Test Procedure
 
@@ -23,6 +24,11 @@ independent vocabulary completeness against FR-388-AC-1 through AC-3.
    Compare its ordered member spellings with `LimitKind::ALL` mapped through
    `as_str()`. Read every declared spelling and at least one undeclared
    control through `from_code`.
+4. Inspect every branch or equivalent return path in `from_code` that yields
+   `Some(kind)`. For each, establish an exact input equality with
+   `kind.as_str()` and membership of `kind` in `LimitKind::ALL`. Inspect the
+   remaining paths for a catch-all success, normalization, alias or unchecked
+   conversion.
 
 ## Expected Results
 
@@ -30,6 +36,8 @@ independent vocabulary completeness against FR-388-AC-1 through AC-3.
 - Step 2: every control returns `None`.
 - Step 3: the ordered lists are equal, each declared spelling returns its
   corresponding kind, and each undeclared control returns `None`.
+- Step 4: every successful path requires exact equality to a declared member's
+  `as_str()`; all other paths return `None`.
 
 ## Status
 
