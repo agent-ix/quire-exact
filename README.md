@@ -117,8 +117,8 @@ this repository owns are in [`spec/`](spec/).
 
 ## Building and testing
 
-The minimum supported Rust version is declared in `Cargo.toml`. Build and
-test commands run through `make`:
+The toolchain is pinned in `rust-toolchain.toml`. Everything runs through
+`make`:
 
 | Command | What it does |
 | --- | --- |
