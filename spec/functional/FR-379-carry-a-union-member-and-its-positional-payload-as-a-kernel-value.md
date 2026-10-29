@@ -21,11 +21,11 @@ relationships:
 
 The `quire-exact` kernel SHALL carry one active member of a union declaration, with its payload values in declared position order, as `Value::Union`, with construction, comparison, key order, clone, `Debug` and drop that do not grow the native stack with the depth.
 
-This requirement states what the kernel does. The language-level source is QSL FR-319, FR-321, FR-322 and FR-323, cited by number only. The kernel carries no member registry and mints no identity. The checking stage supplies the declaration key, the QSpec FR-441 member key and the member identifier already verified, and the caller's type environment supplies the declared position types.
+This requirement states what the kernel does. The language-level source is QSL FR-319, FR-321, FR-322 and FR-323, cited by number only. The kernel carries no member registry and mints no identity. The checking stage supplies the declaration key and exact member name already verified under QSpec FR-441, and the caller's type environment supplies the declared position types.
 
 ## Inputs
 
-- A `UnionMember::from_admitted(declaration, member_key, identifier)`: the union declaration `NodeKey`, the member key retyped as a `VariantId`, and the member `Identifier`.
+- A `UnionMember::from_admitted(declaration, member_name)`: the union declaration `NodeKey` and its exact admitted non-empty UTF-8 member name. The resulting `VariantId` carries that structural pair ([FR-389](./FR-389-carry-admitted-structural-identities.md)); no graph-node key is retyped as member identity.
 - The declared position types of the member, as a `ValueType` slice, for `union` and `evaluate_union`.
 - Payload values, or deferred payload expressions and a `Meter`, in position order.
 
