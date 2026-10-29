@@ -132,6 +132,11 @@ impl LimitKind {
         }
     }
 
+    /// Resolve an exact `ScalarLimitsV1` member spelling.
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == code)
+    }
+
     /// Whether this counter is cumulative rather than a high-water size.
     pub fn is_cumulative(self) -> bool {
         matches!(self, Self::WorkUnits | Self::ResultUnits)
@@ -1224,6 +1229,41 @@ impl Meter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Trace: FR-388-AC-1
+    #[test]
+    fn limit_kind_reader_round_trips_every_member() {
+        for kind in LimitKind::ALL {
+            assert_eq!(LimitKind::from_code(kind.as_str()), Some(kind));
+        }
+        assert_eq!(
+            LimitKind::from_code("integer_bits"),
+            Some(LimitKind::IntegerBits)
+        );
+        assert_eq!(
+            LimitKind::from_code("result_units"),
+            Some(LimitKind::ResultUnits)
+        );
+    }
+
+    /// Trace: FR-388-AC-2
+    #[test]
+    fn limit_kind_reader_refuses_undeclared_spellings() {
+        for code in [
+            "",
+            "unknown_limit",
+            "Integer_bits",
+            " integer_bits",
+            "integer_bits ",
+            "integer-bits",
+        ] {
+            assert_eq!(
+                LimitKind::from_code(code),
+                None,
+                "unexpected limit kind for {code:?}"
+            );
+        }
+    }
 
     fn assert_unchanged(before: &Meter, after: &Meter) {
         assert_eq!(after.admission_count(), before.admission_count());
