@@ -56,10 +56,10 @@ No active AssuranceProfile was found under this repository's spec tree. Quire va
 
 ## Verdict
 
-Needs one spec correction to FR-377-AC-2 and the corresponding TC-925 fixture and expected result. No code or build checks were run for this spec-only PR.
+The initial review required one spec correction. FND-001 was fixed at PR head c13f6d4985d43a165645ae6f0d8d369b35ac1a6f. No code or build checks were run for this spec-only PR.
 
-## Disposition
+## Dispositions
 
-| Finding | Outcome | Evidence |
+| FND | outcome | reason |
 | --- | --- | --- |
-| FND-001 | Fixed | Commit `d03bc42f10f743048b3682d3913b1f6c90a58f21` replaces the segmented-key oracle in FR-377-AC-2 and TC-925 with three distinct caller-admitted keys ordered by `NodeKey`, while integer slots descend in the opposite order. The criterion still requires every forward and reverse comparison to follow key order, with no `Equal` or `None` for distinct keys. |
+| FND-001 | fixed | FR-377-AC-2 now uses three distinct admitted keys ordered by `NodeKey`; TC-925 checks all forward and reverse comparisons with descending integer slots and refuses `Equal` or `None` for distinct keys. No segmented or fixed-byte representation is needed. |
