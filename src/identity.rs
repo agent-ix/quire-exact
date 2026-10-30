@@ -108,13 +108,16 @@ impl PartialOrd for EffectiveId {
 }
 
 /// The least root type node of an object universe.
+///
+/// The owned node is boxed so a refusal carrying two universe ids remains a
+/// small error value; the public identity and its component order are unchanged.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct UniverseId(NodeKey);
+pub struct UniverseId(Box<NodeKey>);
 
 impl UniverseId {
     /// Carry the admitted node id of the least root type declaration.
     pub fn new(root_type: NodeKey) -> Self {
-        Self(root_type)
+        Self(Box::new(root_type))
     }
 
     /// The least root type declaration node.
@@ -139,12 +142,23 @@ pub enum UnitDomain {
 
 /// A quantity's unit identity: a declared unit node or canonical compound terms.
 /// The two domains remain distinct even when their displayed parts coincide.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum UnitId {
     /// One declared unit node.
     Declared(NodeKey),
     /// The evaluator-owned, ordered list of root-unit nodes and nonzero exponents.
     Compound(Box<[(NodeKey, Integer)]>),
+}
+
+impl fmt::Debug for UnitId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Keep a unit on one line inside an alternate Debug of a quantity
+        // type, as FR-387's bounded type layout requires.
+        match self {
+            Self::Declared(node) => write!(f, "Declared({node:?})"),
+            Self::Compound(terms) => write!(f, "Compound({terms:?})"),
+        }
+    }
 }
 
 impl UnitId {

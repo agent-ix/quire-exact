@@ -700,7 +700,7 @@ fn exact_paths_refuse_a_descendant_and_accept_the_declared_type() {
     let record = evaluate_record(
         &record_shape(),
         key(R),
-        vec![(field, FieldExpression::Evaluate(c_deferred()))],
+        vec![(field.clone(), FieldExpression::Evaluate(c_deferred()))],
         &mut meter(),
     )
     .expect("construction");

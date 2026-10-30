@@ -42,7 +42,9 @@ fn bounded_type(
     min: Option<i64>,
     max: Option<i64>,
 ) -> Result<BoundedQuantityType, IllTyped> {
-    BoundedQuantityType::new(of, min.map(|m| whole(m, of)), max.map(|m| whole(m, of)))
+    let min = min.map(|m| whole(m, of.clone()));
+    let max = max.map(|m| whole(m, of.clone()));
+    BoundedQuantityType::new(of, min, max)
 }
 
 fn bounded(of: UnitId, min: Option<i64>, max: Option<i64>) -> ValueType {

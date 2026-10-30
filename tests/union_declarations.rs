@@ -244,7 +244,7 @@ fn union_payload_key_order_sorts_set_and_keeps_ordered_set_supply_order() {
             .iter()
             .map(|value| match value {
                 Value::Union(union) => match &union.payload()[0] {
-                    Value::Composite(composite) => Some(composite.declaration()),
+                    Value::Composite(composite) => Some(composite.declaration().clone()),
                     _ => None,
                 },
                 _ => None,
