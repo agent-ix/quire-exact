@@ -310,6 +310,23 @@ fn inspection_refuses_malformed_storage_and_charges_only_membership_and_bound() 
             cause: ConstructionCause::TypeMismatch
         })
     ));
+    let other_element = CollectionType::new(
+        CollectionKind::OrderedSet,
+        ValueType::Boolean,
+        declared.bound(),
+    );
+    assert!(matches!(
+        inspect_typed_poststate(
+            &other_element,
+            &duplicate,
+            &mut meter(),
+            Some(&mut admitted)
+        ),
+        Err(ConstructionRefusal {
+            component: Component::Value,
+            cause: ConstructionCause::TypeMismatch
+        })
+    ));
     let reversed = from_admitted(declared.clone(), values(&[2, 1]));
     let forward = from_admitted(declared.clone(), values(&[1, 2]));
     for value in [&reversed, &forward] {
@@ -344,4 +361,39 @@ fn inspection_refuses_malformed_storage_and_charges_only_membership_and_bound() 
             ));
         }
     }
+}
+
+#[trace("TC-941", "FR-392-AC-3", "FR-392-AC-6")]
+#[test]
+fn denied_collection_charges_return_only_incomplete() {
+    let ordered = ty(CollectionKind::OrderedSet, None);
+    for point in [
+        ChargePoint::CollectionMemberWalk,
+        ChargePoint::CollectionMemberTest,
+        ChargePoint::CollectionBound,
+        ChargePoint::CollectionResultRetain,
+    ] {
+        let mut denied = meter().with_injected_denial(InjectedDenial {
+            point,
+            occurrence: NonZeroU64::new(1).unwrap(),
+        });
+        assert!(matches!(
+            build_typed_prestate(&ordered, values(&[1, 2]), &mut denied, Some(&mut admitted)),
+            Ok(Outcome::Incomplete(_))
+        ));
+    }
+    let sequence = ty(CollectionKind::Sequence, None);
+    let stored = from_admitted(sequence.clone(), values(&[2, 2, 1]));
+    let mut observed = meter();
+    let view = inspect_typed_poststate(&sequence, &stored, &mut observed, Some(&mut admitted));
+    assert!(matches!(view, Ok(Outcome::Completed(_))));
+    assert_eq!(observed.admission_count(), 1); // collection.bound only
+    let mut denied = meter().with_injected_denial(InjectedDenial {
+        point: ChargePoint::CollectionBound,
+        occurrence: NonZeroU64::new(1).unwrap(),
+    });
+    assert!(matches!(
+        inspect_typed_poststate(&sequence, &stored, &mut denied, Some(&mut admitted)),
+        Ok(Outcome::Incomplete(_))
+    ));
 }
