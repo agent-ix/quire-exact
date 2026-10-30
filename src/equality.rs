@@ -348,7 +348,7 @@ mod tests {
                 .fold(None, |tail: Option<Value>, head| {
                     let tail = tail.map_or(FieldValue::Absent, FieldValue::Present);
                     Some(crate::value::from_admitted_slots(
-                        declaration,
+                        declaration.clone(),
                         vec![
                             FieldValue::Present(Value::Integer(Integer::from(head))),
                             tail,

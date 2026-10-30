@@ -333,7 +333,6 @@ impl fmt::Debug for NodeKey {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
     use ix_trace_rs::trace;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -478,7 +477,9 @@ mod tests {
                 assert!(alloc::format!("{node:?}").starts_with("NodeKey("));
                 let rebuilt = key(node.package(), node.path(), node.ordinal());
                 assert_eq!(rebuilt, node);
-                let [PathSegment::Node(parent)] = node.path().try_into().unwrap() else {
+                let [PathSegment::Node(parent)] =
+                    <[PathSegment; 1]>::try_from(node.path()).unwrap()
+                else {
                     panic!("one nested path segment")
                 };
                 assert_eq!(parent.path().len(), 1);

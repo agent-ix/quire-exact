@@ -333,6 +333,7 @@ impl fmt::Display for ObjectId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::ToString;
     use ix_trace_rs::trace;
     use std::collections::{hash_map::DefaultHasher, HashSet};
     use std::hash::{Hash, Hasher};
@@ -392,6 +393,18 @@ mod tests {
         assert_eq!(HashSet::from([type_id.clone(), same]).len(), 1);
         assert_ne!(type_id, member);
         assert_eq!(member.owner_effective_type(), Some(type_id.clone()));
+        let root_z = EffectiveId::new(None, OriginalDeclarationKey::new("Pkg", "Z"));
+        let member_of_a = EffectiveId::new(
+            Some(EffectiveId::new(
+                None,
+                OriginalDeclarationKey::new("Pkg", "A"),
+            )),
+            OriginalDeclarationKey::new("Pkg", "member"),
+        );
+        assert!(
+            root_z < member_of_a,
+            "null owner sorts before any present owner"
+        );
         assert_ne!(
             type_id,
             EffectiveId::new(None, OriginalDeclarationKey::new("Other", "Type"))
@@ -508,15 +521,15 @@ mod tests {
         );
         assert_ne!(
             compound,
-            UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(2))])
+            UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(2_i64))])
         );
         assert_ne!(
             compound,
             UnitId::compound(vec![(NodeKey::fixture(2), Integer::one())])
         );
         assert!(
-            UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(2))])
-                < UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(10))])
+            UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(2_i64))])
+                < UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(10_i64))])
         );
         assert!(UnitId::compound(vec![])
             .compound_terms()

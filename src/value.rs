@@ -1585,7 +1585,7 @@ mod tests {
         let object_type = EffectiveId::fixture(6);
         let reference = Value::Reference(ObjectReference::new(
             crate::identity::UniverseId::fixture(5),
-            object_type,
+            object_type.clone(),
             crate::identity::ObjectId::new("o-1").expect("non-empty"),
         ));
         assert!(!ValueType::Uuid.admits(&reference));
@@ -1832,7 +1832,7 @@ mod tests {
         let object_type = EffectiveId::fixture(6);
         let reference = ObjectReference::new(
             crate::identity::UniverseId::fixture(5),
-            object_type,
+            object_type.clone(),
             crate::identity::ObjectId::new("o-1").expect("non-empty"),
         );
         let option_type = ValueType::option(ValueType::Boolean);
@@ -2391,13 +2391,14 @@ mod tests {
     /// goes, so the depth is value depth and never type depth.
     fn deep_value() -> (ValueType, Value) {
         let node = NodeKey::fixture(7);
-        let node_type = ValueType::Composite(node);
+        let node_type = ValueType::Composite(node.clone());
         let sequence_type = CollectionType::new(
             crate::collection::CollectionKind::Sequence,
             node_type.clone(),
             None,
         );
-        let mut value = from_admitted_slots(node, vec![FieldValue::Absent].into_boxed_slice());
+        let mut value =
+            from_admitted_slots(node.clone(), vec![FieldValue::Absent].into_boxed_slice());
         let mut level = 1;
         while level < DEEP {
             let sequence = crate::collection::from_admitted(sequence_type.clone(), vec![value]);
@@ -2405,7 +2406,10 @@ mod tests {
                 ValueType::collection(sequence_type.clone()),
                 Some(sequence),
             );
-            value = from_admitted_slots(node, vec![FieldValue::Present(next)].into_boxed_slice());
+            value = from_admitted_slots(
+                node.clone(),
+                vec![FieldValue::Present(next)].into_boxed_slice(),
+            );
             level += 3;
         }
         (node_type, value)
