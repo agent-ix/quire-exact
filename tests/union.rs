@@ -70,7 +70,7 @@ fn equal(left: &Value, right: &Value) -> bool {
         .expect("valid equality operands")
 }
 
-#[trace("FR-379-AC-1")]
+#[trace("FR-379-AC-1", "FR-389-AC-8")]
 #[test]
 fn union_construction_keeps_identity_positions_and_occurrences() {
     let nullary = make(empty(), &[]);

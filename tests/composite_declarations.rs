@@ -385,7 +385,7 @@ fn ordering(left: &Value, right: &Value) -> Option<Ordering> {
 }
 
 /// Trace: FR-377-AC-1
-#[trace("TC-925", "FR-377-AC-1")]
+#[trace("TC-925", "FR-377-AC-1", "FR-389-AC-8")]
 #[test]
 fn declaration_key_orders_before_slots() {
     let cases = [

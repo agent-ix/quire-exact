@@ -290,7 +290,7 @@ mod tests {
 
     /// Two members of one shape order by their rank, whatever the order of
     /// their `VariantId` structural order.
-    #[trace("TC-409", "FR-088-AC-11")]
+    #[trace("TC-409", "FR-088-AC-11", "FR-389-AC-8")]
     #[test]
     fn compare_keys_orders_members_of_one_shape_by_rank() {
         use crate::identity::VariantId;

@@ -580,7 +580,7 @@ mod tests {
 
     /// TC-297 (FR-089-AC-6): a population pair is not an equality operand
     /// pair in the kernel.
-    #[trace("TC-297", "FR-089-AC-6", "FR-369-AC-2")]
+    #[trace("TC-297", "FR-089-AC-6", "FR-369-AC-2", "FR-389-AC-8")]
     #[test]
     fn plan_pairs_refuses_a_population_pair() {
         use crate::identity::PopulationId;

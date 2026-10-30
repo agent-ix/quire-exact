@@ -423,7 +423,7 @@ mod tests {
     }
 
     /// Trace: FR-389-AC-6, FR-088-AC-12, TC-938, TC-411.
-    #[trace("FR-389-AC-6", "FR-088-AC-12", "TC-938", "TC-411")]
+    #[trace("FR-389-AC-6", "FR-389-AC-8", "FR-088-AC-12", "TC-938", "TC-411")]
     #[test]
     fn unit_domain_and_compound_terms_decide_identity_and_order() {
         let declared = UnitId::declared(NodeKey::fixture(1));
