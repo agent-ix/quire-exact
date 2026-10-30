@@ -40,12 +40,18 @@ impl OriginalDeclarationKey {
 }
 
 /// A structural effective declaration identity from QSpec FR-150.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct EffectiveId {
     // Root effective type first, then each member in owner order. This is
     // the recursive FR-150 value in flat form, so Clone and Drop use no
     // call stack proportional to owner depth.
     chain: Vec<OriginalDeclarationKey>,
+}
+
+impl fmt::Debug for EffectiveId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "EffectiveId({:?})", self.chain)
+    }
 }
 
 impl EffectiveId {
@@ -155,8 +161,8 @@ impl fmt::Debug for UnitId {
         // Keep a unit on one line inside an alternate Debug of a quantity
         // type, as FR-387's bounded type layout requires.
         match self {
-            Self::Declared(node) => write!(f, "Declared({node:?})"),
-            Self::Compound(terms) => write!(f, "Compound({terms:?})"),
+            Self::Declared(node) => write!(f, "UnitId(Declared({node:?}))"),
+            Self::Compound(terms) => write!(f, "UnitId(Compound({terms:?}))"),
         }
     }
 }
@@ -204,10 +210,16 @@ impl UnitId {
 pub struct EmptyVariantName;
 
 /// The declaration node and exact case name of an enum or union member.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct VariantId {
     owner: NodeKey,
     case: String,
+}
+
+impl fmt::Debug for VariantId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "VariantId({:?}, {:?})", self.owner, self.case)
+    }
 }
 
 impl VariantId {
