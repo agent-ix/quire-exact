@@ -623,8 +623,8 @@ mod tests {
         );
     }
 
-    /// Trace: FR-391-AC-4, FR-391-AC-5, TC-940.
-    #[trace("FR-391-AC-4", "FR-391-AC-5", "TC-940")]
+    /// Trace: FR-391-AC-5, TC-940.
+    #[trace("FR-391-AC-5", "TC-940")]
     #[test]
     fn policy_node_copy_reports_each_real_request_and_preserves_source() {
         let nested = key("nested", vec![PathSegment::Text("inner".into())], 2);
