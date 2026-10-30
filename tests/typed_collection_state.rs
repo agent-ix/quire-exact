@@ -357,7 +357,7 @@ fn inspection_refuses_malformed_storage_and_charges_only_membership_and_bound() 
             });
             assert!(matches!(
                 inspect_typed_poststate(&declared, value, &mut denied, Some(&mut admitted)),
-                Ok(Outcome::Incomplete(_))
+                Ok(Outcome::Incomplete(incomplete)) if incomplete.charge_point == point
             ));
         }
     }
@@ -379,7 +379,7 @@ fn denied_collection_charges_return_only_incomplete() {
         });
         assert!(matches!(
             build_typed_prestate(&ordered, values(&[1, 2]), &mut denied, Some(&mut admitted)),
-            Ok(Outcome::Incomplete(_))
+            Ok(Outcome::Incomplete(incomplete)) if incomplete.charge_point == point
         ));
     }
     let sequence = ty(CollectionKind::Sequence, None);
@@ -394,6 +394,7 @@ fn denied_collection_charges_return_only_incomplete() {
     });
     assert!(matches!(
         inspect_typed_poststate(&sequence, &stored, &mut denied, Some(&mut admitted)),
-        Ok(Outcome::Incomplete(_))
+        Ok(Outcome::Incomplete(incomplete))
+            if incomplete.charge_point == ChargePoint::CollectionBound
     ));
 }
