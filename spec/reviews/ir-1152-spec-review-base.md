@@ -20,3 +20,13 @@ Independent review of PR #107 at frozen head `c05049b`. FR-391 and TC-940 cover 
 ## Coverage
 
 TC-940 exercises all five FR-391 criteria. Synthetic count and layout controls avoid impossible fixture allocation. QSV FR-108 and FR-115 own carrier projection and publication; FR-390/TC-939 separately own `Integer` copy and decimal output.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | At `a040148`, AC-2 and TC-940 step 2 distinguish crate-internal native reservation refusal (`Allocation { requested }`) from an independent public callback denial that preserves its chosen non-allocation type and value. Expected Result 2 makes the same distinction. |
+
+## Verdict
+
+PASS at `a0401486071a65cef16d5a3914a919f472229652` for the base review finding.
