@@ -35,3 +35,7 @@ PASS — no findings in the changed code or FR-389 criterion bindings.
 ## Method and limits
 
 Plan completion: not assessed. `quire matrix --scope . --format json` found FR-389-AC-1 through AC-8 tagged with test binders at this head. The changed tests contain behavioral assertions; no stub or new unowned behavior was found in the PR diff. This is a diff-scoped gap analysis, not a full repository semantic audit. Focused test execution was queued by the coder.
+
+## Post-review delta at 97c5343
+
+The same PR changed only `UniverseId` storage to `Box<NodeKey>`, the `UnitId` debug formatter, a matching `Refusal` doc comment, and three test ownership fixes. `Box<NodeKey>` delegates equality, ordering, and hashing to the node; the public `new` and `root_type` signatures and QSpec FR-201 component remain the same. The custom `UnitId` formatter keeps its nested representation compact inside the FR-387 alternate bounded-quantity layout. The FR-387-AC-6 bounded quantity debug test and the other ten bounded quantity tests passed in the coder's focused log. The coder's Clippy log exits 0, and `git diff --check c295996..97c5343` is clean. No production identity component, AC, CI gate, or digest compatibility path changed. The lead owns the final full gate. No real finding was recorded in the original review, so no finding disposition row is needed.
