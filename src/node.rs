@@ -21,6 +21,56 @@ use triomphe::Arc;
 
 use crate::identity_copy::{array_bytes, copy_text, retype, IdentityCopyError};
 
+#[cfg(test)]
+mod construction_probe {
+    use std::cell::Cell;
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub(super) struct Counts {
+        pub direct_visits: usize,
+        pub direct_moves: usize,
+        pub descendant_visits: usize,
+        pub descendant_copies: usize,
+        pub shallow_clones: usize,
+    }
+
+    std::thread_local! {
+        static COUNTS: Cell<Counts> = Cell::new(Counts::default());
+    }
+
+    fn update(change: impl FnOnce(&mut Counts)) {
+        COUNTS.with(|cell| {
+            let mut counts = cell.get();
+            change(&mut counts);
+            cell.set(counts);
+        });
+    }
+
+    pub(super) fn reset() {
+        COUNTS.with(|cell| cell.set(Counts::default()));
+    }
+
+    pub(super) fn snapshot() -> Counts {
+        COUNTS.with(Cell::get)
+    }
+
+    pub(super) fn direct_visit() {
+        update(|counts| counts.direct_visits += 1);
+    }
+    pub(super) fn direct_move() {
+        update(|counts| counts.direct_moves += 1);
+    }
+    pub(super) fn descendant_visit() {
+        update(|counts| counts.descendant_visits += 1);
+    }
+    pub(super) fn descendant_copy() {
+        update(|counts| counts.descendant_copies += 1);
+    }
+    pub(super) fn shallow_clone() {
+        update(|counts| counts.shallow_clones += 1);
+    }
+}
+
 /// The greatest node ordinal admitted by the checked-package V2 schema.
 pub const MAX_NODE_ORDINAL: u64 = 9_007_199_254_740_991;
 
@@ -152,9 +202,18 @@ fn node_arc_bytes() -> Result<usize, ()> {
 /// A structural node identity from an admitted checked package.
 ///
 /// quire:canonical
-#[derive(Clone)]
 pub struct NodeKey {
     inner: Arc<NodeData>,
+}
+
+impl Clone for NodeKey {
+    fn clone(&self) -> Self {
+        #[cfg(test)]
+        construction_probe::shallow_clone();
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 struct NodeData {
@@ -172,10 +231,21 @@ struct CopyFrame<'a> {
     next: usize,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 enum FlatSegment {
     Text(String),
     Node(NodeKey),
+}
+
+impl Clone for FlatSegment {
+    fn clone(&self) -> Self {
+        #[cfg(test)]
+        construction_probe::descendant_copy();
+        match self {
+            Self::Text(text) => Self::Text(text.clone()),
+            Self::Node(node) => Self::Node(node.clone()),
+        }
+    }
 }
 
 struct DropFrame {
@@ -251,6 +321,8 @@ impl<'a> NodeKeyView<'a> {
 
     /// Iterate over direct path segments without copying nested identities.
     pub fn path(self) -> NodePathIter<'a> {
+        #[cfg(test)]
+        construction_probe::descendant_visit();
         NodePathIter {
             path: self.data.path.iter(),
         }
@@ -276,8 +348,16 @@ impl<'a> Iterator for NodePathIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.path.next()? {
-            FlatSegment::Text(text) => Some(PathSegmentView::Text(text)),
-            FlatSegment::Node(node) => Some(PathSegmentView::Node(node.view())),
+            FlatSegment::Text(text) => {
+                #[cfg(test)]
+                construction_probe::descendant_visit();
+                Some(PathSegmentView::Text(text))
+            }
+            FlatSegment::Node(node) => {
+                #[cfg(test)]
+                construction_probe::descendant_visit();
+                Some(PathSegmentView::Node(node.view()))
+            }
         }
     }
 }
@@ -472,6 +552,8 @@ impl NodeKey {
         }
         let mut token_count = 3_usize;
         for segment in &path {
+            #[cfg(test)]
+            construction_probe::direct_visit();
             let additional = match segment {
                 PathSegment::Text(_) => 1,
                 PathSegment::Node(node) => nested_token_count(node.inner.token_count)?,
@@ -490,6 +572,8 @@ impl NodeKey {
             .try_reserve_exact(path.len())
             .map_err(|_| InvalidNodeKey::Allocation { requested })?;
         for segment in path {
+            #[cfg(test)]
+            construction_probe::direct_move();
             direct.push(match segment {
                 PathSegment::Text(text) => FlatSegment::Text(text),
                 PathSegment::Node(node) => FlatSegment::Node(node),
@@ -528,6 +612,8 @@ impl NodeKey {
 
     /// The path segments in component order. Nested identities share storage.
     pub fn path(&self) -> Vec<PathSegment> {
+        #[cfg(test)]
+        construction_probe::descendant_visit();
         self.inner
             .path
             .iter()
@@ -575,6 +661,8 @@ impl NodeKey {
             before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
             native_reserve: &mut impl FnMut(usize) -> bool,
         ) -> Result<CopyFrame<'a>, IdentityCopyError<E>> {
+            #[cfg(test)]
+            construction_probe::descendant_copy();
             let package = copy_text(&source.inner.package, before_reserve, native_reserve)?;
             let requested = array_bytes::<FlatSegment>(source.inner.path.len()).map_err(retype)?;
             before_reserve(requested).map_err(IdentityCopyError::Policy)?;
@@ -1529,34 +1617,119 @@ mod tests {
             key
         }
 
-        fn measured_derived(operand: NodeKey) -> (NodeKey, u64, u64) {
+        fn measured_derived(operand: NodeKey) -> (NodeKey, u64, u64, construction_probe::Counts) {
             let package = String::from("derived");
             let path = vec![PathSegment::Node(operand)];
             let mut result = None;
+            construction_probe::reset();
             let allocations = allocation_counter::measure(|| {
                 result = Some(NodeKey::new(package, path, 0).unwrap());
             });
+            let counts = construction_probe::snapshot();
             (
                 result.expect("derived key was constructed"),
                 allocations.count_total,
                 allocations.bytes_total,
+                counts,
             )
+        }
+
+        fn write_json_string(output: &mut String, value: &str) {
+            use core::fmt::Write;
+
+            output.push('"');
+            for character in value.chars() {
+                match character {
+                    '"' => output.push_str("\\\""),
+                    '\\' => output.push_str("\\\\"),
+                    '\u{0000}'..='\u{001f}' => {
+                        write!(output, "\\u{:04x}", u32::from(character)).unwrap();
+                    }
+                    other => output.push(other),
+                }
+            }
+            output.push('"');
+        }
+
+        fn encode_borrowed_node(view: NodeKeyView<'_>) -> String {
+            use core::fmt::Write;
+
+            enum Frame<'a> {
+                Node(NodeKeyView<'a>),
+                Path(NodePathIter<'a>, u64, bool),
+            }
+
+            let mut output = String::new();
+            let mut stack = vec![Frame::Node(view)];
+            while let Some(frame) = stack.pop() {
+                match frame {
+                    Frame::Node(node) => {
+                        output.push_str("{\"package\":");
+                        write_json_string(&mut output, node.package());
+                        output.push_str(",\"path\":[");
+                        stack.push(Frame::Path(node.path(), node.ordinal(), false));
+                    }
+                    Frame::Path(mut path, ordinal, already_wrote_segment) => {
+                        if let Some(segment) = path.next() {
+                            if already_wrote_segment {
+                                output.push(',');
+                            }
+                            stack.push(Frame::Path(path, ordinal, true));
+                            match segment {
+                                PathSegmentView::Text(text) => {
+                                    write_json_string(&mut output, text);
+                                }
+                                PathSegmentView::Node(child) => stack.push(Frame::Node(child)),
+                            }
+                        } else {
+                            write!(output, "],\"ordinal\":{ordinal}}}").unwrap();
+                        }
+                    }
+                }
+            }
+            output
         }
 
         std::thread::Builder::new()
             .stack_size(512 * 1024)
             .spawn(|| {
-                let (shallow, shallow_count, shallow_bytes) = measured_derived(chain(1_000));
-                let (deep, deep_count, deep_bytes) = measured_derived(chain(10_000));
+                let (shallow, shallow_count, shallow_bytes, shallow_visits) =
+                    measured_derived(chain(1_000));
+                let (deep, deep_count, deep_bytes, deep_visits) = measured_derived(chain(10_000));
                 assert_eq!((shallow_count, shallow_bytes), (deep_count, deep_bytes));
                 assert_eq!(deep_count, 3, "direct path, drop frame, shared payload");
+                for visits in [shallow_visits, deep_visits] {
+                    assert_eq!(visits.direct_visits, 1);
+                    assert_eq!(visits.direct_moves, 1);
+                    assert_eq!(visits.descendant_visits, 0);
+                    assert_eq!(visits.descendant_copies, 0);
+                }
 
-                let mut copied = None;
-                let allocations = allocation_counter::measure(|| copied = Some(deep.clone()));
-                assert_eq!((allocations.count_total, allocations.bytes_total), (0, 0));
-                let copied = copied.expect("ordinary clone shares storage");
+                for source in [&shallow, &deep] {
+                    let mut copied = None;
+                    construction_probe::reset();
+                    let allocations =
+                        allocation_counter::measure(|| copied = Some((*source).clone()));
+                    let visits = construction_probe::snapshot();
+                    assert_eq!((allocations.count_total, allocations.bytes_total), (0, 0));
+                    assert_eq!(visits.shallow_clones, 1);
+                    assert_eq!(visits.descendant_visits, 0);
+                    assert_eq!(visits.descendant_copies, 0);
+                    assert!(Arc::ptr_eq(&source.inner, &copied.unwrap().inner));
+                }
+                let copied = deep.clone();
                 assert!(Arc::ptr_eq(&deep.inner, &copied.inner));
                 assert_eq!(deep, copied);
+
+                let encoded = encode_borrowed_node(deep.view());
+                let expected = [
+                    "{\"package\":\"derived\",\"path\":[",
+                    &"{\"package\":\"owner\",\"path\":[".repeat(10_000),
+                    "{\"package\":\"leaf\",\"path\":[\"x\"],\"ordinal\":0}",
+                    &"],\"ordinal\":0}".repeat(10_001),
+                ]
+                .concat();
+                assert_eq!(encoded, expected);
 
                 let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
                 let workers: Vec<_> = [deep.clone(), copied]
