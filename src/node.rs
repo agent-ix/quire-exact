@@ -669,9 +669,10 @@ mod tests {
         std::thread::Builder::new()
             .stack_size(512 * 1024)
             .spawn(|| {
-                let mut node = key("deep", vec![PathSegment::Text("root".into())], 0);
-                for _ in 0..10_000 {
-                    node = key("deep", vec![PathSegment::Node(node)], 0);
+                let mut node = key("root-owner", vec![PathSegment::Text("root".into())], 17);
+                for depth in 0..10_000 {
+                    let package = if depth % 2 == 0 { "even" } else { "odd" };
+                    node = key(package, vec![PathSegment::Node(node)], depth);
                 }
                 let copy = node.try_clone().unwrap();
                 assert_eq!(copy, node);
@@ -679,23 +680,33 @@ mod tests {
                 assert_eq!(segment.try_clone().unwrap(), segment);
                 let mut pending = Vec::new();
                 pending.try_reserve(1).unwrap();
-                pending.push(node.view());
+                pending.push((node.view(), 10_000));
                 let mut nodes = 0;
-                let mut roots = 0;
-                while let Some(view) = pending.pop() {
+                while let Some((view, depth)) = pending.pop() {
                     nodes += 1;
-                    for segment in view.path() {
-                        match segment {
-                            PathSegmentView::Text("root") => roots += 1,
-                            PathSegmentView::Text(other) => panic!("unexpected {other}"),
-                            PathSegmentView::Node(child) => {
-                                pending.try_reserve(1).unwrap();
-                                pending.push(child);
-                            }
-                        }
+                    let mut path = view.path();
+                    if depth == 0 {
+                        assert_eq!((view.package(), view.ordinal()), ("root-owner", 17));
+                        assert!(matches!(path.next(), Some(PathSegmentView::Text("root"))));
+                    } else {
+                        let source_depth = depth - 1;
+                        let expected_package = if source_depth % 2 == 0 { "even" } else { "odd" };
+                        assert_eq!(
+                            (view.package(), view.ordinal()),
+                            (expected_package, source_depth)
+                        );
+                        let Some(PathSegmentView::Node(child)) = path.next() else {
+                            panic!("depth {depth} must contain its nested child");
+                        };
+                        pending.try_reserve(1).unwrap();
+                        pending.push((child, source_depth));
                     }
+                    assert!(
+                        path.next().is_none(),
+                        "depth {depth} has an extra path segment"
+                    );
                 }
-                assert_eq!((nodes, roots), (10_001, 1));
+                assert_eq!(nodes, 10_001);
             })
             .unwrap()
             .join()
