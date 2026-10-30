@@ -154,6 +154,9 @@ enum FlatSegment {
         direct_len: usize,
         ordinal: u64,
         span: usize,
+        // Distance from this header to its parent header; None means the
+        // parent is the outer NodeKey. Relative links survive flat copies.
+        parent_back: Option<usize>,
     },
 }
 
@@ -221,6 +224,7 @@ impl<'a> Iterator for NodePathIter<'a> {
                 direct_len,
                 ordinal,
                 span,
+                ..
             } => {
                 let start = self.index + 1;
                 self.index += *span;
@@ -235,102 +239,121 @@ impl<'a> Iterator for NodePathIter<'a> {
     }
 }
 
-struct CompareFrame<'a> {
-    left: NodeKeyView<'a>,
-    right: NodeKeyView<'a>,
-    left_index: usize,
-    right_index: usize,
-    left_remaining: usize,
-    right_remaining: usize,
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+enum ComparePart<'a> {
+    Package(&'a str),
+    PathEnd,
+    Text(&'a str),
+    NodeStart,
+    Ordinal(u64),
+    Done,
 }
 
-impl<'a> CompareFrame<'a> {
-    fn new(left: NodeKeyView<'a>, right: NodeKeyView<'a>) -> Self {
+enum ComparePhase {
+    Package,
+    Path,
+    Ordinal,
+    Ascend,
+}
+
+struct CompareCursor<'a> {
+    key: &'a NodeKey,
+    // None denotes the outer identity. Each nested header carries the link
+    // needed to resume its parent after the subtree's ordinal.
+    header: Option<usize>,
+    next_index: usize,
+    phase: ComparePhase,
+}
+
+impl<'a> CompareCursor<'a> {
+    fn new(key: &'a NodeKey) -> Self {
         Self {
-            left,
-            right,
-            left_index: 0,
-            right_index: 0,
-            left_remaining: left.direct_len,
-            right_remaining: right.direct_len,
+            key,
+            header: None,
+            next_index: 0,
+            phase: ComparePhase::Package,
+        }
+    }
+
+    fn next(&mut self) -> ComparePart<'a> {
+        loop {
+            match self.phase {
+                ComparePhase::Package => {
+                    self.phase = ComparePhase::Path;
+                    return match self.header {
+                        None => ComparePart::Package(&self.key.package),
+                        Some(index) => match &self.key.path[index] {
+                            FlatSegment::Node { package, .. } => ComparePart::Package(package),
+                            FlatSegment::Text(_) => unreachable!("comparison header is a node"),
+                        },
+                    };
+                }
+                ComparePhase::Path => {
+                    let end = match self.header {
+                        None => self.key.path.len(),
+                        Some(index) => match &self.key.path[index] {
+                            FlatSegment::Node { span, .. } => index + *span,
+                            FlatSegment::Text(_) => unreachable!("comparison header is a node"),
+                        },
+                    };
+                    if self.next_index == end {
+                        self.phase = ComparePhase::Ordinal;
+                        return ComparePart::PathEnd;
+                    }
+                    match &self.key.path[self.next_index] {
+                        FlatSegment::Text(text) => {
+                            self.next_index += 1;
+                            return ComparePart::Text(text);
+                        }
+                        FlatSegment::Node { .. } => {
+                            self.header = Some(self.next_index);
+                            self.next_index += 1;
+                            self.phase = ComparePhase::Package;
+                            return ComparePart::NodeStart;
+                        }
+                    }
+                }
+                ComparePhase::Ordinal => {
+                    self.phase = ComparePhase::Ascend;
+                    return match self.header {
+                        None => ComparePart::Ordinal(self.key.ordinal),
+                        Some(index) => match &self.key.path[index] {
+                            FlatSegment::Node { ordinal, .. } => ComparePart::Ordinal(*ordinal),
+                            FlatSegment::Text(_) => unreachable!("comparison header is a node"),
+                        },
+                    };
+                }
+                ComparePhase::Ascend => {
+                    let Some(index) = self.header else {
+                        return ComparePart::Done;
+                    };
+                    let FlatSegment::Node {
+                        span, parent_back, ..
+                    } = &self.key.path[index]
+                    else {
+                        unreachable!("comparison header is a node")
+                    };
+                    self.next_index = index + *span;
+                    self.header = parent_back.map(|distance| index - distance);
+                    self.phase = ComparePhase::Path;
+                }
+            }
         }
     }
 }
 
 impl Ord for NodeKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut frames = Vec::new();
-        frames.push(CompareFrame::new(self.view(), other.view()));
-        while let Some(frame) = frames.last_mut() {
-            match frame.left.package.cmp(frame.right.package) {
-                Ordering::Equal => {}
-                different => return different,
-            }
-            match (frame.left_remaining, frame.right_remaining) {
-                (0, 0) => {
-                    let order = frame.left.ordinal.cmp(&frame.right.ordinal);
-                    if !order.is_eq() {
-                        return order;
-                    }
-                    frames.pop();
-                    continue;
-                }
-                (0, _) => return Ordering::Less,
-                (_, 0) => return Ordering::Greater,
-                _ => {}
-            }
-            let left = &frame.left.path[frame.left_index];
-            let right = &frame.right.path[frame.right_index];
-            match (left, right) {
-                (FlatSegment::Text(a), FlatSegment::Text(b)) => {
-                    let order = a.cmp(b);
-                    if !order.is_eq() {
-                        return order;
-                    }
-                    frame.left_index += 1;
-                    frame.right_index += 1;
-                    frame.left_remaining -= 1;
-                    frame.right_remaining -= 1;
-                }
-                (FlatSegment::Text(_), FlatSegment::Node { .. }) => return Ordering::Less,
-                (FlatSegment::Node { .. }, FlatSegment::Text(_)) => return Ordering::Greater,
-                (
-                    FlatSegment::Node {
-                        package: left_package,
-                        direct_len: left_len,
-                        ordinal: left_ordinal,
-                        span: left_span,
-                    },
-                    FlatSegment::Node {
-                        package: right_package,
-                        direct_len: right_len,
-                        ordinal: right_ordinal,
-                        span: right_span,
-                    },
-                ) => {
-                    let left_path = frame.left.path;
-                    let right_path = frame.right.path;
-                    let left_node = NodeKeyView {
-                        package: left_package,
-                        path: &left_path[frame.left_index + 1..frame.left_index + *left_span],
-                        direct_len: *left_len,
-                        ordinal: *left_ordinal,
-                    };
-                    let right_node = NodeKeyView {
-                        package: right_package,
-                        path: &right_path[frame.right_index + 1..frame.right_index + *right_span],
-                        direct_len: *right_len,
-                        ordinal: *right_ordinal,
-                    };
-                    frame.left_index += *left_span;
-                    frame.right_index += *right_span;
-                    frame.left_remaining -= 1;
-                    frame.right_remaining -= 1;
-                    frames.push(CompareFrame::new(left_node, right_node));
-                }
+        let mut left = CompareCursor::new(self);
+        let mut right = CompareCursor::new(other);
+        loop {
+            let a = left.next();
+            let b = right.next();
+            let order = a.cmp(&b);
+            if !order.is_eq() || a == ComparePart::Done {
+                return order;
             }
         }
-        Ordering::Equal
     }
 }
 
@@ -400,15 +423,31 @@ impl NodeKey {
                     before_reserve(requested)?;
                     flat.try_reserve(needed)
                         .map_err(|_| InvalidNodeKey::Allocation { requested })?;
+                    let header = flat.len();
                     flat.push(FlatSegment::Node {
                         package,
                         direct_len,
                         ordinal,
                         span: needed,
+                        parent_back: None,
                     });
                     // The reservation above admits this header and every child token.
                     for token in path {
                         flat.push(token);
+                    }
+                    // Reparent only the nested key's direct children. Their own
+                    // descendants keep relative links within their subtrees.
+                    let mut child = header + 1;
+                    while child < header + needed {
+                        match &mut flat[child] {
+                            FlatSegment::Text(_) => child += 1,
+                            FlatSegment::Node {
+                                span, parent_back, ..
+                            } => {
+                                *parent_back = Some(child - header);
+                                child += *span;
+                            }
+                        }
                     }
                 }
             }
@@ -442,10 +481,24 @@ impl NodeKey {
                     direct_len,
                     ordinal,
                     span,
+                    ..
                 } => {
+                    let mut path = self.path[index + 1..index + *span].to_vec();
+                    let mut child = 0;
+                    while child < path.len() {
+                        match &mut path[child] {
+                            FlatSegment::Text(_) => child += 1,
+                            FlatSegment::Node {
+                                span, parent_back, ..
+                            } => {
+                                *parent_back = None;
+                                child += *span;
+                            }
+                        }
+                    }
                     result.push(PathSegment::Node(NodeKey {
                         package: package.clone(),
-                        path: self.path[index + 1..index + *span].to_vec(),
+                        path,
                         direct_len: *direct_len,
                         ordinal: *ordinal,
                     }));
@@ -512,11 +565,13 @@ impl NodeKey {
                     direct_len,
                     ordinal,
                     span,
+                    parent_back,
                 } => FlatSegment::Node {
                     package: copy_text(package, before_reserve, native_reserve)?,
                     direct_len: *direct_len,
                     ordinal: *ordinal,
                     span: *span,
+                    parent_back: *parent_back,
                 },
             };
             path.push(copied);
@@ -547,11 +602,13 @@ impl NodeKey {
                     direct_len,
                     ordinal,
                     span,
+                    parent_back,
                 } => FlatSegment::Node {
                     package: copy_text_with(package, before_reserve)?,
                     direct_len: *direct_len,
                     ordinal: *ordinal,
                     span: *span,
+                    parent_back: *parent_back,
                 },
             };
             path.push(copied);
@@ -772,6 +829,159 @@ mod tests {
                 0
             ) < key("Pkg", vec![nested, PathSegment::Text("b".into())], 0)
         );
+    }
+
+    fn assert_unallocated_order(left: &NodeKey, right: &NodeKey, expected: Ordering) {
+        let mut actual = None;
+        let allocations = allocation_counter::measure(|| actual = Some(left.cmp(right)));
+        assert_eq!(allocations.count_total, 0);
+        assert_eq!(allocations.bytes_total, 0);
+        assert_eq!(actual, Some(expected));
+
+        let mut partial = None;
+        let allocations = allocation_counter::measure(|| partial = left.partial_cmp(right));
+        assert_eq!(allocations.count_total, 0);
+        assert_eq!(allocations.bytes_total, 0);
+        assert_eq!(partial, Some(expected));
+    }
+
+    /// Trace: FR-389-AC-13, TC-938.
+    #[trace("FR-389-AC-13", "TC-938")]
+    #[test]
+    fn structural_order_uses_no_heap_or_depth_dependent_stack() {
+        let text = |value: &str| PathSegment::Text(value.into());
+        let base = key("p", vec![text("a")], 0);
+        let equal = key("p", vec![text("a")], 0);
+        let pairs = [
+            (base.clone(), equal, Ordering::Equal),
+            (base.clone(), key("q", vec![text("a")], 0), Ordering::Less),
+            (base.clone(), key("p", vec![text("b")], 0), Ordering::Less),
+            (
+                base.clone(),
+                key("p", vec![PathSegment::Node(base.clone())], 0),
+                Ordering::Less,
+            ),
+            (
+                base.clone(),
+                key("p", vec![text("a"), text("b")], 0),
+                Ordering::Less,
+            ),
+            (base.clone(), key("p", vec![text("a")], 1), Ordering::Less),
+            (
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("x")], 0))],
+                    0,
+                ),
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("b", vec![text("x")], 0))],
+                    0,
+                ),
+                Ordering::Less,
+            ),
+            (
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a")], 0))],
+                    0,
+                ),
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("b")], 0))],
+                    0,
+                ),
+                Ordering::Less,
+            ),
+            (
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a")], 0))],
+                    0,
+                ),
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a"), text("b")], 0))],
+                    0,
+                ),
+                Ordering::Less,
+            ),
+            (
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a")], 0))],
+                    0,
+                ),
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a")], 1))],
+                    0,
+                ),
+                Ordering::Less,
+            ),
+            (
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a")], 0)), text("a")],
+                    0,
+                ),
+                key(
+                    "p",
+                    vec![PathSegment::Node(key("a", vec![text("a")], 0)), text("b")],
+                    0,
+                ),
+                Ordering::Less,
+            ),
+        ];
+        for (left, right, expected) in &pairs {
+            let before_left = left.clone();
+            let before_right = right.clone();
+            assert_unallocated_order(left, right, *expected);
+            assert_unallocated_order(right, left, expected.reverse());
+            assert_eq!(left, &before_left);
+            assert_eq!(right, &before_right);
+            if expected.is_eq() {
+                assert_eq!(left, right);
+                let mut left_hash = DefaultHasher::new();
+                let mut right_hash = DefaultHasher::new();
+                left.hash(&mut left_hash);
+                right.hash(&mut right_hash);
+                assert_eq!(left_hash.finish(), right_hash.finish());
+            }
+            let rebuilt = key(left.package(), left.path(), left.ordinal());
+            assert_eq!(rebuilt, *left);
+            assert_unallocated_order(&rebuilt, left, Ordering::Equal);
+        }
+
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let mut left = key("leaf", vec![PathSegment::Text("a".into())], 0);
+                let mut equal = key("leaf", vec![PathSegment::Text("a".into())], 0);
+                let mut differing = key("leaf", vec![PathSegment::Text("b".into())], 0);
+                for _ in 0..10_000 {
+                    left = key("outer", vec![PathSegment::Node(left)], 0);
+                    equal = key("outer", vec![PathSegment::Node(equal)], 0);
+                    differing = key("outer", vec![PathSegment::Node(differing)], 0);
+                }
+                assert_unallocated_order(&left, &equal, Ordering::Equal);
+                assert_unallocated_order(&equal, &left, Ordering::Equal);
+                assert_unallocated_order(&left, &differing, Ordering::Less);
+                assert_unallocated_order(&differing, &left, Ordering::Greater);
+                assert_eq!(left, equal);
+                let mut left_hash = DefaultHasher::new();
+                let mut equal_hash = DefaultHasher::new();
+                left.hash(&mut left_hash);
+                equal.hash(&mut equal_hash);
+                assert_eq!(left_hash.finish(), equal_hash.finish());
+                assert_ne!(left, differing);
+                let rebuilt = key(left.package(), left.path(), left.ordinal());
+                assert_eq!(rebuilt, left);
+                assert_unallocated_order(&rebuilt, &left, Ordering::Equal);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     /// Trace: FR-389-AC-2, TC-938.
