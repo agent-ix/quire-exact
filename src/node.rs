@@ -7,7 +7,7 @@
 //! checks only the closed shape and never computes a digest.
 
 use alloc::{boxed::Box, string::String, vec::Vec};
-use core::fmt;
+use core::{cmp::Ordering, fmt};
 
 /// The greatest node ordinal admitted by the checked-package V2 schema.
 pub const MAX_NODE_ORDINAL: u64 = 9_007_199_254_740_991;
@@ -78,11 +78,139 @@ pub enum InvalidNodeKey {
 /// A structural node identity from an admitted checked package.
 ///
 /// quire:canonical
-#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct NodeKey {
     package: String,
-    path: Box<[PathSegment]>,
+    // Preorder tokens. Each nested node header gives the span of its subtree;
+    // no owned token contains another token, so ordinary Clone and Drop are
+    // depth independent.
+    path: Vec<FlatSegment>,
+    direct_len: usize,
     ordinal: u64,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum FlatSegment {
+    Text(String),
+    Node {
+        package: String,
+        direct_len: usize,
+        ordinal: u64,
+        span: usize,
+    },
+}
+
+#[derive(Clone, Copy)]
+struct NodeView<'a> {
+    package: &'a str,
+    path: &'a [FlatSegment],
+    direct_len: usize,
+    ordinal: u64,
+}
+
+struct CompareFrame<'a> {
+    left: NodeView<'a>,
+    right: NodeView<'a>,
+    left_index: usize,
+    right_index: usize,
+    left_remaining: usize,
+    right_remaining: usize,
+}
+
+impl<'a> CompareFrame<'a> {
+    fn new(left: NodeView<'a>, right: NodeView<'a>) -> Self {
+        Self {
+            left,
+            right,
+            left_index: 0,
+            right_index: 0,
+            left_remaining: left.direct_len,
+            right_remaining: right.direct_len,
+        }
+    }
+}
+
+impl Ord for NodeKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut frames = Vec::new();
+        frames.push(CompareFrame::new(self.view(), other.view()));
+        while let Some(frame) = frames.last_mut() {
+            match frame.left.package.cmp(frame.right.package) {
+                Ordering::Equal => {}
+                different => return different,
+            }
+            match (frame.left_remaining, frame.right_remaining) {
+                (0, 0) => {
+                    let order = frame.left.ordinal.cmp(&frame.right.ordinal);
+                    if !order.is_eq() {
+                        return order;
+                    }
+                    frames.pop();
+                    continue;
+                }
+                (0, _) => return Ordering::Less,
+                (_, 0) => return Ordering::Greater,
+                _ => {}
+            }
+            let left = &frame.left.path[frame.left_index];
+            let right = &frame.right.path[frame.right_index];
+            match (left, right) {
+                (FlatSegment::Text(a), FlatSegment::Text(b)) => {
+                    let order = a.cmp(b);
+                    if !order.is_eq() {
+                        return order;
+                    }
+                    frame.left_index += 1;
+                    frame.right_index += 1;
+                    frame.left_remaining -= 1;
+                    frame.right_remaining -= 1;
+                }
+                (FlatSegment::Text(_), FlatSegment::Node { .. }) => return Ordering::Less,
+                (FlatSegment::Node { .. }, FlatSegment::Text(_)) => return Ordering::Greater,
+                (
+                    FlatSegment::Node {
+                        package: left_package,
+                        direct_len: left_len,
+                        ordinal: left_ordinal,
+                        span: left_span,
+                    },
+                    FlatSegment::Node {
+                        package: right_package,
+                        direct_len: right_len,
+                        ordinal: right_ordinal,
+                        span: right_span,
+                    },
+                ) => {
+                    let left_path = frame.left.path;
+                    let right_path = frame.right.path;
+                    let left_node = NodeView {
+                        package: left_package,
+                        path: &left_path[frame.left_index + 1..frame.left_index + *left_span],
+                        direct_len: *left_len,
+                        ordinal: *left_ordinal,
+                    };
+                    let right_node = NodeView {
+                        package: right_package,
+                        path: &right_path[frame.right_index + 1..frame.right_index + *right_span],
+                        direct_len: *right_len,
+                        ordinal: *right_ordinal,
+                    };
+                    frame.left_index += *left_span;
+                    frame.right_index += *right_span;
+                    frame.left_remaining -= 1;
+                    frame.right_remaining -= 1;
+                    frames.push(CompareFrame::new(left_node, right_node));
+                }
+            }
+        }
+        Ordering::Equal
+    }
+}
+
+impl PartialOrd for NodeKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl NodeKey {
@@ -103,9 +231,32 @@ impl NodeKey {
         if ordinal > MAX_NODE_ORDINAL {
             return Err(InvalidNodeKey::OrdinalOutOfRange);
         }
+        let direct_len = path.len();
+        let mut flat = Vec::new();
+        for segment in path {
+            match segment {
+                PathSegment::Text(text) => flat.push(FlatSegment::Text(text)),
+                PathSegment::Node(node) => {
+                    let NodeKey {
+                        package,
+                        path,
+                        direct_len,
+                        ordinal,
+                    } = *node;
+                    flat.push(FlatSegment::Node {
+                        package,
+                        direct_len,
+                        ordinal,
+                        span: path.len() + 1,
+                    });
+                    flat.extend(path);
+                }
+            }
+        }
         Ok(Self {
             package,
-            path: path.into_boxed_slice(),
+            path: flat,
+            direct_len,
             ordinal,
         })
     }
@@ -115,14 +266,48 @@ impl NodeKey {
         &self.package
     }
 
-    /// The path segments in component order.
-    pub fn path(&self) -> &[PathSegment] {
-        &self.path
+    /// The path segments in component order. This reconstructs owned segment
+    /// views from the flat carrier; each nested node remains flat.
+    pub fn path(&self) -> Vec<PathSegment> {
+        let mut result = Vec::with_capacity(self.direct_len);
+        let mut index = 0;
+        while index < self.path.len() {
+            match &self.path[index] {
+                FlatSegment::Text(text) => {
+                    result.push(PathSegment::Text(text.clone()));
+                    index += 1;
+                }
+                FlatSegment::Node {
+                    package,
+                    direct_len,
+                    ordinal,
+                    span,
+                } => {
+                    result.push(PathSegment::Node(Box::new(NodeKey {
+                        package: package.clone(),
+                        path: self.path[index + 1..index + *span].to_vec(),
+                        direct_len: *direct_len,
+                        ordinal: *ordinal,
+                    })));
+                    index += *span;
+                }
+            }
+        }
+        result
     }
 
     /// The ordinal within the owning package and path.
     pub fn ordinal(&self) -> u64 {
         self.ordinal
+    }
+
+    fn view(&self) -> NodeView<'_> {
+        NodeView {
+            package: &self.package,
+            path: &self.path,
+            direct_len: self.direct_len,
+            ordinal: self.ordinal,
+        }
     }
 
     #[cfg(test)]
@@ -150,6 +335,8 @@ impl fmt::Debug for NodeKey {
 mod tests {
     use alloc::string::ToString;
     use ix_trace_rs::trace;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     use super::*;
 
@@ -200,6 +387,25 @@ mod tests {
             )
         );
         assert!(
+            key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("A".into())],
+                    0,
+                )))],
+                0,
+            ) < key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("A".into())],
+                    1,
+                )))],
+                0,
+            )
+        );
+        assert!(
             a < key(
                 "Pkg",
                 vec![
@@ -232,6 +438,44 @@ mod tests {
             key("Pkg", path, MAX_NODE_ORDINAL).ordinal(),
             MAX_NODE_ORDINAL
         );
+    }
+
+    #[trace("TC-938", "FR-389-AC-1", "FR-389-AC-7")]
+    #[test]
+    fn deep_nested_path_clones_compares_hashes_formats_and_drops_on_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let mut node = key("Pkg", vec![PathSegment::Text("root".into())], 0);
+                for _ in 0..10_000 {
+                    node = key("Pkg", vec![PathSegment::Node(Box::new(node))], 0);
+                }
+                let copy = node.clone();
+                assert_eq!(node, copy);
+                assert_eq!(node.cmp(&copy), core::cmp::Ordering::Equal);
+                let mut changed = copy.clone();
+                *changed.path.last_mut().expect("nested path has a root") =
+                    FlatSegment::Text("root2".into());
+                assert!(node < changed);
+                let hash = |value: &NodeKey| {
+                    let mut hasher = DefaultHasher::new();
+                    value.hash(&mut hasher);
+                    hasher.finish()
+                };
+                assert_eq!(hash(&node), hash(&copy));
+                assert!(alloc::format!("{node:?}").starts_with("NodeKey("));
+                let [PathSegment::Node(parent)] = node.path().try_into().unwrap() else {
+                    panic!("one nested path segment")
+                };
+                assert_eq!(parent.path().len(), 1);
+                drop(parent);
+                drop(copy);
+                drop(changed);
+                drop(node);
+            })
+            .expect("spawn small stack")
+            .join()
+            .expect("deep path operations complete");
     }
 
     /// A name that is not `^[A-Za-z_][A-Za-z0-9_]*$` is refused at

@@ -7,7 +7,7 @@
 //! model selections and population bindings before constructing values.
 
 use alloc::{boxed::Box, string::String, vec::Vec};
-use core::fmt;
+use core::{cmp::Ordering, fmt};
 
 use crate::integer::Integer;
 use crate::node::NodeKey;
@@ -40,10 +40,12 @@ impl OriginalDeclarationKey {
 }
 
 /// A structural effective declaration identity from QSpec FR-150.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct EffectiveId {
-    owner_effective_type: Option<Box<EffectiveId>>,
-    original: OriginalDeclarationKey,
+    // Root effective type first, then each member in owner order. This is
+    // the recursive FR-150 value in flat form, so Clone and Drop use no
+    // call stack proportional to owner depth.
+    chain: Vec<OriginalDeclarationKey>,
 }
 
 impl EffectiveId {
@@ -53,20 +55,29 @@ impl EffectiveId {
         owner_effective_type: Option<EffectiveId>,
         original: OriginalDeclarationKey,
     ) -> Self {
-        Self {
-            owner_effective_type: owner_effective_type.map(Box::new),
-            original,
-        }
+        let mut chain = owner_effective_type.map_or_else(Vec::new, |owner| owner.chain);
+        chain.push(original);
+        Self { chain }
     }
 
-    /// The owning effective type, when this is a member.
-    pub fn owner_effective_type(&self) -> Option<&EffectiveId> {
-        self.owner_effective_type.as_deref()
+    /// The owning effective type, when this is a member. Reconstructing the
+    /// owner clones its flat prefix; use [`Self::owner_chain`] to borrow it.
+    pub fn owner_effective_type(&self) -> Option<EffectiveId> {
+        (self.chain.len() > 1).then(|| EffectiveId {
+            chain: self.chain[..self.chain.len() - 1].to_vec(),
+        })
     }
 
     /// The original declaration key.
     pub fn original(&self) -> &OriginalDeclarationKey {
-        &self.original
+        self.chain
+            .last()
+            .expect("EffectiveId::new always records an original")
+    }
+
+    /// The owning declarations from the root type through this declaration.
+    pub fn owner_chain(&self) -> &[OriginalDeclarationKey] {
+        &self.chain
     }
 
     #[cfg(test)]
@@ -75,6 +86,24 @@ impl EffectiveId {
             None,
             OriginalDeclarationKey::new("test", alloc::format!("Node{byte}")),
         )
+    }
+}
+
+impl Ord for EffectiveId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Recursive FR-150 compares null versus owner before any original.
+        // A shorter chain reaches null first; equal depths compare the
+        // original keys from the root owner through the leaf.
+        self.chain
+            .len()
+            .cmp(&other.chain.len())
+            .then_with(|| self.chain.cmp(&other.chain))
+    }
+}
+
+impl PartialOrd for EffectiveId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -305,7 +334,45 @@ impl fmt::Display for ObjectId {
 mod tests {
     use super::*;
     use ix_trace_rs::trace;
-    use std::collections::HashSet;
+    use std::collections::{hash_map::DefaultHasher, HashSet};
+    use std::hash::{Hash, Hasher};
+
+    #[trace("TC-938", "FR-389-AC-3", "FR-389-AC-7")]
+    #[test]
+    fn deep_effective_owner_chain_clones_compares_hashes_and_drops_on_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let mut id = EffectiveId::new(None, OriginalDeclarationKey::new("Pkg", "root"));
+                for _ in 0..10_000 {
+                    id = EffectiveId::new(Some(id), OriginalDeclarationKey::new("Pkg", "member"));
+                }
+                let copy = id.clone();
+                assert_eq!(id, copy);
+                assert_eq!(id.cmp(&copy), Ordering::Equal);
+                let mut changed = copy.clone();
+                *changed
+                    .chain
+                    .last_mut()
+                    .expect("effective id has an original") =
+                    OriginalDeclarationKey::new("Pkg", "member2");
+                assert!(id < changed);
+                let hash = |value: &EffectiveId| {
+                    let mut hasher = DefaultHasher::new();
+                    value.hash(&mut hasher);
+                    hasher.finish()
+                };
+                assert_eq!(hash(&id), hash(&copy));
+                assert!(alloc::format!("{id:?}").starts_with("EffectiveId"));
+                assert_eq!(id.owner_chain().len(), 10_001);
+                drop(copy);
+                drop(changed);
+                drop(id);
+            })
+            .expect("spawn small stack")
+            .join()
+            .expect("deep effective owner operations complete");
+    }
 
     /// Trace: FR-389-AC-3, TC-938.
     #[trace("FR-389-AC-3", "TC-938")]
@@ -321,7 +388,7 @@ mod tests {
         assert_eq!(type_id, same);
         assert_eq!(HashSet::from([type_id.clone(), same]).len(), 1);
         assert_ne!(type_id, member);
-        assert_eq!(member.owner_effective_type(), Some(&type_id));
+        assert_eq!(member.owner_effective_type(), Some(type_id.clone()));
         assert_ne!(
             type_id,
             EffectiveId::new(None, OriginalDeclarationKey::new("Other", "Type"))
