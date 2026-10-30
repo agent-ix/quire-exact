@@ -9,6 +9,8 @@
 use alloc::{string::String, vec::Vec};
 use core::{cmp::Ordering, fmt};
 
+use crate::identity_copy::{array_bytes, copy_text, retype, IdentityCopyError};
+
 /// The greatest node ordinal admitted by the checked-package V2 schema.
 pub const MAX_NODE_ORDINAL: u64 = 9_007_199_254_740_991;
 
@@ -64,16 +66,16 @@ pub enum PathSegment {
 impl PathSegment {
     /// Copy this segment, refusing if any storage reservation fails.
     pub fn try_clone(&self) -> Result<Self, InvalidNodeKey> {
-        self.try_clone_with(&mut |_| Ok(()))
+        self.try_clone_legacy_with(&mut |_| Ok(()))
     }
 
-    fn try_clone_with(
+    fn try_clone_legacy_with(
         &self,
         before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
     ) -> Result<Self, InvalidNodeKey> {
         match self {
             Self::Text(text) => Ok(Self::Text(copy_text_with(text, before_reserve)?)),
-            Self::Node(node) => Ok(Self::Node(node.try_clone_with(before_reserve)?)),
+            Self::Node(node) => Ok(Self::Node(node.try_clone_legacy_with(before_reserve)?)),
         }
     }
 }
@@ -472,10 +474,62 @@ impl NodeKey {
     /// Copy this identity with a fallible reservation for every owned string
     /// and flat path token; nested identity depth does not grow the call stack.
     pub fn try_clone(&self) -> Result<Self, InvalidNodeKey> {
-        self.try_clone_with(&mut |_| Ok(()))
+        self.try_clone_legacy_with(&mut |_| Ok(()))
     }
 
-    fn try_clone_with(
+    /// Copy this structural key, presenting each actual additional payload-byte
+    /// request to `before_reserve` before attempting its native reservation.
+    /// The caller's refusal is returned unchanged inside [`IdentityCopyError::Policy`].
+    /// Count and layout incapacity remain distinct from allocator denial.
+    pub fn try_clone_with<E>(
+        &self,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
+    ) -> Result<Self, IdentityCopyError<E>> {
+        self.try_clone_with_native_hook(before_reserve, &mut |_| true)
+    }
+
+    fn try_clone_with_native_hook<E>(
+        &self,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
+        native_reserve: &mut impl FnMut(usize) -> bool,
+    ) -> Result<Self, IdentityCopyError<E>> {
+        let package = copy_text(&self.package, before_reserve, native_reserve)?;
+        let requested = array_bytes::<FlatSegment>(self.path.len()).map_err(retype)?;
+        before_reserve(requested).map_err(IdentityCopyError::Policy)?;
+        if !native_reserve(requested) {
+            return Err(IdentityCopyError::Allocation { requested });
+        }
+        let mut path = Vec::new();
+        path.try_reserve_exact(self.path.len())
+            .map_err(|_| IdentityCopyError::Allocation { requested })?;
+        for segment in &self.path {
+            let copied = match segment {
+                FlatSegment::Text(text) => {
+                    FlatSegment::Text(copy_text(text, before_reserve, native_reserve)?)
+                }
+                FlatSegment::Node {
+                    package,
+                    direct_len,
+                    ordinal,
+                    span,
+                } => FlatSegment::Node {
+                    package: copy_text(package, before_reserve, native_reserve)?,
+                    direct_len: *direct_len,
+                    ordinal: *ordinal,
+                    span: *span,
+                },
+            };
+            path.push(copied);
+        }
+        Ok(Self {
+            package,
+            path,
+            direct_len: self.direct_len,
+            ordinal: self.ordinal,
+        })
+    }
+
+    fn try_clone_legacy_with(
         &self,
         before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
     ) -> Result<Self, InvalidNodeKey> {
@@ -541,6 +595,102 @@ mod tests {
 
     fn key(package: &str, path: Vec<PathSegment>, ordinal: u64) -> NodeKey {
         NodeKey::new(package, path, ordinal).unwrap()
+    }
+
+    /// Trace: FR-391-AC-3, FR-391-AC-5, TC-940.
+    #[trace("FR-391-AC-3", "FR-391-AC-5", "TC-940")]
+    #[test]
+    fn policy_node_copy_checks_counts_and_retains_legacy_overflow() {
+        let token_size = core::mem::size_of::<FlatSegment>();
+        let max_tokens = usize::MAX / token_size;
+        assert_eq!(
+            array_bytes::<FlatSegment>(max_tokens + 1),
+            Err(IdentityCopyError::Capacity {
+                requested: usize::MAX
+            })
+        );
+        assert_eq!(
+            array_bytes::<FlatSegment>(max_tokens),
+            Err(IdentityCopyError::Capacity {
+                requested: max_tokens * token_size
+            })
+        );
+        assert_eq!(
+            flat_reservation_bytes(max_tokens + 1),
+            Err(InvalidNodeKey::Allocation {
+                requested: usize::MAX
+            })
+        );
+    }
+
+    /// Trace: FR-391-AC-4, FR-391-AC-5, TC-940.
+    #[trace("FR-391-AC-4", "FR-391-AC-5", "TC-940")]
+    #[test]
+    fn policy_node_copy_reports_each_real_request_and_preserves_source() {
+        let nested = key("nested", vec![PathSegment::Text("inner".into())], 2);
+        let source = key(
+            "outer",
+            vec![PathSegment::Text("first".into()), PathSegment::Node(nested)],
+            1,
+        );
+        let token_bytes = core::mem::size_of::<FlatSegment>();
+        let requests = [5, 3 * token_bytes, 5, 6, 5];
+        let copied = source
+            .try_clone_with(&mut |requested| {
+                assert!(requested > 0);
+                Ok::<_, ()>(())
+            })
+            .unwrap();
+        assert_eq!(copied, source);
+        let mut original_hash = DefaultHasher::new();
+        source.hash(&mut original_hash);
+        let mut copied_hash = DefaultHasher::new();
+        copied.hash(&mut copied_hash);
+        assert_eq!(original_hash.finish(), copied_hash.finish());
+        assert_eq!(source.try_clone().unwrap(), source);
+        for denied_at in 0..requests.len() {
+            let mut seen = 0;
+            let result = source.try_clone_with(&mut |requested| {
+                assert_eq!(requested, requests[seen]);
+                let deny = seen == denied_at;
+                seen += 1;
+                if deny {
+                    Err("policy denied")
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result, Err(IdentityCopyError::Policy("policy denied")));
+            assert_eq!(seen, denied_at + 1);
+            let mut native_seen = 0;
+            let result =
+                source.try_clone_with_native_hook(&mut |_| Ok::<_, ()>(()), &mut |requested| {
+                    assert_eq!(requested, requests[native_seen]);
+                    let permit = native_seen != denied_at;
+                    native_seen += 1;
+                    permit
+                });
+            assert_eq!(
+                result,
+                Err(IdentityCopyError::Allocation {
+                    requested: requests[denied_at]
+                })
+            );
+            assert_eq!(native_seen, denied_at + 1);
+            assert_eq!(source, copied);
+        }
+        let empty_text = key("p", vec![PathSegment::Text(String::new())], 0);
+        let mut requests_seen = Vec::new();
+        assert_eq!(
+            empty_text
+                .try_clone_with(&mut |requested| {
+                    requests_seen.push(requested);
+                    Ok::<_, ()>(())
+                })
+                .unwrap(),
+            empty_text
+        );
+        assert_eq!(requests_seen, [1, token_bytes]);
     }
 
     /// Trace: FR-389-AC-1, TC-938.
@@ -891,7 +1041,7 @@ mod tests {
         let clone_requests = [5, 3 * token_bytes, 5, 4];
         for fail_at in 0..4 {
             let mut call = 0;
-            let result = source.try_clone_with(&mut |requested| {
+            let result = source.try_clone_legacy_with(&mut |requested| {
                 assert_eq!(requested, clone_requests[call]);
                 let reject = call == fail_at;
                 call += 1;
@@ -913,7 +1063,7 @@ mod tests {
         let segment = PathSegment::Node(source.clone());
         for fail_at in 0..4 {
             let mut call = 0;
-            let result = segment.try_clone_with(&mut |requested| {
+            let result = segment.try_clone_legacy_with(&mut |requested| {
                 assert_eq!(requested, clone_requests[call]);
                 let reject = call == fail_at;
                 call += 1;
@@ -934,7 +1084,7 @@ mod tests {
         }
         let text = PathSegment::Text("text".into());
         assert_eq!(
-            text.try_clone_with(&mut |requested| {
+            text.try_clone_legacy_with(&mut |requested| {
                 assert_eq!(requested, 4);
                 Err(InvalidNodeKey::Allocation { requested })
             }),
@@ -943,7 +1093,7 @@ mod tests {
         assert_eq!(text, PathSegment::Text("text".into()));
         let empty = PathSegment::Text(String::new());
         assert_eq!(
-            empty.try_clone_with(&mut |_| panic!("empty text never reserves")),
+            empty.try_clone_legacy_with(&mut |_| panic!("empty text never reserves")),
             Ok(empty)
         );
         let max_tokens = usize::MAX / token_bytes;

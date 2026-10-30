@@ -9,6 +9,7 @@
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{cmp::Ordering, fmt};
 
+use crate::identity_copy::{array_bytes, copy_text, retype, IdentityCopyError};
 use crate::integer::Integer;
 use crate::node::NodeKey;
 
@@ -64,6 +65,44 @@ impl EffectiveId {
         let mut chain = owner_effective_type.map_or_else(Vec::new, |owner| owner.chain);
         chain.push(original);
         Self { chain }
+    }
+
+    /// Copy every owned component through fallible reservations, without a caller policy.
+    pub fn try_clone(&self) -> Result<Self, IdentityCopyError<core::convert::Infallible>> {
+        self.try_clone_with(&mut |_| Ok(()))
+    }
+
+    /// Copy this identity, presenting each actual additional payload-byte request
+    /// to `before_reserve` before attempting its native reservation.
+    /// A caller refusal remains its original type inside [`IdentityCopyError::Policy`].
+    pub fn try_clone_with<E>(
+        &self,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
+    ) -> Result<Self, IdentityCopyError<E>> {
+        self.try_clone_with_native_hook(before_reserve, &mut |_| true)
+    }
+
+    fn try_clone_with_native_hook<E>(
+        &self,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
+        native_reserve: &mut impl FnMut(usize) -> bool,
+    ) -> Result<Self, IdentityCopyError<E>> {
+        let requested = array_bytes::<OriginalDeclarationKey>(self.chain.len()).map_err(retype)?;
+        before_reserve(requested).map_err(IdentityCopyError::Policy)?;
+        if !native_reserve(requested) {
+            return Err(IdentityCopyError::Allocation { requested });
+        }
+        let mut chain = Vec::new();
+        chain
+            .try_reserve_exact(self.chain.len())
+            .map_err(|_| IdentityCopyError::Allocation { requested })?;
+        for original in &self.chain {
+            chain.push(OriginalDeclarationKey {
+                package: copy_text(&original.package, before_reserve, native_reserve)?,
+                node: copy_text(&original.node, before_reserve, native_reserve)?,
+            });
+        }
+        Ok(Self { chain })
     }
 
     /// The owning effective type, when this is a member. Reconstructing the
@@ -363,6 +402,113 @@ mod tests {
     use ix_trace_rs::trace;
     use std::collections::{hash_map::DefaultHasher, HashSet};
     use std::hash::{Hash, Hasher};
+
+    /// Trace: FR-391-AC-1, TC-940.
+    #[trace("FR-391-AC-1", "TC-940")]
+    #[test]
+    fn fallible_effective_copy_preserves_deep_components_on_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let root = EffectiveId::new(None, OriginalDeclarationKey::new("root", "start"));
+                assert_eq!(root.try_clone().unwrap(), root);
+                let mut id = root;
+                for depth in 0..10_000 {
+                    id = EffectiveId::new(
+                        Some(id),
+                        OriginalDeclarationKey::new("member", alloc::format!("node{depth}")),
+                    );
+                }
+                let copy = id.try_clone().unwrap();
+                assert_eq!(copy, id);
+                assert_eq!(copy.owner_chain(), id.owner_chain());
+                let hash = |value: &EffectiveId| {
+                    let mut state = DefaultHasher::new();
+                    value.hash(&mut state);
+                    state.finish()
+                };
+                assert_eq!(hash(&copy), hash(&id));
+                for changed_at in [0, 5_000, 10_000] {
+                    let mut changed = id.try_clone().unwrap();
+                    changed.chain[changed_at].node.push('x');
+                    assert_eq!(id.cmp(&changed), copy.cmp(&changed));
+                    assert_ne!(copy, changed);
+                }
+                drop(copy);
+                drop(id);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Trace: FR-391-AC-2, FR-391-AC-5, TC-940.
+    #[trace("FR-391-AC-2", "FR-391-AC-5", "TC-940")]
+    #[test]
+    fn effective_copy_preserves_policy_and_native_refusals() {
+        let source = EffectiveId::new(None, OriginalDeclarationKey::new("pkg", "node"));
+        let requests = [core::mem::size_of::<OriginalDeclarationKey>(), 3, 4];
+        for denied_at in 0..requests.len() {
+            let mut seen = 0;
+            let result = source.try_clone_with(&mut |requested| {
+                assert_eq!(requested, requests[seen]);
+                let deny = seen == denied_at;
+                seen += 1;
+                if deny {
+                    Err("policy denied")
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result, Err(IdentityCopyError::Policy("policy denied")));
+            assert_eq!(seen, denied_at + 1);
+
+            let mut policy_seen = 0;
+            let mut native_seen = 0;
+            let result = source.try_clone_with_native_hook(
+                &mut |requested| {
+                    assert_eq!(requested, requests[policy_seen]);
+                    policy_seen += 1;
+                    Ok::<_, ()>(())
+                },
+                &mut |requested| {
+                    assert_eq!(requested, requests[native_seen]);
+                    let permit = native_seen != denied_at;
+                    native_seen += 1;
+                    permit
+                },
+            );
+            assert_eq!(
+                result,
+                Err(IdentityCopyError::Allocation {
+                    requested: requests[denied_at]
+                })
+            );
+            assert_eq!(policy_seen, denied_at + 1);
+            assert_eq!(native_seen, denied_at + 1);
+            assert_eq!(source.owner_chain()[0].node(), "node");
+        }
+        let empty = EffectiveId::new(None, OriginalDeclarationKey::new("", ""));
+        let mut seen = Vec::new();
+        assert_eq!(
+            empty
+                .try_clone_with(&mut |requested| {
+                    seen.push(requested);
+                    Ok::<_, ()>(())
+                })
+                .unwrap(),
+            empty
+        );
+        assert_eq!(seen, [core::mem::size_of::<OriginalDeclarationKey>()]);
+        let mut native_seen = 0;
+        let copied = empty.try_clone_with_native_hook(&mut |_| Ok::<_, ()>(()), &mut |_| {
+            native_seen += 1;
+            true
+        });
+        assert_eq!(copied, Ok(empty.clone()));
+        assert_eq!(native_seen, 1);
+        assert_eq!(empty.try_clone().unwrap(), empty);
+    }
 
     #[trace("TC-938", "FR-389-AC-3", "FR-389-AC-7")]
     #[test]
