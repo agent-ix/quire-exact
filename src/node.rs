@@ -64,12 +64,12 @@ pub enum PathSegment {
 impl PathSegment {
     /// Copy this segment, refusing if any storage reservation fails.
     pub fn try_clone(&self) -> Result<Self, InvalidNodeKey> {
-        self.try_clone_with(&mut || Ok(()))
+        self.try_clone_with(&mut |_| Ok(()))
     }
 
     fn try_clone_with(
         &self,
-        before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
     ) -> Result<Self, InvalidNodeKey> {
         match self {
             Self::Text(text) => Ok(Self::Text(copy_text_with(text, before_reserve)?)),
@@ -80,13 +80,14 @@ impl PathSegment {
 
 fn copy_text_with(
     text: &str,
-    before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+    before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
 ) -> Result<String, InvalidNodeKey> {
     let mut copy = String::new();
     if !text.is_empty() {
-        before_reserve()?;
+        let requested = text.len();
+        before_reserve(requested)?;
         copy.try_reserve_exact(text.len())
-            .map_err(|_| InvalidNodeKey::Allocation)?;
+            .map_err(|_| InvalidNodeKey::Allocation { requested })?;
         copy.push_str(text);
     }
     Ok(copy)
@@ -104,9 +105,29 @@ pub enum InvalidNodeKey {
     /// The ordinal exceeds the checked-package V2 schema maximum.
     #[error("a node ordinal exceeds the checked-package V2 maximum")]
     OrdinalOutOfRange,
-    /// Storage for a structural identity could not be reserved.
+    /// Storage for a structural identity could not be reserved; the payload is
+    /// the minimum additional byte count passed to that reservation.
     #[error("a structural node identity allocation failed")]
-    Allocation,
+    Allocation {
+        /// The minimum additional bytes requested, or `usize::MAX` if unrepresentable.
+        requested: usize,
+    },
+}
+
+fn flat_reservation_bytes(count: usize) -> Result<usize, InvalidNodeKey> {
+    count
+        .checked_mul(core::mem::size_of::<FlatSegment>())
+        .ok_or(InvalidNodeKey::Allocation {
+            requested: usize::MAX,
+        })
+}
+
+fn nested_token_count(child_count: usize) -> Result<usize, InvalidNodeKey> {
+    child_count
+        .checked_add(1)
+        .ok_or(InvalidNodeKey::Allocation {
+            requested: usize::MAX,
+        })
 }
 
 /// A structural node identity from an admitted checked package.
@@ -336,14 +357,14 @@ impl NodeKey {
         path: Vec<PathSegment>,
         ordinal: u64,
     ) -> Result<Self, InvalidNodeKey> {
-        Self::try_new_with(package, path, ordinal, &mut || Ok(()))
+        Self::try_new_with(package, path, ordinal, &mut |_| Ok(()))
     }
 
     fn try_new_with(
         package: String,
         path: Vec<PathSegment>,
         ordinal: u64,
-        before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
     ) -> Result<Self, InvalidNodeKey> {
         if package.is_empty() {
             return Err(InvalidNodeKey::EmptyPackage);
@@ -359,9 +380,10 @@ impl NodeKey {
         for segment in path {
             match segment {
                 PathSegment::Text(text) => {
-                    before_reserve()?;
+                    let requested = flat_reservation_bytes(1)?;
+                    before_reserve(requested)?;
                     flat.try_reserve(1)
-                        .map_err(|_| InvalidNodeKey::Allocation)?;
+                        .map_err(|_| InvalidNodeKey::Allocation { requested })?;
                     flat.push(FlatSegment::Text(text));
                 }
                 PathSegment::Node(node) => {
@@ -371,18 +393,16 @@ impl NodeKey {
                         direct_len,
                         ordinal,
                     } = node;
-                    let needed = path
-                        .len()
-                        .checked_add(1)
-                        .ok_or(InvalidNodeKey::Allocation)?;
-                    before_reserve()?;
+                    let needed = nested_token_count(path.len())?;
+                    let requested = flat_reservation_bytes(needed)?;
+                    before_reserve(requested)?;
                     flat.try_reserve(needed)
-                        .map_err(|_| InvalidNodeKey::Allocation)?;
+                        .map_err(|_| InvalidNodeKey::Allocation { requested })?;
                     flat.push(FlatSegment::Node {
                         package,
                         direct_len,
                         ordinal,
-                        span: path.len() + 1,
+                        span: needed,
                     });
                     // The reservation above admits this header and every child token.
                     for token in path {
@@ -452,18 +472,19 @@ impl NodeKey {
     /// Copy this identity with a fallible reservation for every owned string
     /// and flat path token; nested identity depth does not grow the call stack.
     pub fn try_clone(&self) -> Result<Self, InvalidNodeKey> {
-        self.try_clone_with(&mut || Ok(()))
+        self.try_clone_with(&mut |_| Ok(()))
     }
 
     fn try_clone_with(
         &self,
-        before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
     ) -> Result<Self, InvalidNodeKey> {
         let package = copy_text_with(&self.package, before_reserve)?;
         let mut path = Vec::new();
-        before_reserve()?;
+        let requested = flat_reservation_bytes(self.path.len())?;
+        before_reserve(requested)?;
         path.try_reserve_exact(self.path.len())
-            .map_err(|_| InvalidNodeKey::Allocation)?;
+            .map_err(|_| InvalidNodeKey::Allocation { requested })?;
         for segment in &self.path {
             let copied = match segment {
                 FlatSegment::Text(text) => FlatSegment::Text(copy_text_with(text, before_reserve)?),
@@ -837,6 +858,8 @@ mod tests {
             0,
         );
         let original = source.clone();
+        let token_bytes = core::mem::size_of::<FlatSegment>();
+        let new_requests = [token_bytes, 2 * token_bytes];
         for fail_at in 0..2 {
             let mut call = 0;
             let result = NodeKey::try_new_with(
@@ -846,56 +869,124 @@ mod tests {
                     PathSegment::Node(child.clone()),
                 ],
                 0,
-                &mut || {
+                &mut |requested| {
+                    assert_eq!(requested, new_requests[call]);
                     let reject = call == fail_at;
                     call += 1;
                     if reject {
-                        Err(InvalidNodeKey::Allocation)
+                        Err(InvalidNodeKey::Allocation { requested })
                     } else {
                         Ok(())
                     }
                 },
             );
-            assert_eq!(result, Err(InvalidNodeKey::Allocation));
+            assert_eq!(
+                result,
+                Err(InvalidNodeKey::Allocation {
+                    requested: new_requests[fail_at]
+                })
+            );
             assert_eq!(call, fail_at + 1);
         }
+        let clone_requests = [5, 3 * token_bytes, 5, 4];
         for fail_at in 0..4 {
             let mut call = 0;
-            let result = source.try_clone_with(&mut || {
+            let result = source.try_clone_with(&mut |requested| {
+                assert_eq!(requested, clone_requests[call]);
                 let reject = call == fail_at;
                 call += 1;
                 if reject {
-                    Err(InvalidNodeKey::Allocation)
+                    Err(InvalidNodeKey::Allocation { requested })
                 } else {
                     Ok(())
                 }
             });
-            assert_eq!(result, Err(InvalidNodeKey::Allocation));
+            assert_eq!(
+                result,
+                Err(InvalidNodeKey::Allocation {
+                    requested: clone_requests[fail_at]
+                })
+            );
             assert_eq!(call, fail_at + 1);
             assert_eq!(source, original);
         }
         let segment = PathSegment::Node(source.clone());
         for fail_at in 0..4 {
             let mut call = 0;
-            let result = segment.try_clone_with(&mut || {
+            let result = segment.try_clone_with(&mut |requested| {
+                assert_eq!(requested, clone_requests[call]);
                 let reject = call == fail_at;
                 call += 1;
                 if reject {
-                    Err(InvalidNodeKey::Allocation)
+                    Err(InvalidNodeKey::Allocation { requested })
                 } else {
                     Ok(())
                 }
             });
-            assert_eq!(result, Err(InvalidNodeKey::Allocation));
+            assert_eq!(
+                result,
+                Err(InvalidNodeKey::Allocation {
+                    requested: clone_requests[fail_at]
+                })
+            );
             assert_eq!(call, fail_at + 1);
             assert_eq!(segment, PathSegment::Node(original.clone()));
         }
         let text = PathSegment::Text("text".into());
         assert_eq!(
-            text.try_clone_with(&mut || Err(InvalidNodeKey::Allocation)),
-            Err(InvalidNodeKey::Allocation)
+            text.try_clone_with(&mut |requested| {
+                assert_eq!(requested, 4);
+                Err(InvalidNodeKey::Allocation { requested })
+            }),
+            Err(InvalidNodeKey::Allocation { requested: 4 })
         );
         assert_eq!(text, PathSegment::Text("text".into()));
+        let empty = PathSegment::Text(String::new());
+        assert_eq!(
+            empty.try_clone_with(&mut |_| panic!("empty text never reserves")),
+            Ok(empty)
+        );
+        let max_tokens = usize::MAX / token_bytes;
+        assert_eq!(
+            flat_reservation_bytes(max_tokens),
+            Ok(max_tokens * token_bytes)
+        );
+        assert_eq!(
+            flat_reservation_bytes(max_tokens + 1),
+            Err(InvalidNodeKey::Allocation {
+                requested: usize::MAX
+            })
+        );
+        assert_eq!(
+            nested_token_count(usize::MAX),
+            Err(InvalidNodeKey::Allocation {
+                requested: usize::MAX
+            })
+        );
+        assert_eq!(
+            NodeKey::try_new_with(
+                String::new(),
+                vec![PathSegment::Text("x".into())],
+                0,
+                &mut |_| { panic!("shape refusal precedes reservation") }
+            ),
+            Err(InvalidNodeKey::EmptyPackage)
+        );
+        assert_eq!(
+            NodeKey::try_new_with("owner".into(), Vec::new(), 0, &mut |_| {
+                panic!("shape refusal precedes reservation")
+            }),
+            Err(InvalidNodeKey::EmptyPath)
+        );
+        assert_eq!(
+            NodeKey::try_new_with(
+                "owner".into(),
+                vec![PathSegment::Text("x".into())],
+                MAX_NODE_ORDINAL + 1,
+                &mut |_| panic!("shape refusal precedes reservation")
+            ),
+            Err(InvalidNodeKey::OrdinalOutOfRange)
+        );
     }
 
     #[trace("TC-938", "FR-389-AC-1", "FR-389-AC-7")]
