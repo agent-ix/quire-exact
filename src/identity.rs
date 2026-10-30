@@ -407,6 +407,14 @@ mod tests {
             PopulationId::new(NodeKey::fixture(3)),
             PopulationId::new(NodeKey::fixture(3))
         );
+        assert_eq!(
+            HashSet::from([
+                PopulationId::new(NodeKey::fixture(3)),
+                PopulationId::new(NodeKey::fixture(3)),
+            ])
+            .len(),
+            1
+        );
         assert_ne!(
             PopulationId::new(NodeKey::fixture(3)),
             PopulationId::new(NodeKey::fixture(4))

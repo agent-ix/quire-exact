@@ -1992,8 +1992,8 @@ mod tests {
     #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn enum_shape_admits_only_its_own_variants() {
-        let in_shape = VariantId::fixture(1);
-        let out_of_shape = VariantId::fixture(2);
+        let in_shape = VariantId::new(NodeKey::fixture(1), "Case").unwrap();
+        let out_of_shape = VariantId::new(NodeKey::fixture(2), "Case").unwrap();
         let shape = ValueType::Enum(EnumShape::new(false, [in_shape.clone()]));
         assert!(shape.admits(&Value::Enum(EnumMember::new(in_shape.clone(), 0))));
         assert!(!shape.admits(&Value::Enum(EnumMember::new(out_of_shape, 0))));

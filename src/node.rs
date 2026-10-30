@@ -172,6 +172,10 @@ mod tests {
         assert_eq!(HashSet::from([a.clone(), b, c.clone()]).len(), 2);
         assert!(a < c);
         assert!(key("A", vec![PathSegment::Text("Type".into())], 9) < a);
+        assert_ne!(
+            key("owner", vec![PathSegment::Text("Type".into())], 0),
+            key("importer", vec![PathSegment::Text("Type".into())], 0)
+        );
         assert!(
             key("Pkg", vec![PathSegment::Text("Type".into())], 0)
                 < key("Pkg", vec![PathSegment::Node(Box::new(a.clone()))], 0)
