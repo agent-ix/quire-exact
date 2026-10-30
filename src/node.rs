@@ -7,7 +7,17 @@
 //! checks only the closed shape and never computes a digest.
 
 use alloc::{string::String, vec::Vec};
-use core::{cmp::Ordering, fmt};
+use core::{
+    alloc::Layout,
+    cmp::Ordering,
+    fmt,
+    hash::{Hash, Hasher},
+    sync::atomic::AtomicUsize,
+};
+
+use allocator_api2::boxed::Box;
+use spin::Mutex;
+use triomphe::Arc;
 
 use crate::identity_copy::{array_bytes, copy_text, retype, IdentityCopyError};
 
@@ -132,60 +142,117 @@ fn nested_token_count(child_count: usize) -> Result<usize, InvalidNodeKey> {
         })
 }
 
+fn node_arc_bytes() -> Result<usize, ()> {
+    Layout::new::<AtomicUsize>()
+        .extend(Layout::new::<NodeData>())
+        .map(|(layout, _)| layout.pad_to_align().size())
+        .map_err(|_| ())
+}
+
 /// A structural node identity from an admitted checked package.
 ///
 /// quire:canonical
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone)]
 pub struct NodeKey {
+    inner: Arc<NodeData>,
+}
+
+struct NodeData {
     package: String,
-    // Preorder tokens. Each nested node header gives the span of its subtree;
-    // no owned token contains another token, so ordinary Clone and Drop are
-    // depth independent.
     path: Vec<FlatSegment>,
-    direct_len: usize,
     ordinal: u64,
+    token_count: usize,
+    drop_frame: Option<Box<DropFrame>>,
+}
+
+struct CopyFrame<'a> {
+    source: &'a NodeKey,
+    package: String,
+    path: Vec<FlatSegment>,
+    next: usize,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum FlatSegment {
     Text(String),
-    Node {
-        package: String,
-        direct_len: usize,
-        ordinal: u64,
-        span: usize,
-        // Distance from this header to its parent header; None means the
-        // parent is the outer NodeKey. Relative links survive flat copies.
-        parent_back: Option<usize>,
-    },
+    Node(NodeKey),
+}
+
+struct DropFrame {
+    pending: Vec<FlatSegment>,
+    next: Option<Box<DropFrame>>,
+}
+
+struct DropQueue {
+    head: Option<Box<DropFrame>>,
+    draining: bool,
+}
+
+static DROP_QUEUE: Mutex<DropQueue> = Mutex::new(DropQueue {
+    head: None,
+    draining: false,
+});
+
+impl Drop for NodeData {
+    fn drop(&mut self) {
+        let Some(mut frame) = self.drop_frame.take() else {
+            return;
+        };
+        frame.pending = core::mem::take(&mut self.path);
+        let mut queue = DROP_QUEUE.lock();
+        frame.next = queue.head.take();
+        queue.head = Some(frame);
+        if queue.draining {
+            return;
+        }
+        queue.draining = true;
+        drop(queue);
+
+        loop {
+            let next = {
+                let mut queue = DROP_QUEUE.lock();
+                match queue.head.take() {
+                    Some(mut frame) => {
+                        queue.head = frame.next.take();
+                        Some(frame)
+                    }
+                    None => {
+                        queue.draining = false;
+                        None
+                    }
+                }
+            };
+            let Some(mut frame) = next else {
+                break;
+            };
+            while let Some(segment) = frame.pending.pop() {
+                drop(segment);
+            }
+        }
+    }
 }
 
 /// A borrowed structural node identity. Creating or traversing a view does not allocate.
 #[derive(Clone, Copy)]
 pub struct NodeKeyView<'a> {
-    package: &'a str,
-    path: &'a [FlatSegment],
-    direct_len: usize,
-    ordinal: u64,
+    data: &'a NodeData,
 }
 
 impl<'a> NodeKeyView<'a> {
     /// The exact owning package name.
     pub fn package(self) -> &'a str {
-        self.package
+        &self.data.package
     }
 
     /// The ordinal within the owning package and path.
     pub fn ordinal(self) -> u64 {
-        self.ordinal
+        self.data.ordinal
     }
 
     /// Iterate over direct path segments without copying nested identities.
     pub fn path(self) -> NodePathIter<'a> {
         NodePathIter {
-            path: self.path,
-            index: 0,
-            remaining: self.direct_len,
+            path: self.data.path.iter(),
         }
     }
 }
@@ -201,40 +268,16 @@ pub enum PathSegmentView<'a> {
 
 /// Allocation-free iterator over a node identity's direct path.
 pub struct NodePathIter<'a> {
-    path: &'a [FlatSegment],
-    index: usize,
-    remaining: usize,
+    path: core::slice::Iter<'a, FlatSegment>,
 }
 
 impl<'a> Iterator for NodePathIter<'a> {
     type Item = PathSegmentView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining == 0 {
-            return None;
-        }
-        self.remaining -= 1;
-        match &self.path[self.index] {
-            FlatSegment::Text(text) => {
-                self.index += 1;
-                Some(PathSegmentView::Text(text))
-            }
-            FlatSegment::Node {
-                package,
-                direct_len,
-                ordinal,
-                span,
-                ..
-            } => {
-                let start = self.index + 1;
-                self.index += *span;
-                Some(PathSegmentView::Node(NodeKeyView {
-                    package,
-                    path: &self.path[start..self.index],
-                    direct_len: *direct_len,
-                    ordinal: *ordinal,
-                }))
-            }
+        match self.path.next()? {
+            FlatSegment::Text(text) => Some(PathSegmentView::Text(text)),
+            FlatSegment::Node(node) => Some(PathSegmentView::Node(node.view())),
         }
     }
 }
@@ -249,109 +292,136 @@ enum ComparePart<'a> {
     Done,
 }
 
-enum ComparePhase {
-    Package,
-    Path,
-    Ordinal,
-    Ascend,
-}
-
-struct CompareCursor<'a> {
-    key: &'a NodeKey,
-    // None denotes the outer identity. Each nested header carries the link
-    // needed to resume its parent after the subtree's ordinal.
-    header: Option<usize>,
-    next_index: usize,
-    phase: ComparePhase,
-}
-
-impl<'a> CompareCursor<'a> {
-    fn new(key: &'a NodeKey) -> Self {
-        Self {
-            key,
-            header: None,
-            next_index: 0,
-            phase: ComparePhase::Package,
+fn compare_part_at(mut node: &NodeKey, mut index: usize) -> ComparePart<'_> {
+    loop {
+        if index == 0 {
+            return ComparePart::Package(&node.inner.package);
         }
-    }
-
-    fn next(&mut self) -> ComparePart<'a> {
-        loop {
-            match self.phase {
-                ComparePhase::Package => {
-                    self.phase = ComparePhase::Path;
-                    return match self.header {
-                        None => ComparePart::Package(&self.key.package),
-                        Some(index) => match &self.key.path[index] {
-                            FlatSegment::Node { package, .. } => ComparePart::Package(package),
-                            FlatSegment::Text(_) => unreachable!("comparison header is a node"),
-                        },
-                    };
-                }
-                ComparePhase::Path => {
-                    let end = match self.header {
-                        None => self.key.path.len(),
-                        Some(index) => match &self.key.path[index] {
-                            FlatSegment::Node { span, .. } => index + *span,
-                            FlatSegment::Text(_) => unreachable!("comparison header is a node"),
-                        },
-                    };
-                    if self.next_index == end {
-                        self.phase = ComparePhase::Ordinal;
-                        return ComparePart::PathEnd;
+        index -= 1;
+        let mut descended = false;
+        for segment in &node.inner.path {
+            match segment {
+                FlatSegment::Text(text) => {
+                    if index == 0 {
+                        return ComparePart::Text(text);
                     }
-                    match &self.key.path[self.next_index] {
-                        FlatSegment::Text(text) => {
-                            self.next_index += 1;
-                            return ComparePart::Text(text);
-                        }
-                        FlatSegment::Node { .. } => {
-                            self.header = Some(self.next_index);
-                            self.next_index += 1;
-                            self.phase = ComparePhase::Package;
-                            return ComparePart::NodeStart;
-                        }
+                    index -= 1;
+                }
+                FlatSegment::Node(child) => {
+                    if index == 0 {
+                        return ComparePart::NodeStart;
                     }
-                }
-                ComparePhase::Ordinal => {
-                    self.phase = ComparePhase::Ascend;
-                    return match self.header {
-                        None => ComparePart::Ordinal(self.key.ordinal),
-                        Some(index) => match &self.key.path[index] {
-                            FlatSegment::Node { ordinal, .. } => ComparePart::Ordinal(*ordinal),
-                            FlatSegment::Text(_) => unreachable!("comparison header is a node"),
-                        },
-                    };
-                }
-                ComparePhase::Ascend => {
-                    let Some(index) = self.header else {
-                        return ComparePart::Done;
-                    };
-                    let FlatSegment::Node {
-                        span, parent_back, ..
-                    } = &self.key.path[index]
-                    else {
-                        unreachable!("comparison header is a node")
-                    };
-                    self.next_index = index + *span;
-                    self.header = parent_back.map(|distance| index - distance);
-                    self.phase = ComparePhase::Path;
+                    index -= 1;
+                    if index < child.inner.token_count {
+                        node = child;
+                        descended = true;
+                        break;
+                    }
+                    index -= child.inner.token_count;
                 }
             }
         }
+        if descended {
+            continue;
+        }
+        return match index {
+            0 => ComparePart::PathEnd,
+            1 => ComparePart::Ordinal(node.inner.ordinal),
+            _ => ComparePart::Done,
+        };
     }
 }
 
 impl Ord for NodeKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut left = CompareCursor::new(self);
-        let mut right = CompareCursor::new(other);
+        if Arc::ptr_eq(&self.inner, &other.inner) {
+            return Ordering::Equal;
+        }
+        // A derived chain commonly wraps one operand at every level. Keep
+        // only the deepest differing ordinal while descending that chain:
+        // the child is compared before its parent's ordinal.
+        let mut left = self;
+        let mut right = other;
+        let mut deferred_ordinal = Ordering::Equal;
+        while let (Some(FlatSegment::Node(left_child)), Some(FlatSegment::Node(right_child))) =
+            (left.inner.path.first(), right.inner.path.first())
+        {
+            if left.inner.path.len() != 1 || right.inner.path.len() != 1 {
+                break;
+            }
+            let package_order = left.inner.package.cmp(&right.inner.package);
+            if !package_order.is_eq() {
+                return package_order;
+            }
+            let ordinal_order = left.inner.ordinal.cmp(&right.inner.ordinal);
+            if !ordinal_order.is_eq() {
+                deferred_ordinal = ordinal_order;
+            }
+            left = left_child;
+            right = right_child;
+            if Arc::ptr_eq(&left.inner, &right.inner) {
+                return deferred_ordinal;
+            }
+        }
+        let mut index = 0;
         loop {
-            let a = left.next();
-            let b = right.next();
+            let a = compare_part_at(left, index);
+            let b = compare_part_at(right, index);
             let order = a.cmp(&b);
             if !order.is_eq() || a == ComparePart::Done {
-                return order;
+                return if order.is_eq() {
+                    deferred_ordinal
+                } else {
+                    order
+                };
+            }
+            index += 1;
+        }
+    }
+}
+
+impl PartialEq for NodeKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl Eq for NodeKey {}
+
+impl Hash for NodeKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        enum Part<'a> {
+            Node(&'a NodeKey),
+            Segment(&'a FlatSegment),
+            PathEnd,
+            Ordinal(u64),
+        }
+        let mut pending = Vec::new();
+        pending.push(Part::Node(self));
+        while let Some(part) = pending.pop() {
+            match part {
+                Part::Node(node) => {
+                    0_u8.hash(state);
+                    node.inner.package.hash(state);
+                    pending.push(Part::Ordinal(node.inner.ordinal));
+                    pending.push(Part::PathEnd);
+                    for segment in node.inner.path.iter().rev() {
+                        pending.push(Part::Segment(segment));
+                    }
+                }
+                Part::Segment(FlatSegment::Text(text)) => {
+                    2_u8.hash(state);
+                    text.hash(state);
+                }
+                Part::Segment(FlatSegment::Node(node)) => {
+                    3_u8.hash(state);
+                    pending.push(Part::Node(node));
+                }
+                Part::PathEnd => 1_u8.hash(state),
+                Part::Ordinal(value) => {
+                    4_u8.hash(state);
+                    value.hash(state);
+                }
             }
         }
     }
@@ -400,128 +470,82 @@ impl NodeKey {
         if ordinal > MAX_NODE_ORDINAL {
             return Err(InvalidNodeKey::OrdinalOutOfRange);
         }
-        let direct_len = path.len();
-        let mut flat = Vec::new();
-        for segment in path {
-            match segment {
-                PathSegment::Text(text) => {
-                    let requested = flat_reservation_bytes(1)?;
-                    before_reserve(requested)?;
-                    flat.try_reserve(1)
-                        .map_err(|_| InvalidNodeKey::Allocation { requested })?;
-                    flat.push(FlatSegment::Text(text));
-                }
-                PathSegment::Node(node) => {
-                    let NodeKey {
-                        package,
-                        path,
-                        direct_len,
-                        ordinal,
-                    } = node;
-                    let needed = nested_token_count(path.len())?;
-                    let requested = flat_reservation_bytes(needed)?;
-                    before_reserve(requested)?;
-                    flat.try_reserve(needed)
-                        .map_err(|_| InvalidNodeKey::Allocation { requested })?;
-                    let header = flat.len();
-                    flat.push(FlatSegment::Node {
-                        package,
-                        direct_len,
-                        ordinal,
-                        span: needed,
-                        parent_back: None,
-                    });
-                    // The reservation above admits this header and every child token.
-                    for token in path {
-                        flat.push(token);
-                    }
-                    // Reparent only the nested key's direct children. Their own
-                    // descendants keep relative links within their subtrees.
-                    let mut child = header + 1;
-                    while child < header + needed {
-                        match &mut flat[child] {
-                            FlatSegment::Text(_) => child += 1,
-                            FlatSegment::Node {
-                                span, parent_back, ..
-                            } => {
-                                *parent_back = Some(child - header);
-                                child += *span;
-                            }
-                        }
-                    }
-                }
-            }
+        let mut token_count = 3_usize;
+        for segment in &path {
+            let additional = match segment {
+                PathSegment::Text(_) => 1,
+                PathSegment::Node(node) => nested_token_count(node.inner.token_count)?,
+            };
+            token_count =
+                token_count
+                    .checked_add(additional)
+                    .ok_or(InvalidNodeKey::Allocation {
+                        requested: usize::MAX,
+                    })?;
         }
-        Ok(Self {
-            package,
-            path: flat,
-            direct_len,
-            ordinal,
+        let requested = flat_reservation_bytes(path.len())?;
+        before_reserve(requested)?;
+        let mut direct = Vec::new();
+        direct
+            .try_reserve_exact(path.len())
+            .map_err(|_| InvalidNodeKey::Allocation { requested })?;
+        for segment in path {
+            direct.push(match segment {
+                PathSegment::Text(text) => FlatSegment::Text(text),
+                PathSegment::Node(node) => FlatSegment::Node(node),
+            });
+        }
+        let frame_request = core::mem::size_of::<DropFrame>();
+        before_reserve(frame_request)?;
+        let frame = Box::try_new(DropFrame {
+            pending: Vec::new(),
+            next: None,
         })
+        .map_err(|_| InvalidNodeKey::Allocation {
+            requested: frame_request,
+        })?;
+        let arc_request = node_arc_bytes().map_err(|_| InvalidNodeKey::Allocation {
+            requested: usize::MAX,
+        })?;
+        before_reserve(arc_request)?;
+        let inner = Arc::try_new(NodeData {
+            package,
+            path: direct,
+            ordinal,
+            token_count,
+            drop_frame: Some(frame),
+        })
+        .map_err(|_| InvalidNodeKey::Allocation {
+            requested: arc_request,
+        })?;
+        Ok(Self { inner })
     }
 
     /// The exact owning package name.
     pub fn package(&self) -> &str {
-        &self.package
+        &self.inner.package
     }
 
-    /// The path segments in component order. This reconstructs owned segment
-    /// views from the flat carrier; each nested node remains flat.
+    /// The path segments in component order. Nested identities share storage.
     pub fn path(&self) -> Vec<PathSegment> {
-        let mut result = Vec::with_capacity(self.direct_len);
-        let mut index = 0;
-        while index < self.path.len() {
-            match &self.path[index] {
-                FlatSegment::Text(text) => {
-                    result.push(PathSegment::Text(text.clone()));
-                    index += 1;
-                }
-                FlatSegment::Node {
-                    package,
-                    direct_len,
-                    ordinal,
-                    span,
-                    ..
-                } => {
-                    let mut path = self.path[index + 1..index + *span].to_vec();
-                    let mut child = 0;
-                    while child < path.len() {
-                        match &mut path[child] {
-                            FlatSegment::Text(_) => child += 1,
-                            FlatSegment::Node {
-                                span, parent_back, ..
-                            } => {
-                                *parent_back = None;
-                                child += *span;
-                            }
-                        }
-                    }
-                    result.push(PathSegment::Node(NodeKey {
-                        package: package.clone(),
-                        path,
-                        direct_len: *direct_len,
-                        ordinal: *ordinal,
-                    }));
-                    index += *span;
-                }
-            }
-        }
-        result
+        self.inner
+            .path
+            .iter()
+            .map(|segment| match segment {
+                FlatSegment::Text(text) => PathSegment::Text(text.clone()),
+                FlatSegment::Node(node) => PathSegment::Node(node.clone()),
+            })
+            .collect()
     }
 
     /// The ordinal within the owning package and path.
     pub fn ordinal(&self) -> u64 {
-        self.ordinal
+        self.inner.ordinal
     }
 
     /// Borrow the package, ordinal and direct path without constructing an owned path.
     pub fn view(&self) -> NodeKeyView<'_> {
-        NodeKeyView {
-            package: &self.package,
-            path: &self.path,
-            direct_len: self.direct_len,
-            ordinal: self.ordinal,
-        }
+        NodeKeyView { data: &self.inner }
     }
 
     /// Copy this identity with a fallible reservation for every owned string
@@ -546,79 +570,121 @@ impl NodeKey {
         before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
         native_reserve: &mut impl FnMut(usize) -> bool,
     ) -> Result<Self, IdentityCopyError<E>> {
-        let package = copy_text(&self.package, before_reserve, native_reserve)?;
-        let requested = array_bytes::<FlatSegment>(self.path.len()).map_err(retype)?;
-        before_reserve(requested).map_err(IdentityCopyError::Policy)?;
-        if !native_reserve(requested) {
-            return Err(IdentityCopyError::Allocation { requested });
+        fn make_frame<'a, E>(
+            source: &'a NodeKey,
+            before_reserve: &mut impl FnMut(usize) -> Result<(), E>,
+            native_reserve: &mut impl FnMut(usize) -> bool,
+        ) -> Result<CopyFrame<'a>, IdentityCopyError<E>> {
+            let package = copy_text(&source.inner.package, before_reserve, native_reserve)?;
+            let requested = array_bytes::<FlatSegment>(source.inner.path.len()).map_err(retype)?;
+            before_reserve(requested).map_err(IdentityCopyError::Policy)?;
+            if !native_reserve(requested) {
+                return Err(IdentityCopyError::Allocation { requested });
+            }
+            let mut path = Vec::new();
+            path.try_reserve_exact(source.inner.path.len())
+                .map_err(|_| IdentityCopyError::Allocation { requested })?;
+            Ok(CopyFrame {
+                source,
+                package,
+                path,
+                next: 0,
+            })
         }
-        let mut path = Vec::new();
-        path.try_reserve_exact(self.path.len())
-            .map_err(|_| IdentityCopyError::Allocation { requested })?;
-        for segment in &self.path {
-            let copied = match segment {
-                FlatSegment::Text(text) => {
-                    FlatSegment::Text(copy_text(text, before_reserve, native_reserve)?)
+
+        let mut stack = Vec::new();
+        let first = make_frame(self, before_reserve, native_reserve)?;
+        let mut pending = Some(first);
+        loop {
+            if let Some(frame) = pending.take() {
+                if stack.len() == stack.capacity() {
+                    let requested = array_bytes::<CopyFrame<'_>>(1).map_err(retype)?;
+                    before_reserve(requested).map_err(IdentityCopyError::Policy)?;
+                    if !native_reserve(requested) {
+                        return Err(IdentityCopyError::Allocation { requested });
+                    }
+                    stack
+                        .try_reserve_exact(1)
+                        .map_err(|_| IdentityCopyError::Allocation { requested })?;
                 }
-                FlatSegment::Node {
-                    package,
-                    direct_len,
-                    ordinal,
-                    span,
-                    parent_back,
-                } => FlatSegment::Node {
-                    package: copy_text(package, before_reserve, native_reserve)?,
-                    direct_len: *direct_len,
-                    ordinal: *ordinal,
-                    span: *span,
-                    parent_back: *parent_back,
-                },
+                stack.push(frame);
+            }
+            let Some(frame) = stack.last_mut() else {
+                unreachable!("copy begins with one frame")
             };
-            path.push(copied);
+            if let Some(segment) = frame.source.inner.path.get(frame.next) {
+                frame.next += 1;
+                match segment {
+                    FlatSegment::Text(text) => {
+                        frame.path.push(FlatSegment::Text(copy_text(
+                            text,
+                            before_reserve,
+                            native_reserve,
+                        )?));
+                    }
+                    FlatSegment::Node(child) => {
+                        pending = Some(make_frame(child, before_reserve, native_reserve)?);
+                    }
+                }
+                continue;
+            }
+            let frame = stack.pop().expect("copy frame exists");
+            let frame_request = core::mem::size_of::<DropFrame>();
+            before_reserve(frame_request).map_err(IdentityCopyError::Policy)?;
+            if !native_reserve(frame_request) {
+                return Err(IdentityCopyError::Allocation {
+                    requested: frame_request,
+                });
+            }
+            let drop_frame = Box::try_new(DropFrame {
+                pending: Vec::new(),
+                next: None,
+            })
+            .map_err(|_| IdentityCopyError::Allocation {
+                requested: frame_request,
+            })?;
+            let arc_request = node_arc_bytes().map_err(|_| IdentityCopyError::Capacity {
+                requested: usize::MAX,
+            })?;
+            before_reserve(arc_request).map_err(IdentityCopyError::Policy)?;
+            if !native_reserve(arc_request) {
+                return Err(IdentityCopyError::Allocation {
+                    requested: arc_request,
+                });
+            }
+            let inner = Arc::try_new(NodeData {
+                package: frame.package,
+                path: frame.path,
+                ordinal: frame.source.inner.ordinal,
+                token_count: frame.source.inner.token_count,
+                drop_frame: Some(drop_frame),
+            })
+            .map_err(|_| IdentityCopyError::Allocation {
+                requested: arc_request,
+            })?;
+            let copied = Self { inner };
+            if let Some(parent) = stack.last_mut() {
+                parent.path.push(FlatSegment::Node(copied));
+            } else {
+                return Ok(copied);
+            }
         }
-        Ok(Self {
-            package,
-            path,
-            direct_len: self.direct_len,
-            ordinal: self.ordinal,
-        })
     }
 
     fn try_clone_legacy_with(
         &self,
         before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
     ) -> Result<Self, InvalidNodeKey> {
-        let package = copy_text_with(&self.package, before_reserve)?;
-        let mut path = Vec::new();
-        let requested = flat_reservation_bytes(self.path.len())?;
-        before_reserve(requested)?;
-        path.try_reserve_exact(self.path.len())
-            .map_err(|_| InvalidNodeKey::Allocation { requested })?;
-        for segment in &self.path {
-            let copied = match segment {
-                FlatSegment::Text(text) => FlatSegment::Text(copy_text_with(text, before_reserve)?),
-                FlatSegment::Node {
-                    package,
-                    direct_len,
-                    ordinal,
-                    span,
-                    parent_back,
-                } => FlatSegment::Node {
-                    package: copy_text_with(package, before_reserve)?,
-                    direct_len: *direct_len,
-                    ordinal: *ordinal,
-                    span: *span,
-                    parent_back: *parent_back,
+        self.try_clone_with_native_hook(before_reserve, &mut |_| true)
+            .map_err(|error| match error {
+                IdentityCopyError::Policy(error) => error,
+                IdentityCopyError::Allocation { requested } => {
+                    InvalidNodeKey::Allocation { requested }
+                }
+                IdentityCopyError::Capacity { .. } => InvalidNodeKey::Allocation {
+                    requested: usize::MAX,
                 },
-            };
-            path.push(copied);
-        }
-        Ok(Self {
-            package,
-            path,
-            direct_len: self.direct_len,
-            ordinal: self.ordinal,
-        })
+            })
     }
 
     #[cfg(test)]
@@ -632,7 +698,31 @@ impl NodeKey {
 
 impl fmt::Display for NodeKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{:?}:{}", self.package, self.path, self.ordinal)
+        enum Part<'a> {
+            Node(&'a NodeKey),
+            Segment(&'a FlatSegment),
+            End(u64),
+        }
+        let mut pending = Vec::new();
+        pending.push(Part::Node(self));
+        while let Some(part) = pending.pop() {
+            match part {
+                Part::Node(node) => {
+                    write!(f, "{}:[", node.inner.package)?;
+                    pending.push(Part::End(node.inner.ordinal));
+                    for segment in node.inner.path.iter().rev() {
+                        pending.push(Part::Segment(segment));
+                    }
+                }
+                Part::Segment(FlatSegment::Text(text)) => write!(f, "{text:?},")?,
+                Part::Segment(FlatSegment::Node(node)) => {
+                    f.write_str("node(")?;
+                    pending.push(Part::Node(node));
+                }
+                Part::End(ordinal) => write!(f, "]:{ordinal}),")?,
+            }
+        }
+        Ok(())
     }
 }
 
@@ -691,7 +781,23 @@ mod tests {
             1,
         );
         let token_bytes = core::mem::size_of::<FlatSegment>();
-        let requests = [5, 3 * token_bytes, 5, 6, 5];
+        let frame_bytes = core::mem::size_of::<CopyFrame<'_>>();
+        let drop_bytes = core::mem::size_of::<DropFrame>();
+        let arc_bytes = node_arc_bytes().unwrap();
+        let requests = [
+            5,
+            2 * token_bytes,
+            frame_bytes,
+            5,
+            6,
+            token_bytes,
+            frame_bytes,
+            5,
+            drop_bytes,
+            arc_bytes,
+            drop_bytes,
+            arc_bytes,
+        ];
         let copied = source
             .try_clone_with(&mut |requested| {
                 assert!(requested > 0);
@@ -747,7 +853,10 @@ mod tests {
                 .unwrap(),
             empty_text
         );
-        assert_eq!(requests_seen, [1, token_bytes]);
+        assert_eq!(
+            requests_seen,
+            [1, token_bytes, frame_bytes, drop_bytes, arc_bytes]
+        );
     }
 
     /// Trace: FR-389-AC-1, TC-938.
@@ -1219,8 +1328,11 @@ mod tests {
         );
         let original = source.clone();
         let token_bytes = core::mem::size_of::<FlatSegment>();
-        let new_requests = [token_bytes, 2 * token_bytes];
-        for fail_at in 0..2 {
+        let frame_bytes = core::mem::size_of::<CopyFrame<'_>>();
+        let drop_bytes = core::mem::size_of::<DropFrame>();
+        let arc_bytes = node_arc_bytes().unwrap();
+        let new_requests = [2 * token_bytes, drop_bytes, arc_bytes];
+        for fail_at in 0..new_requests.len() {
             let mut call = 0;
             let result = NodeKey::try_new_with(
                 "owner".into(),
@@ -1248,8 +1360,20 @@ mod tests {
             );
             assert_eq!(call, fail_at + 1);
         }
-        let clone_requests = [5, 3 * token_bytes, 5, 4];
-        for fail_at in 0..4 {
+        let clone_requests = [
+            5,
+            2 * token_bytes,
+            frame_bytes,
+            5,
+            token_bytes,
+            frame_bytes,
+            4,
+            drop_bytes,
+            arc_bytes,
+            drop_bytes,
+            arc_bytes,
+        ];
+        for fail_at in 0..clone_requests.len() {
             let mut call = 0;
             let result = source.try_clone_legacy_with(&mut |requested| {
                 assert_eq!(requested, clone_requests[call]);
@@ -1271,7 +1395,7 @@ mod tests {
             assert_eq!(source, original);
         }
         let segment = PathSegment::Node(source.clone());
-        for fail_at in 0..4 {
+        for fail_at in 0..clone_requests.len() {
             let mut call = 0;
             let result = segment.try_clone_legacy_with(&mut |requested| {
                 assert_eq!(requested, clone_requests[call]);
@@ -1362,9 +1486,10 @@ mod tests {
                 let copy = node.clone();
                 assert_eq!(node, copy);
                 assert_eq!(node.cmp(&copy), core::cmp::Ordering::Equal);
-                let mut changed = copy.clone();
-                *changed.path.last_mut().expect("nested path has a root") =
-                    FlatSegment::Text("root2".into());
+                let mut changed = key("Pkg", vec![PathSegment::Text("root2".into())], 0);
+                for _ in 0..10_000 {
+                    changed = key("Pkg", vec![PathSegment::Node(changed)], 0);
+                }
                 assert!(node < changed);
                 let hash = |value: &NodeKey| {
                     let mut hasher = DefaultHasher::new();
@@ -1390,6 +1515,73 @@ mod tests {
             .expect("spawn small stack")
             .join()
             .expect("deep path operations complete");
+    }
+
+    /// Trace: FR-389-AC-14, TC-938.
+    #[trace("FR-389-AC-14", "TC-938")]
+    #[test]
+    fn shared_operand_construction_clone_and_concurrent_drop_are_depth_independent() {
+        fn chain(depth: usize) -> NodeKey {
+            let mut key = NodeKey::new("leaf", vec![PathSegment::Text("x".into())], 0).unwrap();
+            for _ in 0..depth {
+                key = NodeKey::new("owner", vec![PathSegment::Node(key)], 0).unwrap();
+            }
+            key
+        }
+
+        fn measured_derived(operand: NodeKey) -> (NodeKey, u64, u64) {
+            let package = String::from("derived");
+            let path = vec![PathSegment::Node(operand)];
+            let mut result = None;
+            let allocations = allocation_counter::measure(|| {
+                result = Some(NodeKey::new(package, path, 0).unwrap());
+            });
+            (
+                result.expect("derived key was constructed"),
+                allocations.count_total,
+                allocations.bytes_total,
+            )
+        }
+
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let (shallow, shallow_count, shallow_bytes) = measured_derived(chain(1_000));
+                let (deep, deep_count, deep_bytes) = measured_derived(chain(10_000));
+                assert_eq!((shallow_count, shallow_bytes), (deep_count, deep_bytes));
+                assert_eq!(deep_count, 3, "direct path, drop frame, shared payload");
+
+                let mut copied = None;
+                let allocations = allocation_counter::measure(|| copied = Some(deep.clone()));
+                assert_eq!((allocations.count_total, allocations.bytes_total), (0, 0));
+                let copied = copied.expect("ordinary clone shares storage");
+                assert!(Arc::ptr_eq(&deep.inner, &copied.inner));
+                assert_eq!(deep, copied);
+
+                let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+                let workers: Vec<_> = [deep.clone(), copied]
+                    .into_iter()
+                    .map(|key| {
+                        let barrier = barrier.clone();
+                        std::thread::Builder::new()
+                            .stack_size(512 * 1024)
+                            .spawn(move || {
+                                barrier.wait();
+                                drop(key);
+                            })
+                            .unwrap()
+                    })
+                    .collect();
+                barrier.wait();
+                drop(deep);
+                for worker in workers {
+                    worker.join().unwrap();
+                }
+                drop(shallow);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     /// A name that is not `^[A-Za-z_][A-Za-z0-9_]*$` is refused at

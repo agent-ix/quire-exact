@@ -28,6 +28,8 @@ num-traits = { version = "0.2.19", default-features = false }
 # `race` supplies a no_std, alloc-compatible Sync cell for retained BigInt views.
 once_cell = { version = "=1.21.4", default-features = false, features = ["alloc"] }
 thiserror = { version = "2.0.20", default-features = false }
+triomphe = { version = "0.1.17", default-features = false }
+spin = { version = "0.9.8", default-features = false, features = ["mutex", "spin_mutex"] }
 # The Unicode 17 text definition requires 0.1.25's tables; 0.1.26 uses Unicode 18.
 unicode-normalization = { version = "=0.1.25", default-features = false }
 
