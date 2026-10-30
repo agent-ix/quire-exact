@@ -20,7 +20,7 @@ Verify [FR-379](../functional/FR-379-carry-a-union-member-and-its-positional-pay
 3. Call `evaluate_union` with a first argument that is undefined, with a `Boolean` at an `Integer` position, and with completed arguments under a meter that records the charge log, including a meter whose retain limit is one fewer than the result.
 4. Call `planned_equality` and `plan_equality` on equal unions, on unions that differ in a payload position and in the member.
 5. Call `plan_equality` and `compare_keys` on a union against a union of another declaration, an enum member and a composite, and on one member with payload lengths 1 and 2.
-6. Call `compare_keys` on `Alpha` against `Zulu` unions whose admitted member identities have the opposite order, on one member with differing payload positions, and on equal identifiers with different `VariantId`s.
+6. Call `compare_keys` on `Alpha` against `Zulu` unions of one declaration, on one member with differing payload positions, and on `Alpha` members of two different union declarations. Check whether `ValueType::Composite` of the first declaration admits the second declaration's `Alpha` union.
 7. Call `form_collection` for `Set`, `Bag`, `OrderedSet` and `Sequence` over four unions in a supply order and its reverse; call `form_grouped` for a `Set` over a union holding an IEEE value, and `form_collection` for a `Sequence` over it.
 8. Nest a union ten thousand levels, and a mixed union, composite and collection nest, on a 512 KiB stack; clone, compare, key, format and drop them. Read the occurrence counts of a union that shares a child.
 9. Build `OptionValue::present(Composite(K), union)` for equal unions and unions of different members, and call equality and `compare_keys`.
@@ -32,7 +32,7 @@ Verify [FR-379](../functional/FR-379-carry-a-union-member-and-its-positional-pay
 3. `Undefined` with no later call and no admission; `DeferredResultNotAdmitted`; one `composite.result-retain` sized by the occurrence count; `Incomplete` naming `composite.result-retain`, the limit kind and the limit.
 4. Equal unions are equal with one plus the payload pairs; the others are unequal.
 5. `ValueKindMismatch` for each equality call and `None` for each key.
-6. Alpha before Zulu regardless of member-identity order; the payload positions decide for one member; `None` for the identifier and variant disagreement.
+6. Alpha before Zulu regardless of payload order; the payload positions decide for one member; the other declaration's `Alpha` union is not admitted and the cross-declaration key is `None` despite the equal identifiers.
 7. The stated element orders from either supply; `CanonicalKeyUnavailable` for the `Set` and a kept pair for the `Sequence`.
 8. Every call completes; storage grows linearly; the shared child counts twice.
 9. The `Option` is admitted, equal for equal unions, unequal for different members, and keys by the union key.

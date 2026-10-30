@@ -1,0 +1,36 @@
+---
+id: TC-938
+title: "Admitted structural identities replace kernel digest constructors"
+type: TC
+org: agent-ix
+relationships:
+  - target: ix://agent-ix/quire-exact/FR-389
+    type: verifies
+---
+# TC-938: Admitted structural identities replace kernel digest constructors
+
+## Description
+
+Verify [FR-389](../functional/FR-389-carry-admitted-structural-identities.md) through the public exact API with caller-authored structural identities. Use the authoritative QSpec identity contracts and selected producer outputs for the final admitted-component cases; this repository stores no copy of another repository's schema or vector.
+
+## Test Procedure
+
+1. Construct `NodeKey` values twice from one admitted `{package, path, ordinal}` and once for each single-component change. Use two packages whose UTF-8 names have known order, a path whose first segment is text against one whose first segment is a nested node id, a prefix path against its extension, and equal paths with different ordinals. Compare equality, hash under one hasher and `cmp` in both directions. Use an imported node with its owning package name and then the importer's alias as a control. Attempt an empty package, an empty path, ordinals 0 and 9007199254740991, and the above-bound ordinal 9007199254740992 at `NodeKey::new`. Read the original id from an admitted package and construct its key through the same API.
+2. Construct `EffectiveId` values from equal `{owner_effective_type, original}` components, with a `null` owner for a type and a recursive owning `EffectiveId` for a member; use an original key made from domain package identity and IR node identity. Change the owner and original separately. Keep the identity fixed while changing a derivation fact's ordinal, rule, inputs or parent. Separately construct `UniverseId` values from equal least-root declaration `NodeId`s and change the package, path and ordinal separately. Change a non-identity member of the FR-150 object-universe value while keeping the least-root `NodeId` equal. Compare equality, hash and order. Compile a client that holds one of each type and cannot substitute one for the other.
+3. Construct enum, union and model-variant `VariantId`s from admitted `{owner: NodeId, case: identifier}` pairs. For an enum, use its `value`/`enum_value` node as admission evidence but not an additional identity component. Use one case name in two declarations; in one declaration use `Gold Plus` and `Café`; attempt an empty union member name. Try an enum foreign member at a matching rank. Compare union values whose member names match but declarations differ, including `ValueType::Composite` admission and `compare_keys`.
+4. Construct `MemberId`s with equal and differing `{owner, member}` components, exercising both `{node_id: NodeId}` and `{effective_id: EffectiveId}` owner arms and changing the exact field identifier. Compare the two arms in order. Construct `PopulationId`s from equal and differing declared `relation`/`population` node ids, including different population nodes with one member type. Change binding, anchor, declared maximum and Direct, Pre or Post role without changing the node id. Exercise the public population admission, equality planning and key comparison paths in each role.
+5. Construct declared `UnitId`s from admitted unit node keys and compound `UnitId`s from caller-admitted ascending canonical term lists. Compare equal and differing values of each domain, cross-domain values, a changed root key, a changed nonzero exponent, numeric exponent order `2` before `10`, and the empty dimensionless list. Verify `declared` orders before `terms`. Keep normalization and term admission outside the kernel.
+6. Compile a consumer that constructs, borrows and clones each typed identity, then constructs an enum, union, quantity, reference and composite value. Check that calls to `from_digest`, `NodeKey::decode_admitted`, fixed digest byte accessors and digest-domain constants fail to compile. Run the existing FR-088, FR-089, FR-377 and FR-379 behavioral controls with structural identities.
+
+## Expected Results
+
+1. Equal components give equal, identically hashed and equally ordered `NodeKey`s; the listed component changes give distinct keys and QSpec FR-322 componentwise order. The importer's alias gives a different key from the imported owner's package name. Ordinals 0 and 9007199254740991 construct; empty package, empty path and 9007199254740992 refuse with typed errors. The admitted read returns the same key without a second digest decoder. Kernel construction does not assert that the package or node exists.
+2. Equal effective-id values give equal identity, hash and component order; changing the recursive owner or original key distinguishes them, while changing only a derivation fact does not. Universe ids preserve the least-root `NodeId` and its component order; changing a node component distinguishes them, while changing only non-identity object-universe context does not. The two types cannot be interchanged.
+3. Equal owner/case pairs give equal enum, union or model-variant identities; changing the declaration or case changes the identity. Union names compare byte for byte. An empty member name is refused with a typed result or cannot be represented by the constructor's validated input type. The foreign enum member is refused even at the matching rank; matching member names of different union declarations have distinct ids, fail cross-declaration admission and give `None` from `compare_keys`.
+4. Equal member owner arms and member identifiers compare equally; changing arm, owner or identifier distinguishes them, and `node_id` orders before `effective_id`. Equal population node ids yield equal ids across role and binding changes; different population nodes yield different ids. The population paths retain FR-089's refusals in Direct, Pre and Post contexts.
+5. Equal identities within a domain compare equally and every specified changed component distinguishes them; declared and compound domains never compare equal, with declared ordered first, and the empty compound list identifies the dimensionless unit. Term order compares unit nodes, then exponent numerically. The exact constructor does not normalize terms or derive a compound unit from a graph node.
+6. The structural client compiles, all removed digest API calls do not, and the existing admission, equality, key ordering, pair count and refusal controls preserve their stated results.
+
+## Status
+
+Planned with FR-389 after the authoritative QSpec structural identity stack lands. QSpec #517/#518 are open at authoring time; the exact kernel code and the caller-owned admission checks are not claimed complete by this test plan.

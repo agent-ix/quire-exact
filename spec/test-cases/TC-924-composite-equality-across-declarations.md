@@ -13,7 +13,7 @@ relationships:
 
 Verify [FR-376](../functional/FR-376-composite-equality-across-declarations.md) through the public kernel equality paths: `plan_equality`, `planned_equality`, `planned_equality_with_plan` and `member_equal`. Build values with `from_admitted_slots`, `OptionValue::from_admitted` and `collection::from_admitted`, so no declaration registry is involved.
 
-Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [1; 32]`, `C = [2; 32]`, `G = [3; 32]`. Integers are `Integer::from`.
+Fixtures. `P`, `C` and `G` are distinct admitted structural declaration keys under `NodeKey::new`; their owning package or declaration path differs. Their exact text is immaterial to the equality oracle. Integers are `Integer::from`.
 
 | Name | Declaration | Slots |
 | --- | --- | --- |
@@ -32,11 +32,11 @@ Fixtures. Declaration keys are `NodeKey::from_digest` of a repeated byte: `P = [
 2. On `(p100, c100)` call `planned_equality` with a test meter that records the admitted charge log. Record the log, `WorkUnits`, `ResultUnits` and the `ValueOccurrences` high-water mark.
 3. Call `planned_equality` on `(p_ref, c_ref)` and, as a control, on `(p_ref, p_ref2)`.
 4. Call `planned_equality` on `(p100, p100')` where `p100'` is a second value built with the same declaration and slots, `(p100, p200)`, and `(c100, c100')` likewise.
-5. Wrap the pair `(p100, c100)` as the payload of two present `Option<Composite(P)>` values, as the only slot of two one-slot records of a declaration `W = [4; 32]`, and as the only element of two one-element `Sequence`, `Set` and `Bag` values of element type `Composite(P)` (built by `from_admitted`). Call `plan_equality` and `planned_equality` on each pair of wrappers, in both orders. As controls, wrap `(p100, p100')` the same way.
+5. Wrap the pair `(p100, c100)` as the payload of two present `Option<Composite(P)>` values, as the only slot of two one-slot records of a fourth admitted declaration `W`, and as the only element of two one-element `Sequence`, `Set` and `Bag` values of element type `Composite(P)` (built by `from_admitted`). Call `plan_equality` and `planned_equality` on each pair of wrappers, in both orders. As controls, wrap `(p100, p100')` the same way.
 6. Call `planned_equality` on `(p100, Integer 100)`, `(p100, none Option)`, `(p100, empty Sequence)` and `(p100, Reference)` in both orders. Build a composite `bad` with declaration `P` and slots `[Present(100), Present(100)]` and call it on `(p100, bad)`. Call it on two `Population` values.
 7. Call `member_equal(candidate = c100, member = p100)` under a recording meter.
 8. Call `form` for an `OrderedSet` of element type `Composite(P)` over `[c100, p100]`, `[p100, c100]` and `[c100, p100, c100]`, under a recording meter.
-9. Hold each of `p100`, `c100`, `g100` at the one position of a union member of a declaration `U = [9; 32]` through `UnionValue::from_admitted`, and call `plan_equality` and `planned_equality` on the pairs of step 1, on `(p_ref, c_ref)` held the same way, and on a two-position member holding `(p100, 1)` against `(c100, 2)`. Wrap one held pair as the payload of two present `Option` values. Call `planned_equality` on a union against `Integer 1`, on two unions of one member with one and two payload values, and on two unions of different declarations.
+9. Hold each of `p100`, `c100`, `g100` at the one position of a union member of a fifth admitted declaration `U` through `UnionValue::from_admitted`, and call `plan_equality` and `planned_equality` on the pairs of step 1, on `(p_ref, c_ref)` held the same way, and on a two-position member holding `(p100, 1)` against `(c100, 2)`. Wrap one held pair as the payload of two present `Option` values. Call `planned_equality` on a union against `Integer 1`, on two unions of one member with one and two payload values, and on two unions of different declarations.
 
 ## Expected Results
 
