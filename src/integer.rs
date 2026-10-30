@@ -1755,6 +1755,16 @@ mod tests {
                 requested: copy_requests[0]
             })
         );
+        let retained_limbs = source.try_clone().unwrap();
+        assert_eq!(
+            retained_limbs.try_clone_with(&mut |requested| {
+                Err(IntegerCopyError::Allocation { requested })
+            }),
+            Err(IntegerCopyError::Allocation {
+                requested: copy_requests[0]
+            })
+        );
+        assert_eq!(retained_limbs, source);
         Integer::from(3_i64)
             .try_clone_with(&mut |_| panic!("inline copy must not reserve"))
             .unwrap();
