@@ -48,7 +48,10 @@ pub struct Integer(IntegerRepr);
 pub enum IntegerCopyError {
     /// Minimum additional payload bytes of the failed reservation.
     #[error("integer copy allocation of {requested} bytes failed")]
-    Allocation { requested: usize },
+    Allocation {
+        /// Minimum additional payload bytes requested.
+        requested: usize,
+    },
 }
 
 /// Refusal to render an integer as bounded canonical decimal text.
@@ -56,10 +59,18 @@ pub enum IntegerCopyError {
 pub enum IntegerDecimalError {
     /// Minimum additional payload bytes of the failed reservation.
     #[error("integer decimal allocation of {requested} bytes failed")]
-    Allocation { requested: usize },
+    Allocation {
+        /// Minimum additional payload bytes requested.
+        requested: usize,
+    },
     /// The representable spelling exceeds the caller's byte limit.
     #[error("integer decimal output needs {required} bytes, limit {limit}")]
-    ByteLimit { required: usize, limit: usize },
+    ByteLimit {
+        /// Complete decimal output bytes, including the minus sign.
+        required: usize,
+        /// Maximum bytes supplied by the caller.
+        limit: usize,
+    },
     /// The complete spelling length cannot fit `usize`.
     #[error("integer decimal output length overflows usize")]
     OutputSizeOverflow,
