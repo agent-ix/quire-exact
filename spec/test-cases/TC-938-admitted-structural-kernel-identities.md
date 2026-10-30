@@ -37,4 +37,4 @@ Verify [FR-389](../functional/FR-389-carry-admitted-structural-identities.md) th
 
 ## Status
 
-The structural identity controls for FR-389-AC-1 through AC-8 are implemented. Borrowed traversal and fallible structural copy controls for AC-9 through AC-12 are planned under IR-1148. Caller-owned admission checks remain outside this kernel test plan.
+The structural identity controls for FR-389-AC-1 through AC-12 are implemented. Caller-owned admission checks remain outside this kernel test plan.

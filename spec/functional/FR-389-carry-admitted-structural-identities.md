@@ -64,7 +64,7 @@ When the caller supplies an admitted semantic identity, the `quire-exact` kernel
 
 ## Status
 
-The structural identity behavior of AC-1 through AC-8 is implemented. AC-9 through AC-12 specify borrowed path traversal and fallible structural construction/copy required by IR-1148; implementation follows this spec. This status does not waive any acceptance criterion.
+The structural identity behavior of AC-1 through AC-12 is implemented. Borrowed path traversal and fallible structural construction/copy are implemented in `src/node.rs`. This status does not waive any acceptance criterion.
 
 ## Dependencies
 

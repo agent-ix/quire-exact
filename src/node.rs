@@ -6,7 +6,7 @@
 //! The caller checks that the identity joins its admitted package; this leaf
 //! checks only the closed shape and never computes a digest.
 
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 use core::{cmp::Ordering, fmt};
 
 /// The greatest node ordinal admitted by the checked-package V2 schema.
@@ -58,7 +58,38 @@ pub enum PathSegment {
     /// An exact UTF-8 segment, including the empty string where admitted.
     Text(String),
     /// An operand node identity nested in a derived node's path.
-    Node(Box<NodeKey>),
+    Node(NodeKey),
+}
+
+impl PathSegment {
+    /// Copy this segment, refusing if any storage reservation fails.
+    pub fn try_clone(&self) -> Result<Self, InvalidNodeKey> {
+        self.try_clone_with(&mut || Ok(()))
+    }
+
+    fn try_clone_with(
+        &self,
+        before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+    ) -> Result<Self, InvalidNodeKey> {
+        match self {
+            Self::Text(text) => Ok(Self::Text(copy_text_with(text, before_reserve)?)),
+            Self::Node(node) => Ok(Self::Node(node.try_clone_with(before_reserve)?)),
+        }
+    }
+}
+
+fn copy_text_with(
+    text: &str,
+    before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+) -> Result<String, InvalidNodeKey> {
+    let mut copy = String::new();
+    if !text.is_empty() {
+        before_reserve()?;
+        copy.try_reserve_exact(text.len())
+            .map_err(|_| InvalidNodeKey::Allocation)?;
+        copy.push_str(text);
+    }
+    Ok(copy)
 }
 
 /// A malformed structural node identity.
@@ -73,6 +104,9 @@ pub enum InvalidNodeKey {
     /// The ordinal exceeds the checked-package V2 schema maximum.
     #[error("a node ordinal exceeds the checked-package V2 maximum")]
     OrdinalOutOfRange,
+    /// Storage for a structural identity could not be reserved.
+    #[error("a structural node identity allocation failed")]
+    Allocation,
 }
 
 /// A structural node identity from an admitted checked package.
@@ -100,17 +134,87 @@ enum FlatSegment {
     },
 }
 
+/// A borrowed structural node identity. Creating or traversing a view does not allocate.
 #[derive(Clone, Copy)]
-struct NodeView<'a> {
+pub struct NodeKeyView<'a> {
     package: &'a str,
     path: &'a [FlatSegment],
     direct_len: usize,
     ordinal: u64,
 }
 
+impl<'a> NodeKeyView<'a> {
+    /// The exact owning package name.
+    pub fn package(self) -> &'a str {
+        self.package
+    }
+
+    /// The ordinal within the owning package and path.
+    pub fn ordinal(self) -> u64 {
+        self.ordinal
+    }
+
+    /// Iterate over direct path segments without copying nested identities.
+    pub fn path(self) -> NodePathIter<'a> {
+        NodePathIter {
+            path: self.path,
+            index: 0,
+            remaining: self.direct_len,
+        }
+    }
+}
+
+/// One borrowed direct path segment.
+#[derive(Clone, Copy)]
+pub enum PathSegmentView<'a> {
+    /// Exact borrowed UTF-8 text, including an empty string.
+    Text(&'a str),
+    /// A borrowed nested node identity.
+    Node(NodeKeyView<'a>),
+}
+
+/// Allocation-free iterator over a node identity's direct path.
+pub struct NodePathIter<'a> {
+    path: &'a [FlatSegment],
+    index: usize,
+    remaining: usize,
+}
+
+impl<'a> Iterator for NodePathIter<'a> {
+    type Item = PathSegmentView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+        match &self.path[self.index] {
+            FlatSegment::Text(text) => {
+                self.index += 1;
+                Some(PathSegmentView::Text(text))
+            }
+            FlatSegment::Node {
+                package,
+                direct_len,
+                ordinal,
+                span,
+            } => {
+                let start = self.index + 1;
+                self.index += *span;
+                Some(PathSegmentView::Node(NodeKeyView {
+                    package,
+                    path: &self.path[start..self.index],
+                    direct_len: *direct_len,
+                    ordinal: *ordinal,
+                }))
+            }
+        }
+    }
+}
+
 struct CompareFrame<'a> {
-    left: NodeView<'a>,
-    right: NodeView<'a>,
+    left: NodeKeyView<'a>,
+    right: NodeKeyView<'a>,
     left_index: usize,
     right_index: usize,
     left_remaining: usize,
@@ -118,7 +222,7 @@ struct CompareFrame<'a> {
 }
 
 impl<'a> CompareFrame<'a> {
-    fn new(left: NodeView<'a>, right: NodeView<'a>) -> Self {
+    fn new(left: NodeKeyView<'a>, right: NodeKeyView<'a>) -> Self {
         Self {
             left,
             right,
@@ -183,13 +287,13 @@ impl Ord for NodeKey {
                 ) => {
                     let left_path = frame.left.path;
                     let right_path = frame.right.path;
-                    let left_node = NodeView {
+                    let left_node = NodeKeyView {
                         package: left_package,
                         path: &left_path[frame.left_index + 1..frame.left_index + *left_span],
                         direct_len: *left_len,
                         ordinal: *left_ordinal,
                     };
-                    let right_node = NodeView {
+                    let right_node = NodeKeyView {
                         package: right_package,
                         path: &right_path[frame.right_index + 1..frame.right_index + *right_span],
                         direct_len: *right_len,
@@ -221,7 +325,26 @@ impl NodeKey {
         path: Vec<PathSegment>,
         ordinal: u64,
     ) -> Result<Self, InvalidNodeKey> {
-        let package = package.into();
+        Self::try_new(package.into(), path, ordinal)
+    }
+
+    /// Carry an already owned structural node identity, refusing failed storage
+    /// reservations separately from invalid shape. The caller owns any fallible
+    /// copy needed to obtain the package string and path before this call.
+    pub fn try_new(
+        package: String,
+        path: Vec<PathSegment>,
+        ordinal: u64,
+    ) -> Result<Self, InvalidNodeKey> {
+        Self::try_new_with(package, path, ordinal, &mut || Ok(()))
+    }
+
+    fn try_new_with(
+        package: String,
+        path: Vec<PathSegment>,
+        ordinal: u64,
+        before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+    ) -> Result<Self, InvalidNodeKey> {
         if package.is_empty() {
             return Err(InvalidNodeKey::EmptyPackage);
         }
@@ -235,21 +358,36 @@ impl NodeKey {
         let mut flat = Vec::new();
         for segment in path {
             match segment {
-                PathSegment::Text(text) => flat.push(FlatSegment::Text(text)),
+                PathSegment::Text(text) => {
+                    before_reserve()?;
+                    flat.try_reserve(1)
+                        .map_err(|_| InvalidNodeKey::Allocation)?;
+                    flat.push(FlatSegment::Text(text));
+                }
                 PathSegment::Node(node) => {
                     let NodeKey {
                         package,
                         path,
                         direct_len,
                         ordinal,
-                    } = *node;
+                    } = node;
+                    let needed = path
+                        .len()
+                        .checked_add(1)
+                        .ok_or(InvalidNodeKey::Allocation)?;
+                    before_reserve()?;
+                    flat.try_reserve(needed)
+                        .map_err(|_| InvalidNodeKey::Allocation)?;
                     flat.push(FlatSegment::Node {
                         package,
                         direct_len,
                         ordinal,
                         span: path.len() + 1,
                     });
-                    flat.extend(path);
+                    // The reservation above admits this header and every child token.
+                    for token in path {
+                        flat.push(token);
+                    }
                 }
             }
         }
@@ -283,12 +421,12 @@ impl NodeKey {
                     ordinal,
                     span,
                 } => {
-                    result.push(PathSegment::Node(Box::new(NodeKey {
+                    result.push(PathSegment::Node(NodeKey {
                         package: package.clone(),
                         path: self.path[index + 1..index + *span].to_vec(),
                         direct_len: *direct_len,
                         ordinal: *ordinal,
-                    })));
+                    }));
                     index += *span;
                 }
             }
@@ -301,13 +439,54 @@ impl NodeKey {
         self.ordinal
     }
 
-    fn view(&self) -> NodeView<'_> {
-        NodeView {
+    /// Borrow the package, ordinal and direct path without constructing an owned path.
+    pub fn view(&self) -> NodeKeyView<'_> {
+        NodeKeyView {
             package: &self.package,
             path: &self.path,
             direct_len: self.direct_len,
             ordinal: self.ordinal,
         }
+    }
+
+    /// Copy this identity with a fallible reservation for every owned string
+    /// and flat path token; nested identity depth does not grow the call stack.
+    pub fn try_clone(&self) -> Result<Self, InvalidNodeKey> {
+        self.try_clone_with(&mut || Ok(()))
+    }
+
+    fn try_clone_with(
+        &self,
+        before_reserve: &mut impl FnMut() -> Result<(), InvalidNodeKey>,
+    ) -> Result<Self, InvalidNodeKey> {
+        let package = copy_text_with(&self.package, before_reserve)?;
+        let mut path = Vec::new();
+        before_reserve()?;
+        path.try_reserve_exact(self.path.len())
+            .map_err(|_| InvalidNodeKey::Allocation)?;
+        for segment in &self.path {
+            let copied = match segment {
+                FlatSegment::Text(text) => FlatSegment::Text(copy_text_with(text, before_reserve)?),
+                FlatSegment::Node {
+                    package,
+                    direct_len,
+                    ordinal,
+                    span,
+                } => FlatSegment::Node {
+                    package: copy_text_with(package, before_reserve)?,
+                    direct_len: *direct_len,
+                    ordinal: *ordinal,
+                    span: *span,
+                },
+            };
+            path.push(copied);
+        }
+        Ok(Self {
+            package,
+            path,
+            direct_len: self.direct_len,
+            ordinal: self.ordinal,
+        })
     }
 
     #[cfg(test)]
@@ -364,43 +543,43 @@ mod tests {
         );
         assert!(
             key("Pkg", vec![PathSegment::Text("Type".into())], 0)
-                < key("Pkg", vec![PathSegment::Node(Box::new(a.clone()))], 0)
+                < key("Pkg", vec![PathSegment::Node(a.clone())], 0)
         );
         assert!(
             key(
                 "Pkg",
-                vec![PathSegment::Node(Box::new(key(
+                vec![PathSegment::Node(key(
                     "Pkg",
                     vec![PathSegment::Text("A".into())],
                     0,
-                )))],
+                ))],
                 0,
             ) < key(
                 "Pkg",
-                vec![PathSegment::Node(Box::new(key(
+                vec![PathSegment::Node(key(
                     "Pkg",
                     vec![PathSegment::Text("B".into())],
                     0,
-                )))],
+                ))],
                 0,
             )
         );
         assert!(
             key(
                 "Pkg",
-                vec![PathSegment::Node(Box::new(key(
+                vec![PathSegment::Node(key(
                     "Pkg",
                     vec![PathSegment::Text("A".into())],
                     0,
-                )))],
+                ))],
                 0,
             ) < key(
                 "Pkg",
-                vec![PathSegment::Node(Box::new(key(
+                vec![PathSegment::Node(key(
                     "Pkg",
                     vec![PathSegment::Text("A".into())],
                     1,
-                )))],
+                ))],
                 0,
             )
         );
@@ -414,11 +593,7 @@ mod tests {
                 0
             )
         );
-        let nested = PathSegment::Node(Box::new(key(
-            "Pkg",
-            vec![PathSegment::Text("child".into())],
-            0,
-        )));
+        let nested = PathSegment::Node(key("Pkg", vec![PathSegment::Text("child".into())], 0));
         assert!(
             key(
                 "Pkg",
@@ -451,6 +626,267 @@ mod tests {
         );
     }
 
+    /// Trace: FR-389-AC-9, FR-389-AC-10, TC-938.
+    #[trace("FR-389-AC-9", "FR-389-AC-10", "TC-938")]
+    #[test]
+    fn borrowed_path_preserves_direct_components_at_depth() {
+        let child = key("nested", vec![PathSegment::Text("leaf".into())], 7);
+        let parent = key(
+            "owner",
+            vec![
+                PathSegment::Text(String::new()),
+                PathSegment::Node(child),
+                PathSegment::Text("tail".into()),
+            ],
+            9,
+        );
+        let view = parent.view();
+        assert_eq!((view.package(), view.ordinal()), ("owner", 9));
+        let mut path = view.path();
+        assert!(matches!(path.next(), Some(PathSegmentView::Text(""))));
+        let Some(PathSegmentView::Node(nested)) = path.next() else {
+            panic!("second direct segment is nested");
+        };
+        assert_eq!((nested.package(), nested.ordinal()), ("nested", 7));
+        assert!(matches!(
+            nested.path().next(),
+            Some(PathSegmentView::Text("leaf"))
+        ));
+        assert!(matches!(path.next(), Some(PathSegmentView::Text("tail"))));
+        assert!(path.next().is_none());
+        let allocations = allocation_counter::measure(|| {
+            let mut segments = 0;
+            for segment in parent.view().path() {
+                segments += 1;
+                if let PathSegmentView::Node(child) = segment {
+                    assert_eq!(child.path().count(), 1);
+                }
+            }
+            assert_eq!(segments, 3);
+        });
+        assert_eq!(allocations.count_total, 0);
+
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let mut node = key("deep", vec![PathSegment::Text("root".into())], 0);
+                for _ in 0..10_000 {
+                    node = key("deep", vec![PathSegment::Node(node)], 0);
+                }
+                let copy = node.try_clone().unwrap();
+                assert_eq!(copy, node);
+                let segment = PathSegment::Node(copy);
+                assert_eq!(segment.try_clone().unwrap(), segment);
+                let mut pending = Vec::new();
+                pending.try_reserve(1).unwrap();
+                pending.push(node.view());
+                let mut nodes = 0;
+                let mut roots = 0;
+                while let Some(view) = pending.pop() {
+                    nodes += 1;
+                    for segment in view.path() {
+                        match segment {
+                            PathSegmentView::Text("root") => roots += 1,
+                            PathSegmentView::Text(other) => panic!("unexpected {other}"),
+                            PathSegmentView::Node(child) => {
+                                pending.try_reserve(1).unwrap();
+                                pending.push(child);
+                            }
+                        }
+                    }
+                }
+                assert_eq!((nodes, roots), (10_001, 1));
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Trace: FR-389-AC-10, TC-938.
+    #[trace("FR-389-AC-10", "TC-938")]
+    #[test]
+    fn borrowed_consumer_refuses_failed_stack_or_output_reservation() {
+        #[derive(Debug, Eq, PartialEq)]
+        enum ConsumerAllocation {
+            Stack,
+            Output,
+        }
+
+        fn collect<'a>(
+            view: NodeKeyView<'a>,
+            fail_stack: bool,
+            fail_output: bool,
+        ) -> Result<Vec<&'a str>, ConsumerAllocation> {
+            let mut stack = Vec::new();
+            stack
+                .try_reserve(if fail_stack { usize::MAX } else { 1 })
+                .map_err(|_| ConsumerAllocation::Stack)?;
+            stack.push(view);
+            let mut output = Vec::new();
+            while let Some(view) = stack.pop() {
+                for segment in view.path() {
+                    match segment {
+                        PathSegmentView::Text(text) => {
+                            output
+                                .try_reserve(if fail_output { usize::MAX } else { 1 })
+                                .map_err(|_| ConsumerAllocation::Output)?;
+                            output.push(text);
+                        }
+                        PathSegmentView::Node(child) => {
+                            stack
+                                .try_reserve(1)
+                                .map_err(|_| ConsumerAllocation::Stack)?;
+                            stack.push(child);
+                        }
+                    }
+                }
+            }
+            Ok(output)
+        }
+
+        let node = key("owner", vec![PathSegment::Text("name".into())], 0);
+        assert_eq!(collect(node.view(), false, false), Ok(vec!["name"]));
+        assert_eq!(
+            collect(node.view(), true, false),
+            Err(ConsumerAllocation::Stack)
+        );
+        assert_eq!(
+            collect(node.view(), false, true),
+            Err(ConsumerAllocation::Output)
+        );
+        assert_eq!(node.view().path().count(), 1);
+    }
+
+    /// Trace: FR-389-AC-11, FR-389-AC-12, TC-938.
+    #[trace("FR-389-AC-11", "FR-389-AC-12", "TC-938")]
+    #[test]
+    fn fallible_structural_construction_and_copy_preserve_identity() {
+        let segment = PathSegment::Node(key(
+            "child",
+            vec![PathSegment::Text("text".into())],
+            MAX_NODE_ORDINAL,
+        ));
+        let node = NodeKey::try_new(
+            "owner".into(),
+            vec![PathSegment::Text("".into()), segment.try_clone().unwrap()],
+            0,
+        )
+        .unwrap();
+        let infallible = NodeKey::new(
+            "owner",
+            vec![PathSegment::Text("".into()), segment.try_clone().unwrap()],
+            0,
+        )
+        .unwrap();
+        assert_eq!(node, infallible);
+        let upper = NodeKey::try_new(
+            "owner".into(),
+            vec![segment.try_clone().unwrap()],
+            MAX_NODE_ORDINAL,
+        )
+        .unwrap();
+        assert_eq!(upper.ordinal(), MAX_NODE_ORDINAL);
+        let copied = node.try_clone().unwrap();
+        assert_eq!(copied, node);
+        assert_eq!(copied.cmp(&node), Ordering::Equal);
+        assert_eq!(segment.try_clone().unwrap(), segment);
+        let text = PathSegment::Text("text".into());
+        assert_eq!(text.try_clone().unwrap(), text);
+        let hash = |key: &NodeKey| {
+            let mut hasher = DefaultHasher::new();
+            key.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(hash(&copied), hash(&node));
+        assert_eq!(
+            NodeKey::try_new(String::new(), vec![segment.try_clone().unwrap()], 0),
+            Err(InvalidNodeKey::EmptyPackage)
+        );
+        assert_eq!(
+            NodeKey::try_new("owner".into(), Vec::new(), 0),
+            Err(InvalidNodeKey::EmptyPath)
+        );
+        assert_eq!(
+            NodeKey::try_new("owner".into(), vec![segment], MAX_NODE_ORDINAL + 1),
+            Err(InvalidNodeKey::OrdinalOutOfRange)
+        );
+    }
+
+    /// Trace: FR-389-AC-11, FR-389-AC-12, TC-938.
+    #[trace("FR-389-AC-11", "FR-389-AC-12", "TC-938")]
+    #[test]
+    fn each_fallible_reservation_refuses_without_changing_source() {
+        let child = key("child", vec![PathSegment::Text("text".into())], 0);
+        let source = key(
+            "owner",
+            vec![
+                PathSegment::Text(String::new()),
+                PathSegment::Node(child.clone()),
+            ],
+            0,
+        );
+        let original = source.clone();
+        for fail_at in 0..2 {
+            let mut call = 0;
+            let result = NodeKey::try_new_with(
+                "owner".into(),
+                vec![
+                    PathSegment::Text(String::new()),
+                    PathSegment::Node(child.clone()),
+                ],
+                0,
+                &mut || {
+                    let reject = call == fail_at;
+                    call += 1;
+                    if reject {
+                        Err(InvalidNodeKey::Allocation)
+                    } else {
+                        Ok(())
+                    }
+                },
+            );
+            assert_eq!(result, Err(InvalidNodeKey::Allocation));
+            assert_eq!(call, fail_at + 1);
+        }
+        for fail_at in 0..4 {
+            let mut call = 0;
+            let result = source.try_clone_with(&mut || {
+                let reject = call == fail_at;
+                call += 1;
+                if reject {
+                    Err(InvalidNodeKey::Allocation)
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result, Err(InvalidNodeKey::Allocation));
+            assert_eq!(call, fail_at + 1);
+            assert_eq!(source, original);
+        }
+        let segment = PathSegment::Node(source.clone());
+        for fail_at in 0..4 {
+            let mut call = 0;
+            let result = segment.try_clone_with(&mut || {
+                let reject = call == fail_at;
+                call += 1;
+                if reject {
+                    Err(InvalidNodeKey::Allocation)
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result, Err(InvalidNodeKey::Allocation));
+            assert_eq!(call, fail_at + 1);
+            assert_eq!(segment, PathSegment::Node(original.clone()));
+        }
+        let text = PathSegment::Text("text".into());
+        assert_eq!(
+            text.try_clone_with(&mut || Err(InvalidNodeKey::Allocation)),
+            Err(InvalidNodeKey::Allocation)
+        );
+        assert_eq!(text, PathSegment::Text("text".into()));
+    }
+
     #[trace("TC-938", "FR-389-AC-1", "FR-389-AC-7")]
     #[test]
     fn deep_nested_path_clones_compares_hashes_formats_and_drops_on_small_stack() {
@@ -459,7 +895,7 @@ mod tests {
             .spawn(|| {
                 let mut node = key("Pkg", vec![PathSegment::Text("root".into())], 0);
                 for _ in 0..10_000 {
-                    node = key("Pkg", vec![PathSegment::Node(Box::new(node))], 0);
+                    node = key("Pkg", vec![PathSegment::Node(node)], 0);
                 }
                 let copy = node.clone();
                 assert_eq!(node, copy);
