@@ -365,6 +365,9 @@ mod tests {
                 assert_eq!(hash(&id), hash(&copy));
                 assert!(alloc::format!("{id:?}").starts_with("EffectiveId"));
                 assert_eq!(id.owner_chain().len(), 10_001);
+                let owner = id.owner_effective_type().expect("deep member has an owner");
+                assert_eq!(owner.owner_chain().len(), 10_000);
+                drop(owner);
                 drop(copy);
                 drop(changed);
                 drop(id);

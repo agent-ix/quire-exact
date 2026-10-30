@@ -415,6 +415,18 @@ mod tests {
                 0
             )
         );
+        let nested = PathSegment::Node(Box::new(key(
+            "Pkg",
+            vec![PathSegment::Text("child".into())],
+            0,
+        )));
+        assert!(
+            key(
+                "Pkg",
+                vec![nested.clone(), PathSegment::Text("a".into())],
+                0
+            ) < key("Pkg", vec![nested, PathSegment::Text("b".into())], 0)
+        );
     }
 
     /// Trace: FR-389-AC-2, TC-938.
@@ -464,6 +476,8 @@ mod tests {
                 };
                 assert_eq!(hash(&node), hash(&copy));
                 assert!(alloc::format!("{node:?}").starts_with("NodeKey("));
+                let rebuilt = key(node.package(), node.path(), node.ordinal());
+                assert_eq!(rebuilt, node);
                 let [PathSegment::Node(parent)] = node.path().try_into().unwrap() else {
                     panic!("one nested path segment")
                 };
@@ -471,6 +485,7 @@ mod tests {
                 drop(parent);
                 drop(copy);
                 drop(changed);
+                drop(rebuilt);
                 drop(node);
             })
             .expect("spawn small stack")
