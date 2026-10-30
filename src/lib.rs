@@ -141,8 +141,8 @@ pub use native_integer::{
     NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
 };
 pub use node::{
-    is_identifier, Identifier, InvalidIdentifier, InvalidNodeKey, NodeKey, PathSegment,
-    MAX_NODE_ORDINAL,
+    is_identifier, Identifier, InvalidIdentifier, InvalidNodeKey, NodeKey, NodeKeyView,
+    NodePathIter, PathSegment, PathSegmentView, MAX_NODE_ORDINAL,
 };
 pub use numeric::{
     evaluate_boolean, evaluate_integer_arithmetic, evaluate_rational_arithmetic, order_numbers,
