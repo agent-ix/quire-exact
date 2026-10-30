@@ -1137,7 +1137,9 @@ mod tests {
             IntegerRepr::Small64 { cache, .. } | IntegerRepr::Small128 { cache, .. } => {
                 assert!(cache.get().is_none());
             }
-            IntegerRepr::Large(_) => panic!("expected an inline value"),
+            IntegerRepr::Large(_) | IntegerRepr::LargeDigits { .. } => {
+                panic!("expected an inline value")
+            }
         }
     }
 
