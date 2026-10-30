@@ -8,6 +8,7 @@ use quire_exact::{
     ConstructionCause, ConstructionRefusal, FieldValue, InjectedDenial, Integer, Meter, NodeKey,
     Outcome, PathSegment, Refusal, ScalarLimits, Value, ValueType,
 };
+use std::num::NonZeroU64;
 
 fn meter() -> Meter {
     Meter::new(ScalarLimits {
@@ -335,7 +336,7 @@ fn inspection_refuses_malformed_storage_and_charges_only_membership_and_bound() 
         ] {
             let mut denied = meter().with_injected_denial(InjectedDenial {
                 point,
-                occurrence: 0,
+                occurrence: NonZeroU64::new(1).unwrap(),
             });
             assert!(matches!(
                 inspect_typed_poststate(&declared, value, &mut denied, Some(&mut admitted)),
