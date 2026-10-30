@@ -18,12 +18,13 @@
 //! [`spanning`](IntegerInterval::spanning), [`from_big`](Integer::from_big)
 //! and [`as_big`](Integer::as_big).
 
+use alloc::{string::String, vec::Vec};
 use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::num::NonZeroU32;
 use core::str::FromStr;
 
-use num_bigint::{BigInt, BigUint};
+use num_bigint::{BigInt, BigUint, Sign};
 use num_integer::Integer as _;
 use num_traits::{One, Signed, Zero};
 
@@ -42,6 +43,96 @@ use crate::accounting::length_amount;
 /// quire:canonical
 pub struct Integer(IntegerRepr);
 
+/// Storage for an owned integer copy could not be reserved.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum IntegerCopyError {
+    /// Minimum additional payload bytes of the failed reservation.
+    #[error("integer copy allocation of {requested} bytes failed")]
+    Allocation { requested: usize },
+}
+
+/// Refusal to render an integer as bounded canonical decimal text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum IntegerDecimalError {
+    /// Minimum additional payload bytes of the failed reservation.
+    #[error("integer decimal allocation of {requested} bytes failed")]
+    Allocation { requested: usize },
+    /// The representable spelling exceeds the caller's byte limit.
+    #[error("integer decimal output needs {required} bytes, limit {limit}")]
+    ByteLimit { required: usize, limit: usize },
+    /// The complete spelling length cannot fit `usize`.
+    #[error("integer decimal output length overflows usize")]
+    OutputSizeOverflow,
+}
+
+fn reservation_bytes<T>(current: usize, additional: usize) -> usize {
+    current
+        .checked_add(additional)
+        .and_then(|_| additional.checked_mul(core::mem::size_of::<T>()))
+        .unwrap_or(usize::MAX)
+}
+
+fn decimal_length(
+    chunks: usize,
+    highest_digits: usize,
+    negative: bool,
+    limit: usize,
+) -> Result<usize, IntegerDecimalError> {
+    let required = chunks
+        .saturating_sub(1)
+        .checked_mul(9)
+        .and_then(|length| length.checked_add(highest_digits))
+        .and_then(|length| length.checked_add(usize::from(negative)))
+        .ok_or(IntegerDecimalError::OutputSizeOverflow)?;
+    if required > limit {
+        Err(IntegerDecimalError::ByteLimit { required, limit })
+    } else {
+        Ok(required)
+    }
+}
+
+const DECIMAL_CHUNK_BASE: u64 = 1_000_000_000;
+const BINARY_LIMB_BASE: u64 = 1_u64 << 32;
+
+fn append_binary_limb(
+    chunks: &mut Vec<u32>,
+    limb: u32,
+    before_reserve: &mut impl FnMut(usize) -> Result<(), IntegerDecimalError>,
+) -> Result<(), IntegerDecimalError> {
+    let mut carry = u64::from(limb);
+    for chunk in chunks.iter_mut() {
+        let value = u64::from(*chunk) * BINARY_LIMB_BASE + carry;
+        *chunk = (value % DECIMAL_CHUNK_BASE) as u32;
+        carry = value / DECIMAL_CHUNK_BASE;
+    }
+    while carry != 0 {
+        if chunks.len() == chunks.capacity() {
+            let requested = reservation_bytes::<u32>(chunks.len(), 1);
+            if requested == usize::MAX {
+                return Err(IntegerDecimalError::Allocation { requested });
+            }
+            before_reserve(requested)?;
+            chunks
+                .try_reserve(1)
+                .map_err(|_| IntegerDecimalError::Allocation { requested })?;
+        }
+        chunks.push((carry % DECIMAL_CHUNK_BASE) as u32);
+        carry /= DECIMAL_CHUNK_BASE;
+    }
+    Ok(())
+}
+
+fn write_decimal_chunk(output: &mut String, mut chunk: u32, width: usize) {
+    let mut digits = [b'0'; 9];
+    for digit in digits[9 - width..].iter_mut().rev() {
+        *digit = b'0' + (chunk % 10) as u8;
+        chunk /= 10;
+    }
+    for digit in &digits[9 - width..] {
+        output.push(char::from(*digit));
+    }
+}
+
 enum IntegerRepr {
     Small64 {
         value: i64,
@@ -54,6 +145,13 @@ enum IntegerRepr {
     // Normalization admits this variant only outside the i128 range; cloning
     // preserves that invariant. Mixed inline/Large comparisons rely on it.
     Large(BigInt),
+    // A fallible copy retains its reserved base-2^32 limbs. Materialization
+    // occurs only through the pre-existing, infallible `as_big` API.
+    LargeDigits {
+        sign: Sign,
+        limbs: Vec<u32>,
+        cache: once_cell::race::OnceBox<BigInt>,
+    },
 }
 
 impl Integer {
@@ -78,11 +176,151 @@ impl Integer {
         }
     }
 
+    /// Copy this integer into separately owned storage, refusing a failed reservation.
+    pub fn try_clone(&self) -> Result<Self, IntegerCopyError> {
+        self.try_clone_with(&mut |_| Ok(()))
+    }
+
+    fn try_clone_with(
+        &self,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), IntegerCopyError>,
+    ) -> Result<Self, IntegerCopyError> {
+        match &self.0 {
+            IntegerRepr::Small64 { value, .. } => Ok(Self::small64(*value)),
+            IntegerRepr::Small128 { value, .. } => Ok(Self::small128(*value)),
+            IntegerRepr::Large(value) => {
+                let limbs = value.iter_u32_digits();
+                let requested = reservation_bytes::<u32>(0, limbs.len());
+                if requested == usize::MAX {
+                    return Err(IntegerCopyError::Allocation { requested });
+                }
+                let mut copy = Vec::new();
+                before_reserve(requested)?;
+                copy.try_reserve_exact(limbs.len())
+                    .map_err(|_| IntegerCopyError::Allocation { requested })?;
+                copy.extend(limbs);
+                Ok(Self(IntegerRepr::LargeDigits {
+                    sign: value.sign(),
+                    limbs: copy,
+                    cache: once_cell::race::OnceBox::new(),
+                }))
+            }
+            IntegerRepr::LargeDigits { sign, limbs, .. } => {
+                let requested = reservation_bytes::<u32>(0, limbs.len());
+                if requested == usize::MAX {
+                    return Err(IntegerCopyError::Allocation { requested });
+                }
+                let mut copy = Vec::new();
+                before_reserve(requested)?;
+                copy.try_reserve_exact(limbs.len())
+                    .map_err(|_| IntegerCopyError::Allocation { requested })?;
+                copy.extend_from_slice(limbs);
+                Ok(Self(IntegerRepr::LargeDigits {
+                    sign: *sign,
+                    limbs: copy,
+                    cache: once_cell::race::OnceBox::new(),
+                }))
+            }
+        }
+    }
+
+    /// Render canonical decimal text within `max_bytes`, with typed size and
+    /// storage refusals. The source and its lazy image cache remain unchanged.
+    ///
+    /// ```
+    /// use quire_exact::{Integer, IntegerCopyError, IntegerDecimalError};
+    /// let original = Integer::from(42_i64);
+    /// let copied = original.try_clone();
+    /// match copied {
+    ///     Ok(value) => assert_eq!(value, original),
+    ///     Err(IntegerCopyError::Allocation { requested }) => assert!(requested > 0),
+    /// }
+    /// match original.try_to_decimal_string(2) {
+    ///     Ok(text) => assert_eq!(text, "42"),
+    ///     Err(IntegerDecimalError::Allocation { requested }) => assert!(requested > 0),
+    ///     Err(IntegerDecimalError::ByteLimit { required, limit }) => assert!(required > limit),
+    ///     Err(IntegerDecimalError::OutputSizeOverflow) => panic!("small text fits usize"),
+    /// }
+    /// ```
+    pub fn try_to_decimal_string(&self, max_bytes: usize) -> Result<String, IntegerDecimalError> {
+        self.try_to_decimal_string_with(max_bytes, &mut |_| Ok(()))
+    }
+
+    fn try_to_decimal_string_with(
+        &self,
+        max_bytes: usize,
+        before_reserve: &mut impl FnMut(usize) -> Result<(), IntegerDecimalError>,
+    ) -> Result<String, IntegerDecimalError> {
+        let mut chunks = Vec::new();
+        match &self.0 {
+            IntegerRepr::Small64 { value, .. } => {
+                let mut magnitude = value.unsigned_abs();
+                let mut limbs = [0_u32; 2];
+                let mut count = 0;
+                while magnitude != 0 {
+                    limbs[count] = magnitude as u32;
+                    magnitude >>= 32;
+                    count += 1;
+                }
+                for limb in limbs[..count].iter().rev() {
+                    append_binary_limb(&mut chunks, *limb, before_reserve)?;
+                }
+            }
+            IntegerRepr::Small128 { value, .. } => {
+                let mut magnitude = value.unsigned_abs();
+                let mut limbs = [0_u32; 4];
+                let mut count = 0;
+                while magnitude != 0 {
+                    limbs[count] = magnitude as u32;
+                    magnitude >>= 32;
+                    count += 1;
+                }
+                for limb in limbs[..count].iter().rev() {
+                    append_binary_limb(&mut chunks, *limb, before_reserve)?;
+                }
+            }
+            IntegerRepr::Large(value) => {
+                for limb in value.iter_u32_digits().rev() {
+                    append_binary_limb(&mut chunks, limb, before_reserve)?;
+                }
+            }
+            IntegerRepr::LargeDigits { limbs, .. } => {
+                for limb in limbs.iter().rev() {
+                    append_binary_limb(&mut chunks, *limb, before_reserve)?;
+                }
+            }
+        }
+        let negative = self.is_negative();
+        let highest = chunks.last().copied().unwrap_or(0);
+        let highest_digits = if highest == 0 {
+            1
+        } else {
+            highest.ilog10() as usize + 1
+        };
+        let count = chunks.len().max(1);
+        let required = decimal_length(count, highest_digits, negative, max_bytes)?;
+        let mut output = String::new();
+        before_reserve(required)?;
+        output
+            .try_reserve_exact(required)
+            .map_err(|_| IntegerDecimalError::Allocation {
+                requested: required,
+            })?;
+        if negative {
+            output.push('-');
+        }
+        write_decimal_chunk(&mut output, highest, highest_digits);
+        for chunk in chunks.iter().rev().skip(1) {
+            write_decimal_chunk(&mut output, *chunk, 9);
+        }
+        Ok(output)
+    }
+
     pub(crate) fn native(&self) -> Option<i128> {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Some(i128::from(*value)),
             IntegerRepr::Small128 { value, .. } => Some(*value),
-            IntegerRepr::Large(_) => None,
+            IntegerRepr::Large(_) | IntegerRepr::LargeDigits { .. } => None,
         }
     }
 }
@@ -99,6 +337,11 @@ impl Clone for Integer {
             IntegerRepr::Small64 { value, .. } => Self::small64(*value),
             IntegerRepr::Small128 { value, .. } => Self::small128(*value),
             IntegerRepr::Large(value) => Self(IntegerRepr::Large(value.clone())),
+            IntegerRepr::LargeDigits { sign, limbs, .. } => Self(IntegerRepr::LargeDigits {
+                sign: *sign,
+                limbs: limbs.clone(),
+                cache: once_cell::race::OnceBox::new(),
+            }),
         }
     }
 }
@@ -154,6 +397,9 @@ impl Ord for Integer {
                     core::cmp::Ordering::Less
                 }
             }
+            (IntegerRepr::LargeDigits { .. }, _) | (_, IntegerRepr::LargeDigits { .. }) => {
+                self.as_big().cmp(other.as_big())
+            }
         }
     }
 }
@@ -168,6 +414,7 @@ pub(crate) struct MagnitudeLimbs<'a>(MagnitudeLimbsSource<'a>);
 enum MagnitudeLimbsSource<'a> {
     Small { magnitude: u128, remaining: u8 },
     Large(num_bigint::U32Digits<'a>),
+    Copied(core::slice::Iter<'a, u32>),
 }
 
 impl Iterator for MagnitudeLimbs<'_> {
@@ -185,6 +432,7 @@ impl Iterator for MagnitudeLimbs<'_> {
             }
             MagnitudeLimbsSource::Small { .. } => None,
             MagnitudeLimbsSource::Large(digits) => digits.next(),
+            MagnitudeLimbsSource::Copied(digits) => digits.next().copied(),
         }
     }
 }
@@ -328,17 +576,21 @@ impl Integer {
 
     /// Whether this integer is zero.
     pub fn is_zero(&self) -> bool {
-        match self.native() {
-            Some(value) => value == 0,
-            None => self.as_big().is_zero(),
+        match &self.0 {
+            IntegerRepr::Small64 { value, .. } => *value == 0,
+            IntegerRepr::Small128 { value, .. } => *value == 0,
+            IntegerRepr::Large(value) => value.is_zero(),
+            IntegerRepr::LargeDigits { sign, .. } => *sign == Sign::NoSign,
         }
     }
 
     /// Whether this integer is strictly negative.
     pub fn is_negative(&self) -> bool {
-        match self.native() {
-            Some(value) => value < 0,
-            None => self.as_big().is_negative(),
+        match &self.0 {
+            IntegerRepr::Small64 { value, .. } => *value < 0,
+            IntegerRepr::Small128 { value, .. } => *value < 0,
+            IntegerRepr::Large(value) => value.is_negative(),
+            IntegerRepr::LargeDigits { sign, .. } => *sign == Sign::Minus,
         }
     }
 
@@ -371,6 +623,9 @@ impl Integer {
             IntegerRepr::Small128 { value, .. } => value.unsigned_abs(),
             IntegerRepr::Large(value) => {
                 return MagnitudeLimbs(MagnitudeLimbsSource::Large(value.iter_u32_digits()));
+            }
+            IntegerRepr::LargeDigits { limbs, .. } => {
+                return MagnitudeLimbs(MagnitudeLimbsSource::Copied(limbs.iter()));
             }
         };
         let bits = 128 - magnitude.leading_zeros();
@@ -857,6 +1112,9 @@ impl Integer {
                 cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
             }
             IntegerRepr::Large(value) => value,
+            IntegerRepr::LargeDigits { sign, limbs, cache } => {
+                cache.get_or_init(|| alloc::boxed::Box::new(BigInt::new(*sign, limbs.clone())))
+            }
         }
     }
 }
@@ -1422,5 +1680,132 @@ mod tests {
             IntegerRepr::Small64 { cache, .. } | IntegerRepr::Small128 { cache, .. }
                 if cache.get().is_none()
         )));
+    }
+
+    /// Trace: FR-390-AC-1, FR-390-AC-2, FR-390-AC-3, FR-390-AC-5
+    #[test]
+    #[trace("FR-390-AC-1", "FR-390-AC-2", "FR-390-AC-3", "FR-390-AC-5")]
+    fn fallible_integer_copy_and_decimal_public_controls() {
+        const POSITIVE: &str = "12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
+        const NEGATIVE: &str = "-98765432109876543210987654321098765432109876543210987654321098765432109876543210987654321098765432109876543210";
+        for spelling in ["0", "1", "-1", POSITIVE, NEGATIVE] {
+            let source = Integer::from_str(spelling).unwrap();
+            let copied = source.try_clone().unwrap();
+            assert_eq!(copied, source);
+            assert_eq!(
+                copied.try_to_decimal_string(spelling.len()).unwrap(),
+                spelling
+            );
+            assert_eq!(copied.try_clone().unwrap(), source);
+            drop(copied);
+            assert_eq!(source.to_string(), spelling);
+            assert_eq!(
+                source.try_to_decimal_string(spelling.len()).unwrap(),
+                spelling
+            );
+            assert_eq!(source.to_string(), spelling);
+            assert_eq!(
+                source.try_to_decimal_string(spelling.len() - 1),
+                Err(IntegerDecimalError::ByteLimit {
+                    required: spelling.len(),
+                    limit: spelling.len() - 1,
+                })
+            );
+        }
+        let small = Integer::from(77_i64);
+        assert_eq!(
+            small.try_clone().unwrap().add(&Integer::one()),
+            Integer::from(78_i64)
+        );
+        assert_eq!(small, Integer::from(77_i64));
+    }
+
+    /// Trace: FR-390-AC-1, FR-390-AC-4
+    #[test]
+    #[trace("FR-390-AC-1", "FR-390-AC-4")]
+    fn every_integer_reservation_reports_its_actual_additional_bytes() {
+        let source = Integer::from_str("-98765432109876543210987654321098765432109876543210987654321098765432109876543210987654321098765432109876543210").unwrap();
+        let expected = source.to_string();
+        let mut copy_requests = Vec::new();
+        source
+            .try_clone_with(&mut |requested| {
+                copy_requests.push(requested);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(copy_requests, [source.magnitude_limbs().count() * 4]);
+        assert_eq!(
+            source.try_clone_with(&mut |requested| {
+                Err(IntegerCopyError::Allocation { requested })
+            }),
+            Err(IntegerCopyError::Allocation {
+                requested: copy_requests[0]
+            })
+        );
+        Integer::from(3_i64)
+            .try_clone_with(&mut |_| panic!("inline copy must not reserve"))
+            .unwrap();
+
+        for spelling in [
+            "0",
+            "1",
+            "-1",
+            "12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",
+            expected.as_str(),
+        ] {
+            let value = Integer::from_str(spelling).unwrap();
+            let mut decimal_requests = Vec::new();
+            value
+                .try_to_decimal_string_with(spelling.len(), &mut |requested| {
+                    decimal_requests.push(requested);
+                    Ok(())
+                })
+                .unwrap();
+            assert!(!decimal_requests.is_empty());
+            assert!(decimal_requests[..decimal_requests.len() - 1]
+                .iter()
+                .all(|requested| *requested == core::mem::size_of::<u32>()));
+            assert_eq!(decimal_requests.last(), Some(&spelling.len()));
+            for (denied_index, expected_request) in decimal_requests.iter().enumerate() {
+                let mut seen = 0;
+                assert_eq!(
+                    value.try_to_decimal_string_with(spelling.len(), &mut |requested| {
+                        let index = seen;
+                        seen += 1;
+                        if index == denied_index {
+                            Err(IntegerDecimalError::Allocation { requested })
+                        } else {
+                            Ok(())
+                        }
+                    }),
+                    Err(IntegerDecimalError::Allocation {
+                        requested: *expected_request
+                    })
+                );
+                assert_eq!(value.to_string(), spelling);
+            }
+        }
+    }
+
+    /// Trace: FR-390-AC-3, FR-390-AC-4
+    #[test]
+    #[trace("FR-390-AC-3", "FR-390-AC-4")]
+    fn checked_integer_reservation_and_output_length_overflow() {
+        assert_eq!(reservation_bytes::<u32>(0, usize::MAX / 4), usize::MAX - 3);
+        assert_eq!(reservation_bytes::<u32>(0, usize::MAX / 4 + 1), usize::MAX);
+        assert_eq!(reservation_bytes::<u32>(usize::MAX, 1), usize::MAX);
+        for limit in [7, usize::MAX] {
+            assert_eq!(
+                decimal_length(usize::MAX, 9, true, limit),
+                Err(IntegerDecimalError::OutputSizeOverflow)
+            );
+        }
+        assert_eq!(
+            decimal_length(2, 3, true, 12),
+            Err(IntegerDecimalError::ByteLimit {
+                required: 13,
+                limit: 12
+            })
+        );
     }
 }

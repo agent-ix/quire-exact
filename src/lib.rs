@@ -131,8 +131,8 @@ pub use ieee::{
     IeeeValue, IeeeWidth, IEEE_DEFINITION,
 };
 pub use integer::{
-    BoundedInteger, EmptyInterval, Integer, IntegerDomain, IntegerInterval, NonCanonicalInteger,
-    NonZeroInteger, OutOfDomain, ZeroDivisor,
+    BoundedInteger, EmptyInterval, Integer, IntegerCopyError, IntegerDecimalError, IntegerDomain,
+    IntegerInterval, NonCanonicalInteger, NonZeroInteger, OutOfDomain, ZeroDivisor,
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
