@@ -1415,6 +1415,10 @@ pub enum ConstructionCause {
     },
     /// A value that is not a member of the declared type.
     TypeMismatch,
+    /// No caller-authenticated schema admission authority was supplied.
+    MissingAdmissionAuthority,
+    /// An ordered set contains a repeated member.
+    DuplicateMember,
     /// UUID text is not lowercase ASCII `8-4-4-4-12` hexadecimal.
     UuidNoncanonical,
     /// Timestamp text is not canonical signed ASCII decimal.
