@@ -790,6 +790,7 @@ impl fmt::Display for NodeKey {
             Node(&'a NodeKey),
             Segment(&'a FlatSegment),
             End(u64),
+            CloseSegment,
         }
         let mut pending = Vec::new();
         pending.push(Part::Node(self));
@@ -805,9 +806,11 @@ impl fmt::Display for NodeKey {
                 Part::Segment(FlatSegment::Text(text)) => write!(f, "{text:?},")?,
                 Part::Segment(FlatSegment::Node(node)) => {
                     f.write_str("node(")?;
+                    pending.push(Part::CloseSegment);
                     pending.push(Part::Node(node));
                 }
-                Part::End(ordinal) => write!(f, "]:{ordinal}),")?,
+                Part::End(ordinal) => write!(f, "]:{ordinal}")?,
+                Part::CloseSegment => f.write_str("),")?,
             }
         }
         Ok(())
@@ -830,6 +833,29 @@ mod tests {
 
     fn key(package: &str, path: Vec<PathSegment>, ordinal: u64) -> NodeKey {
         NodeKey::new(package, path, ordinal).unwrap()
+    }
+
+    /// Trace: FR-389-AC-7, TC-938.
+    #[trace("FR-389-AC-7", "TC-938")]
+    #[test]
+    fn display_closes_only_nested_node_segments() {
+        let leaf = key("Leaf", vec![PathSegment::Text("name".into())], 2);
+        assert_eq!(alloc::format!("{leaf}"), "Leaf:[\"name\",]:2");
+        assert_eq!(alloc::format!("{leaf:?}"), "NodeKey(Leaf:[\"name\",]:2)");
+
+        let root = key(
+            "Root",
+            vec![PathSegment::Node(leaf), PathSegment::Text("tail".into())],
+            3,
+        );
+        assert_eq!(
+            alloc::format!("{root}"),
+            "Root:[node(Leaf:[\"name\",]:2),\"tail\",]:3"
+        );
+        assert_eq!(
+            alloc::format!("{root:?}"),
+            "NodeKey(Root:[node(Leaf:[\"name\",]:2),\"tail\",]:3)"
+        );
     }
 
     /// Trace: FR-391-AC-3, FR-391-AC-5, TC-940.
