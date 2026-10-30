@@ -39,3 +39,10 @@ Independent spec review of exact PR #100 at 6b6698f for IR-1105. QSpec #517 and 
 ## Verdict
 
 Changes required for FND-001 and FND-002 before this spec can serve as the implementation contract. NodeKey shape and ordinal bounds match QSpec #517/#518 drafts, and ObjectId stays authored. No code or build checks were run.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-389 Behavior 2 and AC-3 now use the exact QSpec FR-150 pair `(owner_effective_type, original declaration key)`, explicitly exclude derivation-fact ordinal, and TC-938 changes each pair member while varying facts under a fixed pair. |
+| FND-002 | fixed | FR-379 Behavior 6 and AC-6 now use the reachable same-name cross-declaration admission refusal and `compare_keys == None`; same-declaration members order by UTF-8 bytes. TC-938 step 3 exercises both cross-declaration controls. |
