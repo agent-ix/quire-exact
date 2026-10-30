@@ -55,8 +55,8 @@ fn ty(kind: CollectionKind, bound: Option<CardinalityBound>) -> CollectionType {
 fn public_builder_and_inspector_preserve_the_single_typed_representation() {
     let bound = CardinalityBound::new(1, 3).unwrap();
     for (kind, expected) in [
-        (CollectionKind::Sequence, vec![2, 2, 1]),
-        (CollectionKind::OrderedSet, vec![2, 1]),
+        (CollectionKind::Sequence, vec![2_i64, 2, 1]),
+        (CollectionKind::OrderedSet, vec![2_i64, 1]),
     ] {
         let declared = ty(kind, Some(bound));
         let value = match build_typed_prestate(
@@ -163,36 +163,36 @@ fn inclusive_counts_use_occurrences_or_retained_members() {
 #[test]
 fn element_refusals_precede_collection_work_and_authority_checks_nested_slots() {
     let declared = ty(CollectionKind::OrderedSet, None);
-    let mut meter = meter();
-    assert_eq!(
+    let mut charged = meter();
+    assert!(matches!(
         build_typed_prestate(
             &declared,
-            vec![Value::Boolean(true)],
-            &mut meter,
+            vec![Value::Integer(Integer::one()), Value::Boolean(true)],
+            &mut charged,
             Some(&mut admitted)
         ),
         Err(ConstructionRefusal {
-            component: Component::Element(0),
+            component: Component::Element(1),
             cause: ConstructionCause::TypeMismatch
         })
-    );
-    assert_eq!(meter.admission_count(), 0);
+    ));
+    assert_eq!(charged.admission_count(), 0);
     let mut reject = |_: &ValueType, _: &Value| Err(ConstructionCause::MissingField);
-    assert_eq!(
-        build_typed_prestate(&declared, values(&[1]), &mut meter, Some(&mut reject)),
+    assert!(matches!(
+        build_typed_prestate(&declared, values(&[1]), &mut charged, Some(&mut reject)),
         Err(ConstructionRefusal {
             component: Component::Element(0),
             cause: ConstructionCause::MissingField
         })
-    );
-    assert_eq!(meter.admission_count(), 0);
-    assert_eq!(
-        build_typed_prestate(&declared, values(&[1]), &mut meter, None),
+    ));
+    assert_eq!(charged.admission_count(), 0);
+    assert!(matches!(
+        build_typed_prestate(&declared, values(&[1]), &mut charged, None),
         Err(ConstructionRefusal {
             component: Component::Value,
             cause: ConstructionCause::MissingAdmissionAuthority
         })
-    );
+    ));
 
     let parent = NodeKey::new("test", vec![PathSegment::Text("Parent".into())], 0).unwrap();
     let child = NodeKey::new("test", vec![PathSegment::Text("Child".into())], 0).unwrap();
