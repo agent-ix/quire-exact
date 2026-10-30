@@ -39,8 +39,8 @@ impl Quantity {
     }
 
     /// The unit.
-    pub fn unit(&self) -> UnitId {
-        self.unit
+    pub fn unit(&self) -> &UnitId {
+        &self.unit
     }
 }
 
@@ -79,8 +79,8 @@ impl BoundedQuantityType {
     }
 
     /// The unit.
-    pub fn unit(&self) -> UnitId {
-        self.unit
+    pub fn unit(&self) -> &UnitId {
+        &self.unit
     }
 
     /// The inclusive lower bound, if any.
@@ -138,7 +138,7 @@ pub fn evaluate_quantity_arithmetic(
     Ok(match outcome {
         Outcome::Completed(magnitude) => {
             match meter.charge(Charge::new(ChargePoint::UnitResultRetain).results(1)) {
-                Ok(()) => Outcome::Completed(Quantity::new(magnitude, left.unit)),
+                Ok(()) => Outcome::Completed(Quantity::new(magnitude, left.unit.clone())),
                 Err(incomplete) => Outcome::Incomplete(incomplete),
             }
         }
@@ -222,9 +222,7 @@ mod tests {
     }
 
     fn unit(byte: u8) -> UnitId {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        UnitId::compound(bytes)
+        UnitId::declared(crate::node::NodeKey::fixture(byte))
     }
 
     /// adding two quantities in the same unit completes with the
@@ -232,14 +230,14 @@ mod tests {
     #[test]
     fn same_unit_addition_completes() {
         let metres = unit(1);
-        let left = Quantity::new(Rational::from_integer(Integer::one()), metres);
-        let right = Quantity::new(Rational::from_integer(Integer::one()), metres);
+        let left = Quantity::new(Rational::from_integer(Integer::one()), metres.clone());
+        let right = Quantity::new(Rational::from_integer(Integer::one()), metres.clone());
         let mut meter = generous_meter();
         let outcome =
             evaluate_quantity_arithmetic(QuantityArithmetic::Add(&left, &right), &mut meter)
                 .expect("same unit");
         let sum = outcome.completed().expect("charges available");
-        assert_eq!(sum.unit(), metres);
+        assert_eq!(sum.unit(), &metres);
         assert_eq!(
             sum.magnitude(),
             &Rational::from_integer(Integer::from(2_u64))
@@ -267,7 +265,7 @@ mod tests {
     #[test]
     fn compare_quantity_charges_and_a_tight_meter_is_incomplete() {
         let metres = unit(1);
-        let left = Quantity::new(Rational::from_integer(Integer::one()), metres);
+        let left = Quantity::new(Rational::from_integer(Integer::one()), metres.clone());
         let right = Quantity::new(Rational::from_integer(Integer::from(2_u64)), metres);
 
         let mut generous = generous_meter();

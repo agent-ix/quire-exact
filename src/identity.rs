@@ -1,240 +1,269 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Value-component identities.
+//! Structural value-component identities supplied by an admitted caller.
 //!
-//! Seven identities appear as bare payload inside kernel `Value`s:
-//! `EffectiveId` (declaration identity), `UniverseId` and `ObjectId` (a
-//! `Reference` payload), `UnitId` (a `Quantity` payload), `VariantId` (an `Enum`
-//! payload), `MemberId` and `PopulationId` (a `Population` payload). Five of the
-//! seven -- `EffectiveId`, `UniverseId`, `VariantId`, `MemberId`,
-//! `PopulationId` -- are single-domain opaque 32-byte digests with exactly one
-//! public constructor, `from_digest` (each type's own, e.g.
-//! [`EffectiveId::from_digest`]), mirroring [`crate::NodeKey::from_digest`]: the
-//! kernel wraps an already-computed digest and never hashes. The caller computes
-//! each digest over its own preimage schema and mints the id; this crate holds
-//! no preimage knowledge for any of them. They share one shape (`Eq`/`Ord`/`Hash`,
-//! hex `Display`/`Debug`), so the `digest_identity!` macro below generates all
-//! five from one macro body ("one fact, one place"). `UnitId` and `ObjectId` are
-//! the other two, and each differs: [`UnitId`] is a domain-labelled digest record
-//! over the two unit identities QSpec FR-142 defines, with one constructor per
-//! domain, so it is written out by hand below. [`ObjectId`] is different in kind,
-//! not degree: QSpec FR-204 states a declared object identity is "authored, not
-//! digested", so `ObjectId` wraps the object's own exact UTF-8 bytes directly,
-//! with one public constructor, `new`, that takes the string itself and refuses
-//! only when it is empty (QSpec FR-035) -- never a digest, never a hash -- and is
-//! likewise written out by hand, immediately after `PopulationId` below.
-//!
-//! **Domain strings.** `EffectiveId`'s domain is
-//! `quire.model.effective-declaration/v1` and `UniverseId`'s is
-//! `quire.model.object-universe/v1`. `UnitId`'s two domains are QSpec FR-142's:
-//! [`crate::NODE_KEY_DOMAIN`] for a declared unit's node key and
-//! [`COMPOUND_UNIT_DOMAIN`] for a compound unit. `ObjectId` carries no digest
-//! domain at all: it is the authored UTF-8 object identity (QSpec FR-204,
-//! "authored, not digested"; non-empty per QSpec FR-035), never hashed. The
-//! `VariantId`, `MemberId` and `PopulationId` domain strings are placeholders,
-//! not settled product semantics, and are not to be treated as ratified until the
-//! model digest domains are specified. Each of the three types is used elsewhere
-//! in this crate (`Value::Enum` and `ValueType`'s enum sum shape for
-//! `VariantId`, [`crate::value::FieldDeclaration`] for `MemberId`,
-//! `Value::Population` and `ValueType::Population` for `PopulationId`).
+//! QSpec FR-201 fixes each component list and its comparison order. This
+//! no_std leaf carries those components without hashing, decoding packages or
+//! deriving model identities. The caller validates joins to declarations,
+//! model selections and population bindings before constructing values.
 
-use alloc::{boxed::Box, string::String};
-use core::cmp::Ordering;
+use alloc::{boxed::Box, string::String, vec::Vec};
 use core::fmt;
 
-use crate::node::{NodeKey, NODE_KEY_DOMAIN};
+use crate::integer::Integer;
+use crate::node::NodeKey;
 
-macro_rules! digest_identity {
-    (
-        $(#[$doc:meta])*
-        $name:ident, $domain_const:ident, $domain:literal
-    ) => {
-        /// Digest domain for
-        #[doc = concat!("[`", stringify!($name), "`].")]
-        pub const $domain_const: &str = $domain;
-
-        $(#[$doc])*
-        #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name([u8; 32]);
-
-        impl $name {
-            /// The one public constructor: wrap an already-computed
-            #[doc = concat!("`", $domain, "` digest.")]
-            /// The caller computes the digest over its own canonical
-            /// preimage; this type performs no hashing and holds no preimage
-            /// knowledge.
-            pub fn from_digest(digest: [u8; 32]) -> Self {
-                Self(digest)
-            }
-
-            /// The raw digest bytes.
-            pub fn as_bytes(&self) -> &[u8; 32] {
-                &self.0
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
-            }
-        }
-
-        impl fmt::Debug for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "{}({self})", stringify!($name))
-            }
-        }
-    };
+/// The original declaration key retained by model intake.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct OriginalDeclarationKey {
+    package: String,
+    node: String,
 }
 
-digest_identity!(
-    /// An opaque `quire.model.effective-declaration/v1` identity: the effective, fully-resolved
-    /// identity of a declaration after archetype composition. Only the
-    /// caller's model stage calls [`EffectiveId::from_digest`] in production.
-    EffectiveId,
-    EFFECTIVE_ID_DOMAIN,
-    "quire.model.effective-declaration/v1"
-);
+impl OriginalDeclarationKey {
+    /// Carry the admitted domain package identity and IR node identity.
+    pub fn new(package: impl Into<String>, node: impl Into<String>) -> Self {
+        Self {
+            package: package.into(),
+            node: node.into(),
+        }
+    }
 
-digest_identity!(
-    /// An opaque `quire.model.object-universe/v1` identity: the universe
-    /// half of a `Reference` payload's `(UniverseId, ObjectId)` pair. One per connected component of the
-    /// object-type supertype graph. Only the caller's model stage computes this
-    /// digest, over the `ObjectUniverse` preimage
-    /// (`quire.model.object-universe/v1`).
-    UniverseId,
-    UNIVERSE_ID_DOMAIN,
-    "quire.model.object-universe/v1"
-);
+    /// The owning domain package identity.
+    pub fn package(&self) -> &str {
+        &self.package
+    }
 
-/// Digest domain and preimage version of a compound unit's [`UnitId`]: QSpec
-/// QSpec-FR-142's evaluator-owned `quire.value.compound-unit/v1` value identity.
-pub const COMPOUND_UNIT_DOMAIN: &str = "quire.value.compound-unit/v1";
+    /// The IR node identity.
+    pub fn node(&self) -> &str {
+        &self.node
+    }
+}
 
-/// Which of QSpec FR-142's two unit identities a [`UnitId`] carries. No other domain is admitted.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+/// A structural effective declaration identity from QSpec FR-150.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct EffectiveId {
+    owner_effective_type: Option<Box<EffectiveId>>,
+    original: OriginalDeclarationKey,
+}
+
+impl EffectiveId {
+    /// Carry an admitted effective identity. A type has no owner; a member
+    /// carries the identity of its owning effective type.
+    pub fn new(
+        owner_effective_type: Option<EffectiveId>,
+        original: OriginalDeclarationKey,
+    ) -> Self {
+        Self {
+            owner_effective_type: owner_effective_type.map(Box::new),
+            original,
+        }
+    }
+
+    /// The owning effective type, when this is a member.
+    pub fn owner_effective_type(&self) -> Option<&EffectiveId> {
+        self.owner_effective_type.as_deref()
+    }
+
+    /// The original declaration key.
+    pub fn original(&self) -> &OriginalDeclarationKey {
+        &self.original
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        Self::new(
+            None,
+            OriginalDeclarationKey::new("test", alloc::format!("Node{byte}")),
+        )
+    }
+}
+
+/// The least root type node of an object universe.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct UniverseId(NodeKey);
+
+impl UniverseId {
+    /// Carry the admitted node id of the least root type declaration.
+    pub fn new(root_type: NodeKey) -> Self {
+        Self(root_type)
+    }
+
+    /// The least root type declaration node.
+    pub fn root_type(&self) -> &NodeKey {
+        &self.0
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        Self::new(NodeKey::fixture(byte))
+    }
+}
+
+/// Which of QSpec FR-142's two unit identity kinds a [`UnitId`] carries.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum UnitDomain {
-    /// A declared unit: its node key, in [`NODE_KEY_DOMAIN`]
-    /// (`quire.checked-semantic-node/v1` over the `quire.unit-node/v1`
-    /// preimage).
+    /// A declared unit's admitted node identity.
     Declared,
-    /// A compound unit: its [`COMPOUND_UNIT_DOMAIN`] digest.
+    /// A compound unit's canonical list of root-unit terms.
     Compound,
 }
 
-impl UnitDomain {
-    /// The digest-domain label.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Declared => NODE_KEY_DOMAIN,
-            Self::Compound => COMPOUND_UNIT_DOMAIN,
-        }
-    }
-}
-
-/// A `Quantity` payload's unit: a domain-labelled
-/// digest record over the two unit identities QSpec FR-142
-/// defines. A declared unit carries its node key as opaque bytes under the
-/// [`NODE_KEY_DOMAIN`] label, and a compound unit carries its
-/// [`COMPOUND_UNIT_DOMAIN`] digest. The kernel names no declaration type and
-/// computes neither digest: the caller mints every `UnitId`.
-///
-/// Equality and order are lexical on the domain label, then on the bytes
-/// (R-04), so a declared unit and a compound unit are never equal whatever
-/// their bytes.
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub struct UnitId {
-    domain: UnitDomain,
-    digest: [u8; 32],
+/// A quantity's unit identity: a declared unit node or canonical compound terms.
+/// The two domains remain distinct even when their displayed parts coincide.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum UnitId {
+    /// One declared unit node.
+    Declared(NodeKey),
+    /// The evaluator-owned, ordered list of root-unit nodes and nonzero exponents.
+    Compound(Box<[(NodeKey, Integer)]>),
 }
 
 impl UnitId {
-    /// The declared-unit arm: `key` is the unit's node key. The caller
-    /// admits only a key minted over a `quire.unit-node/v1` preimage; this type cannot tell one node key from another.
+    /// Carry the admitted node identity of one declared unit.
     pub fn declared(key: NodeKey) -> Self {
-        Self {
-            domain: UnitDomain::Declared,
-            digest: *key.as_bytes(),
-        }
+        Self::Declared(key)
     }
 
-    /// The compound-unit arm: wrap an already-computed
-    /// `quire.value.compound-unit/v1` digest.
-    pub fn compound(digest: [u8; 32]) -> Self {
-        Self {
-            domain: UnitDomain::Compound,
-            digest,
-        }
+    /// Carry caller-admitted canonical compound-unit terms without
+    /// normalizing or validating unit algebra. An empty list is dimensionless.
+    pub fn compound(terms: Vec<(NodeKey, Integer)>) -> Self {
+        Self::Compound(terms.into_boxed_slice())
     }
 
-    /// The domain this identity is labelled with.
+    /// The identity domain.
     pub fn domain(&self) -> UnitDomain {
-        self.domain
+        match self {
+            Self::Declared(_) => UnitDomain::Declared,
+            Self::Compound(_) => UnitDomain::Compound,
+        }
     }
 
-    /// The raw digest bytes, meaningful only under [`Self::domain`].
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.digest
+    /// The admitted node for a declared unit, if this is one.
+    pub fn declared_key(&self) -> Option<&NodeKey> {
+        match self {
+            Self::Declared(key) => Some(key),
+            Self::Compound(_) => None,
+        }
     }
-}
 
-impl Ord for UnitId {
-    fn cmp(&self, other: &Self) -> Ordering {
-        (self.domain.label(), &self.digest).cmp(&(other.domain.label(), &other.digest))
-    }
-}
-
-impl PartialOrd for UnitId {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// The digest bytes as 64 lowercase hex digits; the domain is not rendered
-/// (see [`UnitId::domain`]).
-impl fmt::Display for UnitId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.digest
-            .iter()
-            .try_for_each(|byte| write!(f, "{byte:02x}"))
+    /// The canonical terms of a compound unit, if this is one.
+    pub fn compound_terms(&self) -> Option<&[(NodeKey, Integer)]> {
+        match self {
+            Self::Declared(_) => None,
+            Self::Compound(terms) => Some(terms),
+        }
     }
 }
 
-impl fmt::Debug for UnitId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "UnitId({}, {self})", self.domain.label())
+/// An empty union member name.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("a union member identity requires a nonempty name")]
+pub struct EmptyVariantName;
+
+/// The declaration node and exact case name of an enum or union member.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct VariantId {
+    owner: NodeKey,
+    case: String,
+}
+
+impl VariantId {
+    /// Carry the admitted declaration and case. The caller checks membership.
+    pub fn new(owner: NodeKey, case: impl Into<String>) -> Result<Self, EmptyVariantName> {
+        let case = case.into();
+        if case.is_empty() {
+            return Err(EmptyVariantName);
+        }
+        Ok(Self { owner, case })
+    }
+
+    /// The owning enum or union declaration node.
+    pub fn owner(&self) -> &NodeKey {
+        &self.owner
+    }
+
+    /// The exact UTF-8 case name.
+    pub fn case(&self) -> &str {
+        &self.case
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        Self::new(NodeKey::fixture(0), alloc::format!("Case{byte}")).unwrap()
     }
 }
 
-digest_identity!(
-    /// An opaque `quire.enum-variant/v1` identity: a bare `Enum` payload
-    /// "with no `NodeKey`".
-    VariantId,
-    VARIANT_ID_DOMAIN,
-    "quire.enum-variant/v1"
-);
+/// The declaring node or effective type that owns a member.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum MemberOwner {
+    /// A checked record, event, or object declaration node.
+    Node(NodeKey),
+    /// An effective model type declaration.
+    Effective(EffectiveId),
+}
 
-digest_identity!(
-    /// An opaque `quire.member/v1` identity: a collection or
-    /// composite member's identity.
-    MemberId,
-    MEMBER_ID_DOMAIN,
-    "quire.member/v1"
-);
+/// A member name is empty.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("a member identity requires a nonempty name")]
+pub struct EmptyMemberName;
 
-digest_identity!(
-    /// An opaque `quire.population/v1` identity: a `Population` payload's admission identity.
-    /// Only the caller's model stage calls [`PopulationId::from_digest`] in production,
-    /// minting it from the admitted binding's own preimage (domain package,
-    /// `population_key`, and the closed three-state admission-role
-    /// discriminator `Direct`/`Pre`/`Post`) at admission time -- this crate
-    /// holds none of that preimage knowledge, only the resulting digest.
-    /// `PopulationBinding` itself -- admission, membership, and the
-    /// `allInstances`/`lookup` closure state -- stays a caller's model type,
-    /// never a kernel one.
-    PopulationId,
-    POPULATION_ID_DOMAIN,
-    "quire.population/v1"
-);
+/// The owning declaration and exact field identifier of a member.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MemberId {
+    owner: MemberOwner,
+    member: String,
+}
+
+impl MemberId {
+    /// Carry an admitted owner and nonempty declared field identifier.
+    pub fn new(owner: MemberOwner, member: impl Into<String>) -> Result<Self, EmptyMemberName> {
+        let member = member.into();
+        if member.is_empty() {
+            return Err(EmptyMemberName);
+        }
+        Ok(Self { owner, member })
+    }
+
+    /// The owning declaration identity.
+    pub fn owner(&self) -> &MemberOwner {
+        &self.owner
+    }
+
+    /// The exact field identifier.
+    pub fn member(&self) -> &str {
+        &self.member
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        Self::new(
+            MemberOwner::Node(NodeKey::fixture(0)),
+            alloc::format!("field{byte}"),
+        )
+        .unwrap()
+    }
+}
+
+/// The admitted `relation`/`population` declaration node identity.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PopulationId(NodeKey);
+
+impl PopulationId {
+    /// Carry the admitted population declaration node.
+    pub fn new(node: NodeKey) -> Self {
+        Self(node)
+    }
+
+    /// The population declaration node.
+    pub fn node(&self) -> &NodeKey {
+        &self.0
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        Self::new(NodeKey::fixture(byte))
+    }
+}
 
 /// An empty [`ObjectId`]: QSpec FR-035 requires a non-empty authored object
 /// identity.
@@ -242,12 +271,8 @@ digest_identity!(
 #[error("an object identity has at least one authored UTF-8 byte")]
 pub struct EmptyObjectIdentity;
 
-/// The object half of a `Reference` payload's `(UniverseId, ObjectId)` pair
-/// The object's own authored identity,
-/// carried as its exact UTF-8 bytes. Unlike every type the `digest_identity!`
-/// macro above generates, `ObjectId` is never a digest and has no digest
-/// domain (QSpec FR-204: "authored, not digested") -- `model` never hashes
-/// it, so there is no digest for this type to wrap.
+/// The authored object half of a `Reference` payload's
+/// `(UniverseId, ObjectId)` pair, carried as exact UTF-8 bytes.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ObjectId(Box<str>);
 
@@ -278,145 +303,156 @@ impl fmt::Display for ObjectId {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
-    use ix_trace_rs::trace;
-
     use super::*;
+    use ix_trace_rs::trace;
+    use std::collections::HashSet;
 
-    fn digest(byte: u8) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        bytes
-    }
-
-    /// Each of the five single-domain digest
-    /// identities (`EffectiveId`, `UniverseId`, `VariantId`, `MemberId`,
-    /// `PopulationId`) treats equal digest bytes as interchangeable ids --
-    /// not just `==`, but hashing equal (either stands in for the other as a
-    /// set/map key) -- and distinct digests as distinct, differently
-    /// ordered ids. `UnitId`
-    /// and `ObjectId` are each hand-written, not
-    /// macro-generated, and have their own equivalent coverage below
-    /// (`tc_411_unit_id_is_a_two_domain_record_compared_on_label_then_bytes`,
-    /// `equal_object_identity_bytes_mint_interchangeable_identities`).
+    /// Trace: FR-389-AC-3, TC-938.
+    #[trace("FR-389-AC-3", "TC-938")]
     #[test]
-    fn equal_digest_bytes_mint_interchangeable_identities() {
-        macro_rules! check {
-            ($ty:ident) => {
-                let a = $ty::from_digest(digest(1));
-                let b = $ty::from_digest(digest(1));
-                let c = $ty::from_digest(digest(2));
-                assert_eq!(a, b);
-                assert_eq!(a.as_bytes(), b.as_bytes());
-                assert_eq!(std::collections::HashSet::from([a, b, c]).len(), 2);
-                assert!(a < c);
-            };
-        }
-        check!(EffectiveId);
-        check!(UniverseId);
-        check!(VariantId);
-        check!(MemberId);
-        check!(PopulationId);
-    }
-
-    /// The same check for `ObjectId`: equal authored UTF-8
-    /// bytes mint interchangeable ids -- `==`, equal hashing, and distinct
-    /// strings compare unequal and order lexically over their bytes (`ObjectId` carries its bytes directly, never a
-    /// digest, so there is no digest to equate here).
-    #[test]
-    fn equal_object_identity_bytes_mint_interchangeable_identities() {
-        let a = ObjectId::new("o1").unwrap();
-        let b = ObjectId::new("o1").unwrap();
-        let c = ObjectId::new("o2").unwrap();
-        assert_eq!(a, b);
-        assert_eq!(a.as_str(), b.as_str());
-        assert_eq!(
-            std::collections::HashSet::from([a.clone(), b, c.clone()]).len(),
-            2
+    fn effective_and_universe_components_keep_their_owners() {
+        let original = OriginalDeclarationKey::new("Pkg", "Type");
+        let type_id = EffectiveId::new(None, original.clone());
+        let same = EffectiveId::new(None, original.clone());
+        let member = EffectiveId::new(
+            Some(type_id.clone()),
+            OriginalDeclarationKey::new("Pkg", "field"),
         );
-        assert!(a < c);
+        assert_eq!(type_id, same);
+        assert_eq!(HashSet::from([type_id.clone(), same]).len(), 1);
+        assert_ne!(type_id, member);
+        assert_eq!(member.owner_effective_type(), Some(&type_id));
+        assert_ne!(
+            type_id,
+            EffectiveId::new(None, OriginalDeclarationKey::new("Other", "Type"))
+        );
+
+        let universe = UniverseId::new(NodeKey::fixture(1));
+        let same_universe = UniverseId::new(NodeKey::fixture(1));
+        assert_eq!(universe, same_universe);
+        assert_eq!(HashSet::from([universe.clone(), same_universe]).len(), 1);
+        assert_ne!(universe, UniverseId::new(NodeKey::fixture(2)));
+        assert!(universe < UniverseId::new(NodeKey::fixture(2)));
     }
 
-    /// An empty authored object identity refuses (QSpec FR-035): this is the
-    /// one validation `ObjectId::new` performs, so it is worth its own
-    /// mutation-provable assertion (removing the `is_empty` check would let
-    /// this construct `Ok`).
+    /// Trace: FR-389-AC-4, FR-389-AC-5, TC-938.
+    #[trace("FR-389-AC-4", "FR-389-AC-5", "TC-938")]
     #[test]
-    fn empty_object_identity_refuses() {
-        assert_eq!(ObjectId::new("").unwrap_err(), EmptyObjectIdentity);
-        assert!(ObjectId::new("o1").is_ok());
+    fn member_variant_and_population_identities_keep_exact_components() {
+        let owner = NodeKey::fixture(1);
+        let other = NodeKey::fixture(2);
+        let field = MemberId::new(MemberOwner::Node(owner.clone()), "field").unwrap();
+        assert_eq!(
+            field,
+            MemberId::new(MemberOwner::Node(owner.clone()), "field").unwrap()
+        );
+        assert_eq!(
+            HashSet::from([
+                field.clone(),
+                MemberId::new(MemberOwner::Node(owner.clone()), "field").unwrap(),
+            ])
+            .len(),
+            1
+        );
+        assert_ne!(
+            field,
+            MemberId::new(MemberOwner::Node(other.clone()), "field").unwrap()
+        );
+        assert_ne!(
+            field,
+            MemberId::new(MemberOwner::Node(owner.clone()), "other").unwrap()
+        );
+        assert!(MemberOwner::Node(owner.clone()) < MemberOwner::Effective(EffectiveId::fixture(1)));
+        let effective_field = MemberId::new(
+            MemberOwner::Effective(EffectiveId::new(
+                None,
+                OriginalDeclarationKey::new("acme/orders", "Order"),
+            )),
+            "total",
+        )
+        .unwrap();
+        let other_effective_field = MemberId::new(
+            MemberOwner::Effective(EffectiveId::new(
+                None,
+                OriginalDeclarationKey::new("acme/orders", "Invoice"),
+            )),
+            "total",
+        )
+        .unwrap();
+        assert_ne!(effective_field, other_effective_field);
+        assert!(field < effective_field);
+        assert_eq!(
+            MemberId::new(MemberOwner::Node(owner.clone()), ""),
+            Err(EmptyMemberName)
+        );
+
+        let case = VariantId::new(owner.clone(), "Gold Plus").unwrap();
+        assert_eq!(case.case(), "Gold Plus");
+        assert_eq!(
+            HashSet::from([
+                case.clone(),
+                VariantId::new(owner.clone(), "Gold Plus").unwrap()
+            ])
+            .len(),
+            1
+        );
+        assert_ne!(case, VariantId::new(other, "Gold Plus").unwrap());
+        assert_ne!(case, VariantId::new(owner, "Café").unwrap());
+        assert_eq!(
+            VariantId::new(NodeKey::fixture(1), ""),
+            Err(EmptyVariantName)
+        );
+
+        assert_eq!(
+            PopulationId::new(NodeKey::fixture(3)),
+            PopulationId::new(NodeKey::fixture(3))
+        );
+        assert_ne!(
+            PopulationId::new(NodeKey::fixture(3)),
+            PopulationId::new(NodeKey::fixture(4))
+        );
+        assert!(PopulationId::new(NodeKey::fixture(3)) < PopulationId::new(NodeKey::fixture(4)));
     }
 
-    /// Each identity's domain constant is
-    /// distinct, so no two of the identities (`EffectiveId`, `UniverseId`,
-    /// `VariantId`, `MemberId`, `PopulationId`, and the compound-unit arm
-    /// of `UnitId`) can be confused by domain string.
-    /// Also pins `EFFECTIVE_ID_DOMAIN` and `UNIVERSE_ID_DOMAIN` to the literal
-    /// strings the module doc names. `ObjectId` has no digest domain to include.
+    /// Trace: FR-389-AC-6, FR-088-AC-12, TC-938, TC-411.
+    #[trace("FR-389-AC-6", "FR-088-AC-12", "TC-938", "TC-411")]
     #[test]
-    fn domain_constants_are_pairwise_distinct() {
-        assert_eq!(EFFECTIVE_ID_DOMAIN, "quire.model.effective-declaration/v1");
-        assert_eq!(UNIVERSE_ID_DOMAIN, "quire.model.object-universe/v1");
-        let domains = [
-            EFFECTIVE_ID_DOMAIN,
-            UNIVERSE_ID_DOMAIN,
-            COMPOUND_UNIT_DOMAIN,
-            VARIANT_ID_DOMAIN,
-            MEMBER_ID_DOMAIN,
-            POPULATION_ID_DOMAIN,
-        ];
-        for (i, a) in domains.iter().enumerate() {
-            for (j, b) in domains.iter().enumerate() {
-                assert_eq!(i == j, a == b, "domains at {i} and {j} collided");
-            }
-        }
-    }
-
-    /// TC-411 (kernel half): a `UnitId` is labelled with one of its two
-    /// domains; equality and order are lexical on the label, then the bytes,
-    /// so a declared and a compound unit over identical bytes are unequal,
-    /// and every declared unit orders before every compound unit
-    /// (`quire.checked-semantic-node/v1` < `quire.value.compound-unit/v1`).
-    #[trace("FR-088-AC-12", "TC-411")]
-    #[test]
-    fn tc_411_unit_id_is_a_two_domain_record_compared_on_label_then_bytes() {
-        let declared = UnitId::declared(NodeKey::from_digest(digest(2)));
-        let compound = UnitId::compound(digest(2));
-        assert_eq!(declared.as_bytes(), compound.as_bytes());
+    fn unit_domain_and_compound_terms_decide_identity_and_order() {
+        let declared = UnitId::declared(NodeKey::fixture(1));
+        let compound = UnitId::compound(vec![(NodeKey::fixture(1), Integer::one())]);
         assert_ne!(declared, compound);
-        assert_eq!(
-            std::collections::HashSet::from([declared, compound]).len(),
-            2
-        );
         assert_eq!(declared.domain(), UnitDomain::Declared);
-        assert_eq!(declared.domain().label(), NODE_KEY_DOMAIN);
         assert_eq!(compound.domain(), UnitDomain::Compound);
-        assert_eq!(compound.domain().label(), COMPOUND_UNIT_DOMAIN);
         assert!(declared < compound);
-        assert!(UnitId::declared(NodeKey::from_digest(digest(9))) < UnitId::compound(digest(1)));
-        assert!(UnitId::compound(digest(1)) < UnitId::compound(digest(2)));
-        assert_eq!(declared, UnitId::declared(NodeKey::from_digest(digest(2))));
+        assert_eq!(
+            compound,
+            UnitId::compound(vec![(NodeKey::fixture(1), Integer::one())])
+        );
+        assert_ne!(
+            compound,
+            UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(2))])
+        );
+        assert_ne!(
+            compound,
+            UnitId::compound(vec![(NodeKey::fixture(2), Integer::one())])
+        );
+        assert!(
+            UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(2))])
+                < UnitId::compound(vec![(NodeKey::fixture(1), Integer::from(10))])
+        );
+        assert!(UnitId::compound(vec![])
+            .compound_terms()
+            .unwrap()
+            .is_empty());
     }
 
-    /// `Display` renders exactly 64 lowercase hex digits.
     #[test]
-    fn display_is_64_lowercase_hex_digits() {
-        let id = UniverseId::from_digest(digest(0xcd));
-        let rendered = id.to_string();
-        assert_eq!(rendered.len(), 64);
-        assert!(rendered
-            .chars()
-            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        assert!(rendered.ends_with("cd"));
-    }
-
-    /// The same check for `ObjectId`: `Display` renders the authored
-    /// bytes exactly, never hex -- `ObjectId` is "not a digest" and that holds
-    /// all the way through formatting.
-    #[test]
-    fn object_id_display_is_the_authored_bytes_exactly() {
-        let id = ObjectId::new("zz9-plural-z-alpha").unwrap();
-        assert_eq!(id.to_string(), "zz9-plural-z-alpha");
-        assert_eq!(id.as_str(), "zz9-plural-z-alpha");
+    fn object_id_keeps_authored_utf8_and_refuses_empty() {
+        assert_eq!(ObjectId::new(""), Err(EmptyObjectIdentity));
+        let a = ObjectId::new("o-1").unwrap();
+        assert_eq!(a.as_str(), "o-1");
+        assert_eq!(a.to_string(), "o-1");
+        assert_eq!(a, ObjectId::new("o-1").unwrap());
+        assert_ne!(a, ObjectId::new("o-2").unwrap());
     }
 }

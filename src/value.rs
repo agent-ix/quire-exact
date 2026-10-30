@@ -7,7 +7,7 @@
 //! kernel's.
 //!
 //! - `ValueType::Enum(EnumShape)`: the shape carries its admitted variants
-//!   inline, as a canonically ranked list of opaque `VariantId` digests, so
+//!   inline, as a canonically ranked list of structural `VariantId`s, so
 //!   `ValueType::admits` needs no declaration lookup at all -- membership and
 //!   rank agreement are checked against the shape the type itself carries.
 //!   `Value::Enum(EnumMember)` carries one variant's identity plus its
@@ -19,7 +19,7 @@
 //! - `ValueType::Quantity(UnitId)`; `Value::Quantity` carries
 //!   [`crate::quantity::Quantity`], a bare `(magnitude, UnitId)` pair with no
 //!   unit-graph declaration.
-//! - `Value::Population(PopulationId)`: the kernel carries the opaque identity
+//! - `Value::Population(PopulationId)`: the kernel carries the identity
 //!   alone, never the population binding a caller's model owns.
 //!   `ValueType::Population(Option<u64>)` holds the declared maximum.
 //!   The declared-maximum comparison is a caller-layer check: the
@@ -34,10 +34,10 @@
 //!   rather than looking it up in a registry. The kernel trusts the shape its
 //!   caller hands it.
 //! - [`UnionMember::from_admitted`] retains the checking stage's verified
-//!   (union declaration, FR-441 member key, identifier) binding. A union
+//!   (union declaration, FR-441 case name) binding. A union
 //!   value shares that binding with its positional payload; `Composite`
-//!   remains the type shape, and SV owns the member list. Identifier ASCII
-//!   bytes, not a digest or enum rank, supply its FR-144 canonical key.
+//!   remains the type shape, and SV owns the member list. Case-name UTF-8
+//!   bytes supply its FR-144 canonical key.
 //! - [`from_admitted_slots`] is a trusted, unchecked composite constructor, `pub`
 //!   for a caller that has independently checked a value against its own
 //!   registry, mirroring [`OptionValue::from_admitted`]'s identical role.
@@ -49,10 +49,10 @@ use core::fmt;
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::collection::{CollectionType, CollectionValue, MapType};
 use crate::decimal::{Decimal, DecimalType};
-use crate::identity::{EffectiveId, MemberId, PopulationId, UnitId, VariantId};
+use crate::identity::{EffectiveId, EmptyVariantName, MemberId, PopulationId, UnitId, VariantId};
 use crate::ieee::{FloatType, IeeeValue};
 use crate::integer::{Integer, IntegerInterval};
-use crate::node::{Identifier, NodeKey};
+use crate::node::NodeKey;
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
 use crate::quantity::{BoundedQuantityType, Quantity};
 use crate::rational::{Rational, RationalDomain};
@@ -63,47 +63,44 @@ mod native;
 mod value_type;
 pub use native::{Timestamp, Uuid};
 
-/// The admitted identity of one union member, retaining its FR-144 ASCII
-/// identifier key separately from its opaque FR-441 identity. This is a
+/// The admitted identity of one union member, retaining its case name
+/// alongside the FR-441 structural pair. This is a
 /// member handle, not a member registry or a declaration-position rank.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnionMember {
     declaration: NodeKey,
     variant: VariantId,
-    identifier: Identifier,
+    identifier: String,
 }
 
 impl UnionMember {
-    /// Retain a member binding already admitted by the checking/package
-    /// identity stage. `member_key` must be the FR-441 key of exactly
-    /// (`declaration`, `identifier`), in the evaluating package, and must
-    /// name a union member, never an enum member. That stage owns the
-    /// canonical preimage and digest verification; the kernel hashes nothing.
-    /// Do not call this constructor on an unvalidated runtime label/key pair.
+    /// Retain an admitted union declaration and exact member name.
+    /// The caller checks that this member belongs to the declaration.
     pub fn from_admitted(
         declaration: NodeKey,
-        member_key: NodeKey,
-        identifier: Identifier,
-    ) -> Self {
-        Self {
+        identifier: impl Into<String>,
+    ) -> Result<Self, EmptyVariantName> {
+        let identifier = identifier.into();
+        let variant = VariantId::new(declaration.clone(), identifier.clone())?;
+        Ok(Self {
             declaration,
-            variant: VariantId::from_digest(*member_key.as_bytes()),
+            variant,
             identifier,
-        }
+        })
     }
 
     /// The union declaration in the admitted package.
-    pub fn declaration(&self) -> NodeKey {
-        self.declaration
+    pub fn declaration(&self) -> &NodeKey {
+        &self.declaration
     }
 
-    /// The FR-441 member key bytes, retyped without fresh computation.
-    pub fn variant(&self) -> VariantId {
-        self.variant
+    /// The FR-441 structural member identity.
+    pub fn variant(&self) -> &VariantId {
+        &self.variant
     }
 
-    /// The admitted member identifier, whose ASCII bytes define key order.
-    pub fn identifier(&self) -> &Identifier {
+    /// The admitted case name, whose UTF-8 bytes define key order.
+    pub fn identifier(&self) -> &str {
         &self.identifier
     }
 }
@@ -136,7 +133,7 @@ impl UnionValue {
     }
 
     /// The union declaration key.
-    pub fn declaration(&self) -> NodeKey {
+    pub fn declaration(&self) -> &NodeKey {
         self.member.declaration()
     }
 
@@ -145,8 +142,8 @@ impl UnionValue {
         &self.member
     }
 
-    /// The active member's opaque identity.
-    pub fn variant(&self) -> VariantId {
+    /// The active member's structural identity.
+    pub fn variant(&self) -> &VariantId {
         self.member.variant()
     }
 
@@ -233,14 +230,13 @@ fn check_union_arity(shape: &[ValueType], supplied: usize) -> Result<(), Constru
 }
 
 /// The inline, *ranked* set of an enum type's admitted variants. The kernel `ValueType::Enum` carries its variant set
-/// directly, as opaque [`VariantId`] digests, so `admits` is a pure
+/// directly, as structural [`VariantId`] values, so `admits` is a pure
 /// set-membership test needing no declaration lookup. The variants are held as a canonically
-/// ordered list, not a digest-ordered set: QSpec-FR-144's enumeration key row (QSpec-FR-144-AC-9) fixes
+/// ordered list, not an identity-ordered set: QSpec-FR-144's enumeration key row (QSpec-FR-144-AC-9) fixes
 /// canonical order as declaration position for an `ordered enum` and
 /// case-identifier byte order for an unordered one, never the `VariantId`
-/// digest. `EnumShape` cannot compute that order itself -- a kernel leaf
-/// holds no case-name strings -- so the caller
-/// supplies `variants` already in that canonical order; each variant's
+/// identity. The caller knows the declaration's ordered flag and supplies
+/// `variants` already in that canonical order; each variant's
 /// zero-based index in the list is its *rank* ([`Self::rank`]), which
 /// [`EnumMember`] carries next to its `VariantId` (an enum value
 /// carries its `VariantId` and its rank). Two shapes are the same shape
@@ -255,8 +251,7 @@ pub struct EnumShape {
 impl EnumShape {
     /// The enum shape admitting exactly `variants`, supplied already in QSpec-FR-141
     /// canonical order (declaration order when `ordered`, case-identifier byte
-    /// order otherwise): the caller's responsibility, since this leaf type has
-    /// no case-name strings to sort by itself.
+    /// order otherwise): the caller's responsibility at admission.
     pub fn new(ordered: bool, variants: impl IntoIterator<Item = VariantId>) -> Self {
         Self {
             ordered,
@@ -272,16 +267,16 @@ impl EnumShape {
     }
 
     /// Whether `variant` is one of this shape's admitted variants.
-    pub fn contains(&self, variant: VariantId) -> bool {
+    pub fn contains(&self, variant: &VariantId) -> bool {
         self.rank(variant).is_some()
     }
 
     /// `variant`'s zero-based index in this shape's canonical member list, or
     /// `None` when `variant` is not one of this shape's admitted variants.
-    pub fn rank(&self, variant: VariantId) -> Option<u32> {
+    pub fn rank(&self, variant: &VariantId) -> Option<u32> {
         self.variants
             .iter()
-            .position(|candidate| *candidate == variant)
+            .position(|candidate| candidate == variant)
             .map(|position| {
                 u32::try_from(position)
                     .expect("an admitted enum has far fewer than u32::MAX variants")
@@ -289,8 +284,8 @@ impl EnumShape {
     }
 
     /// The admitted variants, in canonical (rank) order.
-    pub fn variants(&self) -> impl Iterator<Item = VariantId> + '_ {
-        self.variants.iter().copied()
+    pub fn variants(&self) -> impl Iterator<Item = &VariantId> + '_ {
+        self.variants.iter()
     }
 }
 
@@ -305,7 +300,7 @@ impl EnumShape {
 /// whose claimed rank disagrees with the shape's own ranked list, so a
 /// well-formed `EnumMember` always has `shape.rank(member.variant()) ==
 /// Some(member.rank())` for the `EnumShape` it was admitted against.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnumMember {
     variant: VariantId,
     rank: u32,
@@ -320,8 +315,8 @@ impl EnumMember {
     }
 
     /// The variant identity: the only component identity and equality use.
-    pub fn variant(&self) -> VariantId {
-        self.variant
+    pub fn variant(&self) -> &VariantId {
+        &self.variant
     }
 
     /// This member's zero-based index in its enum's QSpec-FR-141 canonical member
@@ -437,7 +432,7 @@ impl ValueType {
             (Self::Rational(domain), Value::Rational(rational)) => domain.contains(rational),
             (Self::Decimal(declared), Value::Decimal(decimal)) => declared.contains(decimal),
             (Self::Float(declared), Value::Float(float)) => float.width() == declared.width(),
-            (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == *unit,
+            (Self::Quantity(unit), Value::Quantity(quantity)) => quantity.unit() == unit,
             (Self::BoundedQuantity(bounded), Value::Quantity(quantity)) => bounded.admits(quantity),
             (Self::Text(declared), Value::Text(text)) => text.text_type() == declared,
             (Self::String, Value::String(_)) => true,
@@ -447,16 +442,16 @@ impl ValueType {
             }
             (Self::Option(payload), Value::Option(option)) => option.payload_type() == &**payload,
             (Self::Composite(declaration), Value::Composite(composite)) => {
-                composite.declaration() == *declaration
+                composite.declaration() == declaration
             }
             (Self::Composite(declaration), Value::Union(union)) => {
-                union.declaration() == *declaration
+                union.declaration() == declaration
             }
             (Self::Collection(declared), Value::Collection(collection)) => {
                 collection.collection_type() == &**declared
             }
             (Self::Reference(object_type), Value::Reference(reference)) => {
-                reference.object_type() == *object_type
+                reference.object_type() == object_type
             }
             // `ValueType::Population` does not pair with `Value::Population`
             // here (see this module's doc comment): the
@@ -1161,7 +1156,7 @@ pub enum FieldValue {
 }
 
 /// A declaration-owned named field. The kernel carries a member only as an
-/// opaque [`MemberId`] digest: `name` is retained solely as a
+/// structural [`MemberId`]: `name` is retained solely as a
 /// human-readable label for `Debug`/diagnostics, and no public semantic
 /// dispatch here keys on it -- every
 /// lookup, refusal component and slot match below keys on `member`.
@@ -1190,9 +1185,9 @@ impl FieldDeclaration {
         }
     }
 
-    /// The opaque member identity dispatch keys on.
-    pub fn member(&self) -> MemberId {
-        self.member
+    /// The structural member identity dispatch keys on.
+    pub fn member(&self) -> &MemberId {
+        &self.member
     }
 
     /// The field's human-readable label. Not used for dispatch.
@@ -1267,7 +1262,7 @@ pub fn evaluate_record(
     let mut plan = Vec::with_capacity(shape.len());
     for field in shape {
         let expression = supplied.remove(&field.member);
-        let component = || Component::Field(field.member);
+        let component = || Component::Field(field.member.clone());
         match (&expression, field.presence) {
             (None, Presence::Required) => {
                 return refuse(component(), ConstructionCause::MissingField)
@@ -1450,12 +1445,12 @@ fn match_members<T>(
 ) -> Result<alloc::collections::BTreeMap<MemberId, T>, ConstructionRefusal> {
     let mut by_member = alloc::collections::BTreeMap::new();
     for (member, entry) in supplied {
-        let component = || Component::Field(member);
-        if !declared.iter().any(|field| field.member == member) {
-            return refuse(component(), ConstructionCause::UndeclaredField);
+        let component = Component::Field(member.clone());
+        if !declared.iter().any(|field| field.member.eq(&member)) {
+            return refuse(component, ConstructionCause::UndeclaredField);
         }
         if by_member.insert(member, entry).is_some() {
-            return refuse(component(), ConstructionCause::DuplicateField);
+            return refuse(component, ConstructionCause::DuplicateField);
         }
     }
     Ok(by_member)
@@ -1469,7 +1464,7 @@ pub fn fill_slots(
     let mut by_member = match_members(declared, supplied)?;
     let mut slots = Vec::with_capacity(declared.len());
     for field in declared {
-        let component = || Component::Field(field.member);
+        let component = || Component::Field(field.member.clone());
         let slot = by_member
             .remove(&field.member)
             .unwrap_or(FieldValue::Absent);
@@ -1526,8 +1521,8 @@ pub struct CompositeValue {
 
 impl CompositeValue {
     /// The declaration node key.
-    pub fn declaration(&self) -> NodeKey {
-        self.declaration
+    pub fn declaration(&self) -> &NodeKey {
+        &self.declaration
     }
 
     /// Field or position states in declaration order.
@@ -1587,9 +1582,9 @@ mod tests {
         assert!(!ValueType::Uuid.admits(&text));
         assert!(!ValueType::Timestamp.admits(&text));
         assert!(ValueType::Text(text_type).admits(&text));
-        let object_type = EffectiveId::from_digest(digest(6));
+        let object_type = EffectiveId::fixture(6);
         let reference = Value::Reference(ObjectReference::new(
-            crate::identity::UniverseId::from_digest(digest(5)),
+            crate::identity::UniverseId::fixture(5),
             object_type,
             crate::identity::ObjectId::new("o-1").expect("non-empty"),
         ));
@@ -1627,7 +1622,7 @@ mod tests {
     #[test]
     fn nested_native_string_debug_matches_the_derived_format() {
         let value = from_admitted_slots(
-            NodeKey::from_digest(digest(9)),
+            NodeKey::fixture(9),
             vec![FieldValue::Present(Value::String("e\u{301}".to_owned()))].into_boxed_slice(),
         );
 
@@ -1649,7 +1644,7 @@ mod tests {
     fn native_mixed_kind_plans_refuse_in_both_orders() {
         use crate::outcome::CheckedInvariantCause;
 
-        let key = NodeKey::from_digest(digest(9));
+        let key = NodeKey::fixture(9);
         let half = Rational::new(Integer::one(), Integer::from(2_i64)).expect("nonzero");
         let text_type =
             TextType::new(0, 10, crate::text::TextProfile::UnicodeScalars).expect("bounds");
@@ -1666,10 +1661,10 @@ mod tests {
             Value::Rational(half.clone()),
             Value::Decimal(Decimal::new(Integer::one(), 0)),
             Value::Float(IeeeValue::binary64(0x3ff0_0000_0000_0000)),
-            Value::Quantity(Quantity::new(half, UnitId::declared(key))),
+            Value::Quantity(Quantity::new(half, UnitId::declared(key.clone()))),
             Value::Text(text),
-            Value::Enum(EnumMember::new(VariantId::from_digest(digest(3)), 0)),
-            Value::Population(PopulationId::from_digest(digest(4))),
+            Value::Enum(EnumMember::new(VariantId::fixture(3), 0)),
+            Value::Population(PopulationId::fixture(4)),
             OptionValue::none(ValueType::option(ValueType::Boolean)),
             from_admitted_slots(key, vec![FieldValue::Absent].into_boxed_slice()),
             crate::collection::from_admitted(
@@ -1681,8 +1676,8 @@ mod tests {
                 vec![],
             ),
             Value::Reference(ObjectReference::new(
-                crate::identity::UniverseId::from_digest(digest(5)),
-                EffectiveId::from_digest(digest(6)),
+                crate::identity::UniverseId::fixture(5),
+                EffectiveId::fixture(6),
                 crate::identity::ObjectId::new("o-1").expect("non-empty"),
             )),
         ];
@@ -1834,9 +1829,9 @@ mod tests {
         )
         .completed()
         .expect("admitted text");
-        let object_type = EffectiveId::from_digest(digest(6));
+        let object_type = EffectiveId::fixture(6);
         let reference = ObjectReference::new(
-            crate::identity::UniverseId::from_digest(digest(5)),
+            crate::identity::UniverseId::fixture(5),
             object_type,
             crate::identity::ObjectId::new("o-1").expect("non-empty"),
         );
@@ -1901,12 +1896,6 @@ mod tests {
         }
     }
 
-    fn digest(byte: u8) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        bytes
-    }
-
     fn generous_meter() -> Meter {
         Meter::new(ScalarLimits {
             integer_bits: u64::MAX,
@@ -1935,24 +1924,19 @@ mod tests {
     /// Trace: FR-369-AC-2
     #[test]
     fn deferred_record_field_outside_its_type_reports_exact_cause() {
-        let member = MemberId::from_digest(digest(1));
+        let member = MemberId::fixture(1);
         let shape = [FieldDeclaration::new(
-            member,
+            member.clone(),
             "count",
             ValueType::Integer,
             Presence::Required,
         )];
         let fields = vec![(
-            member,
+            member.clone(),
             FieldExpression::Evaluate(Box::new(|_| Outcome::Completed(Value::Boolean(true)))),
         )];
-        let outcome = evaluate_record(
-            &shape,
-            NodeKey::from_digest(digest(2)),
-            fields,
-            &mut generous_meter(),
-        )
-        .expect("field shape is valid before deferred evaluation");
+        let outcome = evaluate_record(&shape, NodeKey::fixture(2), fields, &mut generous_meter())
+            .expect("field shape is valid before deferred evaluation");
         assert!(matches!(
             outcome,
             Outcome::Refused(Refusal::CheckedInvariant {
@@ -1968,7 +1952,7 @@ mod tests {
             vec![Box::new(|_| Outcome::Completed(Value::Boolean(true)))];
         let outcome = evaluate_tuple(
             &[ValueType::Integer],
-            NodeKey::from_digest(digest(2)),
+            NodeKey::fixture(2),
             positions,
             &mut generous_meter(),
         )
@@ -1994,8 +1978,9 @@ mod tests {
     #[trace("TC-297", "FR-089-AC-6")]
     #[test]
     fn admits_refuses_a_population_pair() {
-        assert!(!ValueType::Population(Some(5))
-            .admits(&Value::Population(PopulationId::from_digest(digest(1)))));
+        assert!(
+            !ValueType::Population(Some(5)).admits(&Value::Population(PopulationId::fixture(1)))
+        );
     }
 
     /// an `Enum` shape admits a `Value::Enum` of a variant it
@@ -2007,10 +1992,10 @@ mod tests {
     #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn enum_shape_admits_only_its_own_variants() {
-        let in_shape = VariantId::from_digest(digest(1));
-        let out_of_shape = VariantId::from_digest(digest(2));
-        let shape = ValueType::Enum(EnumShape::new(false, [in_shape]));
-        assert!(shape.admits(&Value::Enum(EnumMember::new(in_shape, 0))));
+        let in_shape = VariantId::fixture(1);
+        let out_of_shape = VariantId::fixture(2);
+        let shape = ValueType::Enum(EnumShape::new(false, [in_shape.clone()]));
+        assert!(shape.admits(&Value::Enum(EnumMember::new(in_shape.clone(), 0))));
         assert!(!shape.admits(&Value::Enum(EnumMember::new(out_of_shape, 0))));
         assert!(!ValueType::Boolean.admits(&Value::Enum(EnumMember::new(in_shape, 0))));
     }
@@ -2025,11 +2010,11 @@ mod tests {
     #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn admits_refuses_a_known_variant_at_the_wrong_rank() {
-        let first = VariantId::from_digest(digest(1));
-        let second = VariantId::from_digest(digest(2));
-        let shape = ValueType::Enum(EnumShape::new(true, [first, second]));
-        assert!(shape.admits(&Value::Enum(EnumMember::new(first, 0))));
-        assert!(shape.admits(&Value::Enum(EnumMember::new(second, 1))));
+        let first = VariantId::fixture(1);
+        let second = VariantId::fixture(2);
+        let shape = ValueType::Enum(EnumShape::new(true, [first.clone(), second.clone()]));
+        assert!(shape.admits(&Value::Enum(EnumMember::new(first.clone(), 0))));
+        assert!(shape.admits(&Value::Enum(EnumMember::new(second.clone(), 1))));
         assert!(!shape.admits(&Value::Enum(EnumMember::new(first, 1))));
         assert!(!shape.admits(&Value::Enum(EnumMember::new(second, 0))));
     }
@@ -2043,15 +2028,15 @@ mod tests {
     #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn enum_shape_rank_matches_canonical_position() {
-        let a = VariantId::from_digest(digest(1));
-        let b = VariantId::from_digest(digest(2));
-        let c = VariantId::from_digest(digest(3));
-        let shape = EnumShape::new(true, [a, b]);
-        assert_eq!(shape.rank(a), Some(0));
-        assert_eq!(shape.rank(b), Some(1));
-        assert_eq!(shape.rank(c), None);
+        let a = VariantId::fixture(1);
+        let b = VariantId::fixture(2);
+        let c = VariantId::fixture(3);
+        let shape = EnumShape::new(true, [a.clone(), b.clone()]);
+        assert_eq!(shape.rank(&a), Some(0));
+        assert_eq!(shape.rank(&b), Some(1));
+        assert_eq!(shape.rank(&c), None);
         assert!(shape.is_ordered());
-        assert_eq!(shape.variants().collect::<Vec<_>>(), [a, b]);
+        assert_eq!(shape.variants().collect::<Vec<_>>(), [&a, &b]);
     }
 
     /// Form the kernel set of `members` over `shape` and return the visited
@@ -2077,8 +2062,8 @@ mod tests {
         let occurrences = members
             .iter()
             .map(|variant| {
-                let rank = shape.rank(*variant).expect("a variant of the shape");
-                Value::Enum(EnumMember::new(*variant, rank))
+                let rank = shape.rank(variant).expect("a variant of the shape");
+                Value::Enum(EnumMember::new(variant.clone(), rank))
             })
             .collect();
         let value = form_collection(&collection_type, occurrences, &mut meter)
@@ -2099,52 +2084,59 @@ mod tests {
 
     /// A set of an ordered enum's values visits them in declaration order,
     /// and a set of an unordered enum's values in its canonical (case
-    /// identifier) order, whatever the digests of the variants and whatever
+    /// identifier) order, whatever the structural order of the variants and whatever
     /// order they were formed in. Two shapes whose variants differ in
     /// identity but not in rank and order give the same ranks and the same
     /// visiting order.
     #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn a_set_visits_enum_values_in_canonical_rank_order() {
-        // Declared order `b`, `a`, `c`; the digests order them `a`, `c`, `b`.
+        // Declared order `b`, `a`, `c`; structural names order `a`, `c`, `b`.
         let (a, b, c) = (
-            VariantId::from_digest(digest(1)),
-            VariantId::from_digest(digest(3)),
-            VariantId::from_digest(digest(2)),
+            VariantId::fixture(1),
+            VariantId::fixture(3),
+            VariantId::fixture(2),
         );
-        let ordered = EnumShape::new(true, [b, a, c]);
+        let ordered = EnumShape::new(true, [b.clone(), a.clone(), c.clone()]);
         assert_eq!(
-            [ordered.rank(b), ordered.rank(a), ordered.rank(c)],
+            [ordered.rank(&b), ordered.rank(&a), ordered.rank(&c)],
             [Some(0), Some(1), Some(2)]
         );
-        assert_eq!(set_visiting_ranks(&ordered, &[c, a, b]), [0, 1, 2]);
+        assert_eq!(
+            set_visiting_ranks(&ordered, &[c.clone(), a.clone(), b.clone()]),
+            [0, 1, 2]
+        );
         let visited: Vec<VariantId> = {
-            let ranks = set_visiting_ranks(&ordered, &[c, a, b]);
+            let ranks = set_visiting_ranks(&ordered, &[c.clone(), a.clone(), b.clone()]);
             ranks
                 .iter()
-                .map(|rank| ordered.variants().nth(*rank as usize).unwrap())
+                .map(|rank| ordered.variants().nth(*rank as usize).unwrap().clone())
                 .collect()
         };
-        assert_eq!(visited, [b, a, c]);
+        assert_eq!(visited, [b.clone(), a.clone(), c.clone()]);
 
         // Unordered: canonical list `a`, `b`, `c`.
-        let unordered = EnumShape::new(false, [a, b, c]);
-        assert_eq!(set_visiting_ranks(&unordered, &[c, b, a]), [0, 1, 2]);
-        let visited: Vec<VariantId> = set_visiting_ranks(&unordered, &[c, b, a])
-            .iter()
-            .map(|rank| unordered.variants().nth(*rank as usize).unwrap())
-            .collect();
+        let unordered = EnumShape::new(false, [a.clone(), b.clone(), c.clone()]);
+        assert_eq!(
+            set_visiting_ranks(&unordered, &[c.clone(), b.clone(), a.clone()]),
+            [0, 1, 2]
+        );
+        let visited: Vec<VariantId> =
+            set_visiting_ranks(&unordered, &[c.clone(), b.clone(), a.clone()])
+                .iter()
+                .map(|rank| unordered.variants().nth(*rank as usize).unwrap().clone())
+                .collect();
         assert_eq!(visited, [a, b, c]);
 
         // A second shape with other variant identities at the same positions.
         let (x, y, z) = (
-            VariantId::from_digest(digest(9)),
-            VariantId::from_digest(digest(8)),
-            VariantId::from_digest(digest(7)),
+            VariantId::fixture(9),
+            VariantId::fixture(8),
+            VariantId::fixture(7),
         );
-        let renamed = EnumShape::new(true, [x, y, z]);
+        let renamed = EnumShape::new(true, [x.clone(), y.clone(), z.clone()]);
         assert_eq!(
-            [renamed.rank(x), renamed.rank(y), renamed.rank(z)],
+            [renamed.rank(&x), renamed.rank(&y), renamed.rank(&z)],
             [Some(0), Some(1), Some(2)]
         );
         assert_eq!(set_visiting_ranks(&renamed, &[z, x, y]), [0, 1, 2]);
@@ -2155,14 +2147,14 @@ mod tests {
     #[trace("QSpec-TC-188", "QSpec-FR-143-AC-4")]
     #[test]
     fn record_refuses_a_missing_required_field() {
-        let member = MemberId::from_digest(digest(2));
+        let member = MemberId::fixture(2);
         let shape = vec![FieldDeclaration::new(
-            member,
+            member.clone(),
             "count",
             ValueType::Integer,
             Presence::Required,
         )];
-        let err = record(&shape, NodeKey::from_digest(digest(1)), vec![]).unwrap_err();
+        let err = record(&shape, NodeKey::fixture(1), vec![]).unwrap_err();
         assert_eq!(err.component, Component::Field(member));
         assert_eq!(err.cause, ConstructionCause::MissingField);
     }
@@ -2175,7 +2167,7 @@ mod tests {
         let shape = vec![ValueType::Integer];
         let value = tuple(
             &shape,
-            NodeKey::from_digest(digest(1)),
+            NodeKey::fixture(1),
             vec![Value::Integer(Integer::one())],
         )
         .unwrap();
@@ -2190,7 +2182,7 @@ mod tests {
         let shape = vec![ValueType::Integer, ValueType::Boolean];
         let err = tuple(
             &shape,
-            NodeKey::from_digest(digest(1)),
+            NodeKey::fixture(1),
             vec![Value::Integer(Integer::one())],
         )
         .unwrap_err();
@@ -2210,10 +2202,15 @@ mod tests {
     /// refusal path).
     #[test]
     fn fill_slots_fills_present_and_absent_in_declaration_order() {
-        let count = MemberId::from_digest(digest(1));
-        let label = MemberId::from_digest(digest(2));
+        let count = MemberId::fixture(1);
+        let label = MemberId::fixture(2);
         let shape = vec![
-            FieldDeclaration::new(count, "count", ValueType::Integer, Presence::Required),
+            FieldDeclaration::new(
+                count.clone(),
+                "count",
+                ValueType::Integer,
+                Presence::Required,
+            ),
             FieldDeclaration::new(
                 label,
                 "label",
@@ -2238,9 +2235,9 @@ mod tests {
     /// non-deferred constructors).
     #[test]
     fn evaluate_record_completes_from_a_deferred_field() {
-        let count = MemberId::from_digest(digest(1));
+        let count = MemberId::fixture(1);
         let shape = vec![FieldDeclaration::new(
-            count,
+            count.clone(),
             "count",
             ValueType::Integer,
             Presence::Required,
@@ -2252,7 +2249,7 @@ mod tests {
                 Outcome::Completed(Value::Integer(Integer::one()))
             })),
         )];
-        let outcome = evaluate_record(&shape, NodeKey::from_digest(digest(2)), fields, &mut meter)
+        let outcome = evaluate_record(&shape, NodeKey::fixture(2), fields, &mut meter)
             .expect("declared fields match");
         let value = outcome.completed().expect("charges available");
         assert_eq!(value.occ(), Integer::one().add(&Integer::one()));
@@ -2268,13 +2265,8 @@ mod tests {
         let positions: Vec<Deferred<'_>> = vec![Box::new(|_meter| {
             Outcome::Completed(Value::Integer(Integer::one()))
         })];
-        let outcome = evaluate_tuple(
-            &shape,
-            NodeKey::from_digest(digest(1)),
-            positions,
-            &mut meter,
-        )
-        .expect("declared arity matches");
+        let outcome = evaluate_tuple(&shape, NodeKey::fixture(1), positions, &mut meter)
+            .expect("declared arity matches");
         let value = outcome.completed().expect("charges available");
         assert_eq!(value.occ(), Integer::one().add(&Integer::one()));
     }
@@ -2284,7 +2276,7 @@ mod tests {
     /// including a node inside a collection element inside an option
     /// payload. The second has an option root.
     fn debug_samples() -> [Value; 2] {
-        let key = NodeKey::from_digest(digest(9));
+        let key = NodeKey::fixture(9);
         let boolean_sequence = CollectionType::new(
             crate::collection::CollectionKind::Sequence,
             ValueType::Boolean,
@@ -2309,27 +2301,27 @@ mod tests {
         .completed()
         .expect("admitted");
         let reference = ObjectReference::new(
-            crate::identity::UniverseId::from_digest(digest(5)),
-            EffectiveId::from_digest(digest(6)),
+            crate::identity::UniverseId::fixture(5),
+            EffectiveId::fixture(6),
             crate::identity::ObjectId::new("o-1").expect("non-empty"),
         );
         let scalars = [
             Value::Rational(half.clone()),
             Value::Decimal(Decimal::new(Integer::from(125_i64), 2)),
             Value::Float(IeeeValue::binary64(0x3ff8_0000_0000_0000)),
-            Value::Quantity(Quantity::new(half, UnitId::declared(key))),
+            Value::Quantity(Quantity::new(half, UnitId::declared(key.clone()))),
             Value::Text(text),
             Value::Reference(reference),
-            Value::Enum(EnumMember::new(VariantId::from_digest(digest(3)), 0)),
-            Value::Population(PopulationId::from_digest(digest(4))),
+            Value::Enum(EnumMember::new(VariantId::fixture(3), 0)),
+            Value::Population(PopulationId::fixture(4)),
         ];
         let node_sequence = CollectionType::new(
             crate::collection::CollectionKind::Sequence,
-            ValueType::Composite(key),
+            ValueType::Composite(key.clone()),
             None,
         );
         let leaf_node = from_admitted_slots(
-            key,
+            key.clone(),
             vec![FieldValue::Present(Value::Boolean(true))].into_boxed_slice(),
         );
         let nodes = crate::collection::from_admitted(node_sequence.clone(), vec![leaf_node]);
@@ -2348,7 +2340,7 @@ mod tests {
     }
 
     /// `Debug` retains nesting, slot order and value-bearing fields without
-    /// freezing opaque identity bytes in a whole-output snapshot.
+    /// freezing a whole structural identity in an output snapshot.
     #[test]
     fn value_debug_preserves_structure_and_fields() {
         let [composite, option] = debug_samples();
@@ -2398,7 +2390,7 @@ mod tests {
     /// whose declared types stay three levels deep however deep the value
     /// goes, so the depth is value depth and never type depth.
     fn deep_value() -> (ValueType, Value) {
-        let node = NodeKey::from_digest(digest(7));
+        let node = NodeKey::fixture(7);
         let node_type = ValueType::Composite(node);
         let sequence_type = CollectionType::new(
             crate::collection::CollectionKind::Sequence,
@@ -2486,7 +2478,7 @@ mod tests {
         on_small_stack(|| {
             let (_, value) = deep_value();
             let parent = from_admitted_slots(
-                NodeKey::from_digest(digest(8)),
+                NodeKey::fixture(8),
                 vec![FieldValue::Present(value.clone())].into_boxed_slice(),
             );
             let occ = value.occ();

@@ -143,14 +143,12 @@ fn leaf<'a>(
             }
             (left, right) => left.is_some().cmp(&right.is_some()),
         },
-        // Composites of different declarations order by the ascending bytes
-        // of their declaration keys, before any slot (FR-377).
+        // Composites of different declarations order by their structural
+        // declaration keys, before any slot (FR-377).
         (Value::Composite(left), Value::Composite(right))
             if left.declaration() != right.declaration() =>
         {
-            left.declaration()
-                .as_bytes()
-                .cmp(right.declaration().as_bytes())
+            left.declaration().cmp(right.declaration())
         }
         (Value::Composite(left), Value::Composite(right))
             if left.slots().len() == right.slots().len() =>
@@ -163,9 +161,8 @@ fn leaf<'a>(
             let ordering = left
                 .member()
                 .identifier()
-                .as_str()
                 .as_bytes()
-                .cmp(right.member().identifier().as_str().as_bytes());
+                .cmp(right.member().identifier().as_bytes());
             if ordering.is_eq() {
                 if left.variant() != right.variant()
                     || left.payload().len() != right.payload().len()
@@ -275,14 +272,8 @@ mod tests {
     fn compare_keys_yields_no_key_for_a_population_pair() {
         use crate::identity::PopulationId;
 
-        fn digest(byte: u8) -> [u8; 32] {
-            let mut bytes = [0_u8; 32];
-            bytes[31] = byte;
-            bytes
-        }
-
-        let left = Value::Population(PopulationId::from_digest(digest(1)));
-        let right = Value::Population(PopulationId::from_digest(digest(2)));
+        let left = Value::Population(PopulationId::fixture(1));
+        let right = Value::Population(PopulationId::fixture(2));
         assert_eq!(compare_keys(&left, &right), None);
     }
 
@@ -298,7 +289,7 @@ mod tests {
     }
 
     /// Two members of one shape order by their rank, whatever the order of
-    /// their `VariantId` digests.
+    /// their `VariantId` structural order.
     #[trace("TC-409", "FR-088-AC-11")]
     #[test]
     fn compare_keys_orders_members_of_one_shape_by_rank() {
@@ -306,12 +297,10 @@ mod tests {
         use crate::value::EnumMember;
 
         fn variant(byte: u8) -> VariantId {
-            let mut bytes = [0_u8; 32];
-            bytes[31] = byte;
-            VariantId::from_digest(bytes)
+            VariantId::fixture(byte)
         }
 
-        // Rank 0 has the larger digest.
+        // Rank 0 has the larger structural case name.
         let first = Value::Enum(EnumMember::new(variant(9), 0));
         let second = Value::Enum(EnumMember::new(variant(1), 1));
         assert_eq!(compare_keys(&first, &second), Some(Ordering::Less));
@@ -332,14 +321,14 @@ mod tests {
         use crate::identity::VariantId;
         use crate::value::EnumMember;
 
-        fn digest(byte: u8) -> [u8; 32] {
-            let mut bytes = [0_u8; 32];
-            bytes[31] = byte;
-            bytes
-        }
-
-        let left = Value::Enum(EnumMember::new(VariantId::from_digest(digest(1)), 0));
-        let right = Value::Enum(EnumMember::new(VariantId::from_digest(digest(2)), 0));
+        let left = Value::Enum(EnumMember::new(
+            VariantId::new(crate::node::NodeKey::fixture(1), "Case").unwrap(),
+            0,
+        ));
+        let right = Value::Enum(EnumMember::new(
+            VariantId::new(crate::node::NodeKey::fixture(2), "Case").unwrap(),
+            0,
+        ));
         assert_eq!(compare_keys(&left, &right), None);
     }
 }

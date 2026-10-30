@@ -215,8 +215,8 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
             (Value::Reference(l), Value::Reference(r)) => {
                 if l.universe() != r.universe() {
                     return Err(Refusal::ForeignReference {
-                        required: l.universe(),
-                        supplied: r.universe(),
+                        required: l.universe().clone(),
+                        supplied: r.universe().clone(),
                     });
                 }
                 l == r
@@ -340,7 +340,7 @@ mod tests {
     }
 
     fn e21_list_shape_operands(first_head_unequal: bool) -> (Value, Value) {
-        let declaration = crate::node::NodeKey::from_digest([42; 32]);
+        let declaration = crate::node::NodeKey::fixture(42);
         let list = |heads: [i64; 8]| {
             heads
                 .into_iter()
@@ -585,14 +585,8 @@ mod tests {
     fn plan_pairs_refuses_a_population_pair() {
         use crate::identity::PopulationId;
 
-        fn digest(byte: u8) -> [u8; 32] {
-            let mut bytes = [0_u8; 32];
-            bytes[31] = byte;
-            bytes
-        }
-
-        let left = Value::Population(PopulationId::from_digest(digest(1)));
-        let right = Value::Population(PopulationId::from_digest(digest(2)));
+        let left = Value::Population(PopulationId::fixture(1));
+        let right = Value::Population(PopulationId::fixture(2));
         assert!(matches!(
             plan_pairs(&left, &right),
             Err(Refusal::CheckedInvariant {
@@ -622,7 +616,7 @@ mod tests {
 
         let collection =
             |kind| from_admitted(CollectionType::new(kind, ValueType::Integer, None), vec![]);
-        let population = || Value::Population(PopulationId::from_digest([1; 32]));
+        let population = || Value::Population(PopulationId::fixture(1));
         let cases = [
             (
                 collection(CollectionKind::Set),
@@ -664,22 +658,20 @@ mod tests {
         use crate::identity::{EffectiveId, ObjectId, UniverseId};
         use crate::reference::ObjectReference;
 
-        fn digest(byte: u8) -> [u8; 32] {
-            let mut bytes = [0_u8; 32];
-            bytes[31] = byte;
-            bytes
-        }
-
-        let object_type = EffectiveId::from_digest(digest(1));
+        let object_type = EffectiveId::fixture(1);
         let object = ObjectId::new("o1").unwrap();
-        let left_universe = UniverseId::from_digest(digest(10));
-        let right_universe = UniverseId::from_digest(digest(20));
+        let left_universe = UniverseId::fixture(10);
+        let right_universe = UniverseId::fixture(20);
         let left = Value::Reference(ObjectReference::new(
-            left_universe,
-            object_type,
+            left_universe.clone(),
+            object_type.clone(),
             object.clone(),
         ));
-        let right = Value::Reference(ObjectReference::new(right_universe, object_type, object));
+        let right = Value::Reference(ObjectReference::new(
+            right_universe.clone(),
+            object_type,
+            object,
+        ));
         let Err(refusal) = plan_pairs(&left, &right) else {
             panic!("expected ForeignReference");
         };

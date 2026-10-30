@@ -11,41 +11,28 @@ use quire_exact::{
     compare_keys, evaluate_union, form_collection, form_grouped, from_admitted_slots,
     plan_equality, planned_equality, union, ChargePoint, CheckedInvariantCause, CollectionKind,
     CollectionType, Component, ConstructionCause, ConstructionRefusal, Deferred, EnumMember,
-    FieldValue, Identifier, IeeeValue, Integer, LimitKind, Meter, NodeKey, OptionValue, Outcome,
+    FieldValue, IeeeValue, Integer, LimitKind, Meter, NodeKey, OptionValue, Outcome, PathSegment,
     Refusal, ScalarLimits, Undefined, UnionMember, UnionValue, Value, ValueType, VariantId,
 };
 
-// The kernel retains already-computed keys and mints nothing, so these
-// identities are opaque fixture bytes.
 fn circle() -> UnionMember {
-    UnionMember::from_admitted(
-        declaration(),
-        NodeKey::from_digest([0xC1; 32]),
-        Identifier::new("Circle").unwrap(),
-    )
+    UnionMember::from_admitted(declaration(), "Circle").unwrap()
 }
 
 fn empty() -> UnionMember {
-    UnionMember::from_admitted(
-        declaration(),
-        NodeKey::from_digest([0xE1; 32]),
-        Identifier::new("Empty").unwrap(),
-    )
+    UnionMember::from_admitted(declaration(), "Empty").unwrap()
 }
 
 fn declaration() -> NodeKey {
-    NodeKey::from_digest([0xD1; 32])
+    key(0xD1)
 }
 
-// Structural fixtures use opaque caller-minted identities, as the existing
-// kernel tests do. Their deliberately reversed digest order is not an FR-441
-// minting oracle. No declaration position is supplied to the kernel.
-fn fixture(name: &str, digest: u8) -> UnionMember {
-    UnionMember::from_admitted(
-        declaration(),
-        NodeKey::from_digest([digest; 32]),
-        Identifier::new(name).unwrap(),
-    )
+fn key(byte: u8) -> NodeKey {
+    NodeKey::new("test", vec![PathSegment::Text(byte.to_string())], 0).unwrap()
+}
+
+fn fixture(name: &str) -> UnionMember {
+    UnionMember::from_admitted(declaration(), name).unwrap()
 }
 
 fn integer(value: i64) -> Value {
@@ -87,19 +74,22 @@ fn equal(left: &Value, right: &Value) -> bool {
 #[test]
 fn union_construction_keeps_identity_positions_and_occurrences() {
     let nullary = make(empty(), &[]);
-    let rect = make(fixture("Rect", 1), &[2, 3]);
+    let rect = make(fixture("Rect"), &[2, 3]);
     assert_eq!(nullary.occ(), Integer::one());
     assert_eq!(rect.occ(), Integer::from(3_u64));
     let Value::Union(rect) = &rect else {
         panic!("a union value")
     };
-    assert_eq!(rect.declaration(), declaration());
-    assert_eq!(rect.variant(), VariantId::from_digest([1; 32]));
-    assert_eq!(rect.member().identifier().as_str(), "Rect");
+    assert_eq!(rect.declaration(), &declaration());
+    assert_eq!(
+        rect.variant(),
+        &VariantId::new(declaration(), "Rect").unwrap()
+    );
+    assert_eq!(rect.member().identifier(), "Rect");
     assert!(equal(&rect.payload()[0], &integer(2)));
     assert!(equal(&rect.payload()[1], &integer(3)));
     assert!(ValueType::Composite(declaration()).admits(&nullary));
-    assert!(!ValueType::Composite(NodeKey::from_digest([7; 32])).admits(&nullary));
+    assert!(!ValueType::Composite(key(7)).admits(&nullary));
     assert!(!ValueType::Integer.admits(&nullary));
 }
 
@@ -143,13 +133,13 @@ fn union_position_and_arity_refusals_are_typed() {
 #[trace("FR-379-AC-4")]
 #[test]
 fn union_equality_compares_members_and_payload_positions() {
-    let rect = make(fixture("Rect", 1), &[2, 3]);
-    assert!(equal(&rect, &make(fixture("Rect", 1), &[2, 3])));
-    assert!(!equal(&rect, &make(fixture("Rect", 1), &[3, 2])));
+    let rect = make(fixture("Rect"), &[2, 3]);
+    assert!(equal(&rect, &make(fixture("Rect"), &[2, 3])));
+    assert!(!equal(&rect, &make(fixture("Rect"), &[3, 2])));
     assert!(!equal(&make(empty(), &[]), &make(circle(), &[0])));
     assert!(!equal(
         &make(circle(), &[3]),
-        &make(fixture("Square", 2), &[3])
+        &make(fixture("Square"), &[3])
     ));
     assert_eq!(
         plan_equality(&rect, &rect).unwrap().pair_events(),
@@ -162,14 +152,10 @@ fn union_equality_compares_members_and_payload_positions() {
 #[test]
 fn foreign_union_enum_and_composite_kinds_remain_distinct() {
     let left = make(circle(), &[1]);
-    let foreign = UnionMember::from_admitted(
-        NodeKey::from_digest([0xD2; 32]),
-        NodeKey::from_digest([0xC2; 32]),
-        Identifier::new("Circle").unwrap(),
-    );
+    let foreign = UnionMember::from_admitted(key(0xD2), "Circle").unwrap();
     for other in [
         make(foreign, &[1]),
-        Value::Enum(EnumMember::new(circle().variant(), 0)),
+        Value::Enum(EnumMember::new(circle().variant().clone(), 0)),
         from_admitted_slots(
             declaration(),
             vec![FieldValue::Present(integer(1))].into_boxed_slice(),
@@ -183,8 +169,8 @@ fn foreign_union_enum_and_composite_kinds_remain_distinct() {
             })
         );
     }
-    let short = make(fixture("Rect", 1), &[1]);
-    let long = make(fixture("Rect", 1), &[1, 2]);
+    let short = make(fixture("Rect"), &[1]);
+    let long = make(fixture("Rect"), &[1, 2]);
     assert_eq!(compare_keys(&short, &long), None);
     assert_eq!(
         plan_equality(&short, &long),
@@ -196,24 +182,24 @@ fn foreign_union_enum_and_composite_kinds_remain_distinct() {
 
 #[trace("FR-379-AC-6")]
 #[test]
-fn union_keys_order_identifier_ascii_then_payload_positions() {
-    let one = make(fixture("Rect", 1), &[1]);
-    let other = make(fixture("Rect", 2), &[1]);
-    assert_eq!(compare_keys(&one, &other), None);
-    assert!(!equal(&one, &other));
-    let first = make(fixture("Alpha", 250), &[9]);
-    let second = make(fixture("Zulu", 1), &[0]);
+fn union_keys_order_case_utf8_then_payload_positions() {
+    let one = make(fixture("Rect"), &[1]);
+    let other = make(fixture("Rect"), &[1]);
+    assert_eq!(compare_keys(&one, &other), Some(Ordering::Equal));
+    assert!(equal(&one, &other));
+    let first = make(fixture("Alpha"), &[9]);
+    let second = make(fixture("Zulu"), &[0]);
     assert_eq!(compare_keys(&first, &second), Some(Ordering::Less));
     assert_eq!(compare_keys(&second, &first), Some(Ordering::Greater));
-    let rect = make(fixture("Rect", 3), &[2, 9]);
-    let later = make(fixture("Rect", 3), &[3, 1]);
+    let rect = make(fixture("Rect"), &[2, 9]);
+    let later = make(fixture("Rect"), &[3, 1]);
     assert_eq!(compare_keys(&rect, &later), Some(Ordering::Less));
     assert_eq!(
-        compare_keys(&rect, &make(fixture("Rect", 3), &[2, 10])),
+        compare_keys(&rect, &make(fixture("Rect"), &[2, 10])),
         Some(Ordering::Less)
     );
     assert_eq!(
-        compare_keys(&rect, &make(fixture("Rect", 3), &[2, 9])),
+        compare_keys(&rect, &make(fixture("Rect"), &[2, 9])),
         Some(Ordering::Equal)
     );
     assert_eq!(
@@ -228,11 +214,11 @@ fn union_keys_order_identifier_ascii_then_payload_positions() {
 
 fn input() -> Vec<Value> {
     vec![
-        make(fixture("Rect", 1), &[2, 3]),
+        make(fixture("Rect"), &[2, 3]),
         make(empty(), &[]),
         make(circle(), &[5]),
         make(circle(), &[1]),
-        make(fixture("Rect", 1), &[2, 3]),
+        make(fixture("Rect"), &[2, 3]),
     ]
 }
 
@@ -265,23 +251,23 @@ fn union_collections_sort_deduplicate_and_preserve_first_occurrence() {
                     make(circle(), &[1]),
                     make(circle(), &[5]),
                     make(empty(), &[]),
-                    make(fixture("Rect", 1), &[2, 3]),
+                    make(fixture("Rect"), &[2, 3]),
                 ],
                 CollectionKind::Bag => vec![
                     make(circle(), &[1]),
                     make(circle(), &[5]),
                     make(empty(), &[]),
-                    make(fixture("Rect", 1), &[2, 3]),
-                    make(fixture("Rect", 1), &[2, 3]),
+                    make(fixture("Rect"), &[2, 3]),
+                    make(fixture("Rect"), &[2, 3]),
                 ],
                 CollectionKind::OrderedSet if reversed => vec![
-                    make(fixture("Rect", 1), &[2, 3]),
+                    make(fixture("Rect"), &[2, 3]),
                     make(circle(), &[1]),
                     make(circle(), &[5]),
                     make(empty(), &[]),
                 ],
                 CollectionKind::OrderedSet => vec![
-                    make(fixture("Rect", 1), &[2, 3]),
+                    make(fixture("Rect"), &[2, 3]),
                     make(empty(), &[]),
                     make(circle(), &[5]),
                     make(circle(), &[1]),
@@ -300,29 +286,18 @@ fn union_collections_sort_deduplicate_and_preserve_first_occurrence() {
 
 #[trace("FR-379-AC-6")]
 #[test]
-fn member_declaration_order_and_digest_order_do_not_reach_union_key_order() {
-    // Two independent admitted declaration fixtures. Neither position nor
-    // digest order is the identifier order; identity remains package scoped.
+fn member_declaration_order_does_not_reach_union_key_order() {
+    // The member's declared case name determines order within each owner.
     for (declaration, bindings) in [
-        (
-            NodeKey::from_digest([10; 32]),
-            [("Zulu", 1), ("Alpha", 250), ("Middle", 2)],
-        ),
-        (
-            NodeKey::from_digest([11; 32]),
-            [("Middle", 200), ("Zulu", 251), ("Alpha", 252)],
-        ),
+        (key(10), ["Zulu", "Alpha", "Middle"]),
+        (key(11), ["Middle", "Zulu", "Alpha"]),
     ] {
         let values = bindings
             .into_iter()
-            .map(|(name, digest)| {
+            .map(|name| {
                 union(
                     &[],
-                    UnionMember::from_admitted(
-                        declaration,
-                        NodeKey::from_digest([digest; 32]),
-                        Identifier::new(name).unwrap(),
-                    ),
+                    UnionMember::from_admitted(declaration.clone(), name).unwrap(),
                     vec![],
                 )
                 .unwrap()
@@ -344,7 +319,7 @@ fn member_declaration_order_and_digest_order_do_not_reach_union_key_order() {
                 let Value::Union(value) = value else {
                     panic!("union")
                 };
-                value.member().identifier().as_str()
+                value.member().identifier()
             })
             .collect();
         assert_eq!(names, ["Alpha", "Middle", "Zulu"]);
@@ -357,7 +332,7 @@ fn member_declaration_order_and_digest_order_do_not_reach_union_key_order() {
 #[test]
 fn ieee_union_payload_has_no_key_and_sequence_keeps_occurrences() {
     let value = UnionValue::from_admitted(
-        fixture("Measured", 9),
+        fixture("Measured"),
         vec![Value::Float(IeeeValue::binary64(0x3ff0_0000_0000_0000))],
     );
     assert_eq!(compare_keys(&value, &value), None);
@@ -416,7 +391,7 @@ fn evaluated_union_preserves_deferred_fault_and_first_stop() {
     assert!(matches!(
         evaluate_union(
             &[ValueType::Integer, ValueType::Integer],
-            fixture("Rect", 1),
+            fixture("Rect"),
             payload,
             &mut stopped_meter
         )
@@ -452,7 +427,7 @@ fn evaluated_union_orders_arguments_and_charges_one_complete_result() {
     let mut charged = meter();
     let result = evaluate_union(
         &[ValueType::Integer, ValueType::Integer],
-        fixture("Rect", 1),
+        fixture("Rect"),
         payload,
         &mut charged,
     )
@@ -462,7 +437,7 @@ fn evaluated_union_orders_arguments_and_charges_one_complete_result() {
     assert_eq!(*calls.borrow(), vec![0, 1]);
     assert_eq!(charged.admission_count(), 1);
     assert_eq!(charged.consumed(LimitKind::ResultUnits), 3);
-    assert!(equal(&result, &make(fixture("Rect", 1), &[2, 3])));
+    assert!(equal(&result, &make(fixture("Rect"), &[2, 3])));
     let mut charged = meter();
     let result = evaluate_union(&[], empty(), vec![], &mut charged)
         .unwrap()
@@ -496,7 +471,7 @@ fn deep(levels: usize) -> Value {
     for _ in 0..levels {
         value = union(
             &[ValueType::option(ValueType::Composite(declaration()))],
-            fixture("Link", 42),
+            fixture("Link"),
             vec![OptionValue::present(ValueType::Composite(declaration()), value).unwrap()],
         )
         .unwrap();
@@ -557,7 +532,7 @@ fn ten_thousand_union_levels_clone_compare_format_and_drop_on_small_stack() {
 #[test]
 fn shared_union_children_count_each_occurrence_and_clone_shares_root() {
     let child = deep(1_000);
-    let root = UnionValue::from_admitted(fixture("Pair", 7), vec![child.clone(), child]);
+    let root = UnionValue::from_admitted(fixture("Pair"), vec![child.clone(), child]);
     assert_eq!(root.occ(), Integer::from(4_003_u64));
     let copy = root.clone();
     let (Value::Union(root), Value::Union(copy)) = (&root, &copy) else {
@@ -612,7 +587,7 @@ fn mixed_union_composite_collection_paths_walk_and_drop_on_small_stack() {
                     );
                     value = union(
                         &[ValueType::Composite(declaration())],
-                        fixture("Nested", 81),
+                        fixture("Nested"),
                         vec![record],
                     )
                     .unwrap();

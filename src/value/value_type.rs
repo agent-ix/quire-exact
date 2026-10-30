@@ -175,15 +175,15 @@ impl Clone for ValueType {
             Self::Rational(domain) => Self::Rational(domain.clone()),
             Self::Decimal(declared) => Self::Decimal(declared.clone()),
             Self::Float(declared) => Self::Float(*declared),
-            Self::Quantity(unit) => Self::Quantity(*unit),
+            Self::Quantity(unit) => Self::Quantity(unit.clone()),
             Self::BoundedQuantity(bounded) => Self::BoundedQuantity(Arc::clone(bounded)),
             Self::Text(declared) => Self::Text(*declared),
             Self::Enum(shape) => Self::Enum(shape.clone()),
             Self::Option(payload) => Self::Option(Arc::clone(payload)),
-            Self::Composite(declaration) => Self::Composite(*declaration),
+            Self::Composite(declaration) => Self::Composite(declaration.clone()),
             Self::Collection(collection) => Self::Collection(Arc::clone(collection)),
             Self::Map(map) => Self::Map(Arc::clone(map)),
-            Self::Reference(object_type) => Self::Reference(*object_type),
+            Self::Reference(object_type) => Self::Reference(object_type.clone()),
             Self::Population(maximum) => Self::Population(*maximum),
         }
     }
@@ -366,12 +366,6 @@ mod tests {
             .expect("the walk completes without overflowing the stack");
     }
 
-    fn digest(byte: u8) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        bytes
-    }
-
     fn interval(lower: i64, upper: i64) -> IntegerInterval {
         IntegerInterval::new(Integer::from(lower), Integer::from(upper)).expect("ordered")
     }
@@ -401,7 +395,7 @@ mod tests {
 
     /// One type per variant, plus a bounded collection nested in options.
     fn samples() -> Vec<ValueType> {
-        let key = NodeKey::from_digest(digest(9));
+        let key = NodeKey::fixture(9);
         let nested = ValueType::option(ValueType::collection(CollectionType::new(
             CollectionKind::Set,
             ValueType::option(ValueType::Int(interval(0, 9))),
@@ -425,12 +419,12 @@ mod tests {
                 .expect("well formed"),
             ),
             ValueType::Float(FloatType::exact(IeeeWidth::Binary64)),
-            ValueType::Quantity(UnitId::declared(key)),
+            ValueType::Quantity(UnitId::declared(key.clone())),
             ValueType::Text(TextType::new(0, 10, TextProfile::UnicodeScalars).expect("bounds")),
             ValueType::String,
-            ValueType::Enum(EnumShape::new(false, [VariantId::from_digest(digest(3))])),
+            ValueType::Enum(EnumShape::new(false, [VariantId::fixture(3)])),
             ValueType::Composite(key),
-            ValueType::Reference(EffectiveId::from_digest(digest(6))),
+            ValueType::Reference(EffectiveId::fixture(6)),
             ValueType::Population(Some(5)),
             ValueType::Population(None),
             ValueType::collection(CollectionType::new(

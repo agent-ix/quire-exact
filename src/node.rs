@@ -1,37 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Checked semantic node identity.
 //!
-//! A `NodeKey` is an opaque 32-byte digest in domain
-//! `quire.checked-semantic-node/v1`. Node ids are content-addressed over the
-//! preimage the caller defines: equal keys mean
-//! structurally identical nodes.
-//!
-//! Minting rule: the kernel `NodeKey` has one minting constructor,
-//! [`NodeKey::from_digest`], which takes an already-computed digest. It does not
-//! hash: the preimage schema, RFC 8785 JCS canonicalization and the SHA-256
-//! computation over that canonical form all stay with the caller, who passes the
-//! finished 32 bytes in. Only the checking stage calls it in production; this
-//! crate's own tests call it freely to exercise the type.
-//!
-//! Decoding rule: a key the checking stage already minted, read back out of an
-//! admitted package's bytes, is decoded with [`NodeKey::decode_admitted`], not
-//! minted. Its caller runs only after the admitted-package identity check has
-//! bound the key bytes, and a decoded key carries that check's provenance, not a
-//! fresh mint.
-//!
-//! A wire-read node id otherwise becomes a `NodeKey` only by lookup in a checked
-//! package, never by parsing a digest string directly: parsing a wire digest is
-//! the caller's concern. Bridging another digest type's bytes into a `NodeKey`
-//! has no canonical role either.
-//!
-//! Like `from_digest`, `decode_admitted` accepts any 32 bytes: the guarantee is
-//! the caller allow-list plus the verified binding, not the type.
+//! A `NodeKey` carries the structural identity of a node in an admitted package.
+//! Its owner, path, and ordinal compare componentwise as QSpec FR-322 specifies.
+//! The caller checks that the identity joins its admitted package; this leaf
+//! checks only the closed shape and never computes a digest.
 
-use alloc::string::String;
+use alloc::{boxed::Box, string::String, vec::Vec};
 use core::fmt;
 
-/// Digest domain of every checked semantic node key.
-pub const NODE_KEY_DOMAIN: &str = "quire.checked-semantic-node/v1";
+/// The greatest node ordinal admitted by the checked-package V2 schema.
+pub const MAX_NODE_ORDINAL: u64 = 9_007_199_254_740_991;
 
 /// Whether `text` is `^[A-Za-z_][A-Za-z0-9_]*$`: the one definition of this
 /// character class, which every identifier-shaped field and [`Identifier`]
@@ -73,44 +52,91 @@ impl Identifier {
     }
 }
 
-/// An opaque `quire.checked-semantic-node/v1` node key.
+/// One segment of a structural node path. Text sorts before a nested node id.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PathSegment {
+    /// An exact UTF-8 segment, including the empty string where admitted.
+    Text(String),
+    /// An operand node identity nested in a derived node's path.
+    Node(Box<NodeKey>),
+}
+
+/// A malformed structural node identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum InvalidNodeKey {
+    /// The owning package has no name.
+    #[error("a node identity requires a nonempty package")]
+    EmptyPackage,
+    /// The structural path has no segment.
+    #[error("a node identity requires a nonempty path")]
+    EmptyPath,
+    /// The ordinal exceeds the checked-package V2 schema maximum.
+    #[error("a node ordinal exceeds the checked-package V2 maximum")]
+    OrdinalOutOfRange,
+}
+
+/// A structural node identity from an admitted checked package.
 ///
 /// quire:canonical
-#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct NodeKey([u8; 32]);
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct NodeKey {
+    package: String,
+    path: Box<[PathSegment]>,
+    ordinal: u64,
+}
 
 impl NodeKey {
-    /// The minting constructor: wrap an already-computed
-    /// `quire.checked-semantic-node/v1` digest. The caller (the checking stage)
-    /// computes the digest over the canonical preimage; this type performs
-    /// no hashing and holds no preimage knowledge.
-    pub fn from_digest(digest: [u8; 32]) -> Self {
-        Self(digest)
+    /// Carry a node identity already admitted by the caller. This checks its
+    /// closed shape, but does not resolve the node against a package.
+    pub fn new(
+        package: impl Into<String>,
+        path: Vec<PathSegment>,
+        ordinal: u64,
+    ) -> Result<Self, InvalidNodeKey> {
+        let package = package.into();
+        if package.is_empty() {
+            return Err(InvalidNodeKey::EmptyPackage);
+        }
+        if path.is_empty() {
+            return Err(InvalidNodeKey::EmptyPath);
+        }
+        if ordinal > MAX_NODE_ORDINAL {
+            return Err(InvalidNodeKey::OrdinalOutOfRange);
+        }
+        Ok(Self {
+            package,
+            path: path.into_boxed_slice(),
+            ordinal,
+        })
     }
 
-    /// Decode a key the checking stage minted and an admitted package carries. It hashes nothing and
-    /// takes no preimage: it re-reads `digest`, the key's own bytes.
-    ///
-    /// Precondition: call it only on the bytes of a package that already
-    /// passed the admitted-package identity check (the verified
-    /// binding), so a forged package is refused before any of its keys is
-    /// decoded. The decoded key carries that check's provenance; it never
-    /// feeds a constructor that asserts `check` produced it. The guarantee
-    /// is the caller allow-list plus the
-    /// verified binding, not this type.
-    pub fn decode_admitted(digest: [u8; 32]) -> Self {
-        Self(digest)
+    /// The exact owning package name.
+    pub fn package(&self) -> &str {
+        &self.package
     }
 
-    /// The raw digest bytes.
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
+    /// The path segments in component order.
+    pub fn path(&self) -> &[PathSegment] {
+        &self.path
+    }
+
+    /// The ordinal within the owning package and path.
+    pub fn ordinal(&self) -> u64 {
+        self.ordinal
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        use alloc::string::ToString;
+
+        Self::new("test", Vec::from([PathSegment::Text(byte.to_string())]), 0)
+            .expect("test key has valid structural components")
     }
 }
 
 impl fmt::Display for NodeKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
+        write!(f, "{}:{:?}:{}", self.package, self.path, self.ordinal)
     }
 }
 
@@ -123,60 +149,85 @@ impl fmt::Debug for NodeKey {
 #[cfg(test)]
 mod tests {
     use alloc::string::ToString;
+    use ix_trace_rs::trace;
 
     use super::*;
 
-    fn digest(byte: u8) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        bytes
+    fn key(package: &str, path: Vec<PathSegment>, ordinal: u64) -> NodeKey {
+        NodeKey::new(package, path, ordinal).unwrap()
     }
 
-    /// Equal digests mint interchangeable
-    /// `NodeKey`s -- not just `==`, but
-    /// hashing equal (so either stands in for the other as a set/map key)
-    /// and ordering equal to zero. Unequal digests mint keys that order by
-    /// raw digest bytes, not merely compare unequal.
+    /// Trace: FR-389-AC-1, TC-938.
+    #[trace("FR-389-AC-1", "TC-938")]
     #[test]
-    fn equal_digest_bytes_mint_interchangeable_node_keys() {
+    fn structural_node_components_determine_equality_hash_and_order() {
         use std::collections::HashSet;
 
-        let a = NodeKey::from_digest(digest(1));
-        let b = NodeKey::from_digest(digest(1));
-        let c = NodeKey::from_digest(digest(2));
+        let path = vec![PathSegment::Text("Type".into())];
+        let a = key("Pkg", path.clone(), 0);
+        let b = key("Pkg", path.clone(), 0);
+        let c = key("Pkg", path, 1);
         assert_eq!(a, b);
-        assert_eq!(a.as_bytes(), b.as_bytes());
         assert_eq!(a.cmp(&b), core::cmp::Ordering::Equal);
-        assert_eq!(HashSet::from([a, b, c]).len(), 2);
+        assert_eq!(HashSet::from([a.clone(), b, c.clone()]).len(), 2);
         assert!(a < c);
+        assert!(key("A", vec![PathSegment::Text("Type".into())], 9) < a);
+        assert!(
+            key("Pkg", vec![PathSegment::Text("Type".into())], 0)
+                < key("Pkg", vec![PathSegment::Node(Box::new(a.clone()))], 0)
+        );
+        assert!(
+            key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("A".into())],
+                    0,
+                )))],
+                0,
+            ) < key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("B".into())],
+                    0,
+                )))],
+                0,
+            )
+        );
+        assert!(
+            a < key(
+                "Pkg",
+                vec![
+                    PathSegment::Text("Type".into()),
+                    PathSegment::Text("".into())
+                ],
+                0
+            )
+        );
     }
 
-    /// A key decoded from an admitted package's bytes is the
-    /// key `check` minted from the same digest -- equal, hashing equal and
-    /// ordering equal -- so a lookup by the decoded key finds the minted one.
+    /// Trace: FR-389-AC-2, TC-938.
+    #[trace("FR-389-AC-2", "TC-938")]
     #[test]
-    fn a_decoded_admitted_key_is_the_key_check_minted() {
-        use std::collections::HashSet;
-
-        let minted = NodeKey::from_digest(digest(7));
-        let decoded = NodeKey::decode_admitted(*minted.as_bytes());
-        assert_eq!(decoded, minted);
-        assert_eq!(decoded.cmp(&minted), core::cmp::Ordering::Equal);
-        assert!(HashSet::from([minted]).contains(&decoded));
-        assert_ne!(NodeKey::decode_admitted(digest(8)), minted);
-    }
-
-    /// `Display` renders exactly 64 lowercase hex digits, the wire
-    /// spelling an emitter writes for `NodeId{digest}`.
-    #[test]
-    fn display_is_64_lowercase_hex_digits() {
-        let key = NodeKey::from_digest(digest(0xab));
-        let rendered = key.to_string();
-        assert_eq!(rendered.len(), 64);
-        assert!(rendered
-            .chars()
-            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        assert!(rendered.ends_with("ab"));
+    fn malformed_structural_node_shape_refuses() {
+        let path = vec![PathSegment::Text(String::new())];
+        assert_eq!(
+            NodeKey::new("", path.clone(), 0),
+            Err(InvalidNodeKey::EmptyPackage)
+        );
+        assert_eq!(
+            NodeKey::new("Pkg", vec![], 0),
+            Err(InvalidNodeKey::EmptyPath)
+        );
+        assert_eq!(
+            NodeKey::new("Pkg", path.clone(), MAX_NODE_ORDINAL + 1),
+            Err(InvalidNodeKey::OrdinalOutOfRange)
+        );
+        assert_eq!(
+            key("Pkg", path, MAX_NODE_ORDINAL).ordinal(),
+            MAX_NODE_ORDINAL
+        );
     }
 
     /// A name that is not `^[A-Za-z_][A-Za-z0-9_]*$` is refused at

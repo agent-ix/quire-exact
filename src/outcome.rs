@@ -469,7 +469,7 @@ mod tests {
             domain: interval(),
             member,
         };
-        let universe = UniverseId::from_digest([0; 32]);
+        let universe = UniverseId::fixture(0);
         let cases: [(Refusal, &str, &str); 14] = [
             (
                 Refusal::InexactDecimal {
@@ -538,7 +538,7 @@ mod tests {
             ),
             (
                 Refusal::ForeignReference {
-                    required: universe,
+                    required: universe.clone(),
                     supplied: universe,
                 },
                 "foreign_reference",
