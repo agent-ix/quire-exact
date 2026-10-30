@@ -65,6 +65,7 @@ mod decimal_membership;
 mod division;
 mod equality;
 mod identity;
+mod identity_copy;
 mod ieee;
 mod integer;
 mod key;
@@ -122,6 +123,7 @@ pub use identity::{
     EffectiveId, EmptyMemberName, EmptyObjectIdentity, EmptyVariantName, MemberId, MemberOwner,
     ObjectId, OriginalDeclarationKey, PopulationId, UnitDomain, UnitId, UniverseId, VariantId,
 };
+pub use identity_copy::IdentityCopyError;
 pub use ieee::{
     compare_ieee, convert_ieee_width, evaluate_ieee, exact_to_ieee, ieee_intrinsic_identities,
     ieee_to_exact, ExactScalar, FloatType, IeeeComparison, IeeeExact, IeeeExactLoss, IeeeFlag,
