@@ -200,8 +200,9 @@ pub enum CheckedInvariantCause {
 ///
 /// Each of the ten value refusals carries the declared target domain or IEEE
 /// width its catalog record renders, so the record is built
-/// from the variant and never from a message. Bigint domains are boxed, which
-/// keeps `Refusal` small; it is `Clone`, not `Copy`.
+/// from the variant and never from a message. Bigint domains and the node
+/// carried by each `UniverseId` are boxed, which keeps `Refusal` small; it is
+/// `Clone`, not `Copy`.
 ///
 /// quire:canonical
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -469,7 +470,7 @@ mod tests {
             domain: interval(),
             member,
         };
-        let universe = UniverseId::from_digest([0; 32]);
+        let universe = UniverseId::fixture(0);
         let cases: [(Refusal, &str, &str); 14] = [
             (
                 Refusal::InexactDecimal {
@@ -538,7 +539,7 @@ mod tests {
             ),
             (
                 Refusal::ForeignReference {
-                    required: universe,
+                    required: universe.clone(),
                     supplied: universe,
                 },
                 "foreign_reference",

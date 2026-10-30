@@ -15,7 +15,14 @@ use quire_exact::{
 const DEEP: usize = 100_000;
 
 fn unit(byte: u8) -> UnitId {
-    UnitId::declared(NodeKey::from_digest([byte; 32]))
+    UnitId::declared(
+        NodeKey::new(
+            "test",
+            vec![quire_exact::PathSegment::Text(byte.to_string())],
+            0,
+        )
+        .unwrap(),
+    )
 }
 
 fn ratio(numerator: i64, denominator: i64) -> Rational {
@@ -35,7 +42,9 @@ fn bounded_type(
     min: Option<i64>,
     max: Option<i64>,
 ) -> Result<BoundedQuantityType, IllTyped> {
-    BoundedQuantityType::new(of, min.map(|m| whole(m, of)), max.map(|m| whole(m, of)))
+    let min = min.map(|m| whole(m, of.clone()));
+    let max = max.map(|m| whole(m, of.clone()));
+    BoundedQuantityType::new(of, min, max)
 }
 
 fn bounded(of: UnitId, min: Option<i64>, max: Option<i64>) -> ValueType {
@@ -104,10 +113,10 @@ fn a_bounded_quantity_type_reports_its_unit_and_bounds() {
         (None, Some(100)),
         (Some(0), Some(100)),
     ] {
-        let built = bounded_type(u, min, max).expect("valid");
-        assert_eq!(built.unit(), u);
-        assert_eq!(built.min(), min.map(|m| whole(m, u)).as_ref());
-        assert_eq!(built.max(), max.map(|m| whole(m, u)).as_ref());
+        let built = bounded_type(u.clone(), min, max).expect("valid");
+        assert_eq!(built.unit(), &u);
+        assert_eq!(built.min(), min.map(|m| whole(m, u.clone())).as_ref());
+        assert_eq!(built.max(), max.map(|m| whole(m, u.clone())).as_ref());
         let ValueType::BoundedQuantity(ref wrapped) = ValueType::bounded_quantity(built.clone())
         else {
             panic!("ValueType::bounded_quantity builds a BoundedQuantity");
@@ -121,30 +130,30 @@ fn a_bounded_quantity_type_reports_its_unit_and_bounds() {
 fn only_a_bound_in_another_unit_is_refused() {
     let (u, other) = (unit(1), unit(2));
     let refused = |min, max| {
-        BoundedQuantityType::new(u, min, max)
+        BoundedQuantityType::new(u.clone(), min, max)
             .expect_err("a bound in another unit")
             .cause
     };
     assert_eq!(
-        refused(Some(whole(0, other)), None),
+        refused(Some(whole(0, other.clone())), None),
         IllTypedCause::MalformedBoundedQuantityType
     );
     assert_eq!(
-        refused(None, Some(whole(9, other))),
+        refused(None, Some(whole(9, other.clone()))),
         IllTypedCause::MalformedBoundedQuantityType
     );
 
     for (min, max) in [(3, 3), (3, 5), (5, 3), (4, 2)] {
-        let built = bounded_type(u, Some(min), Some(max)).expect("valid, possibly empty");
-        assert_eq!(built.min(), Some(&whole(min, u)));
-        assert_eq!(built.max(), Some(&whole(max, u)));
+        let built = bounded_type(u.clone(), Some(min), Some(max)).expect("valid, possibly empty");
+        assert_eq!(built.min(), Some(&whole(min, u.clone())));
+        assert_eq!(built.max(), Some(&whole(max, u.clone())));
     }
     for (min, max) in [
-        (amount(1, 3, u), amount(1, 2, u)),
-        (amount(1, 2, u), amount(1, 3, u)),
+        (amount(1, 3, u.clone()), amount(1, 2, u.clone())),
+        (amount(1, 2, u.clone()), amount(1, 3, u.clone())),
     ] {
-        let built =
-            BoundedQuantityType::new(u, Some(min.clone()), Some(max.clone())).expect("valid");
+        let built = BoundedQuantityType::new(u.clone(), Some(min.clone()), Some(max.clone()))
+            .expect("valid");
         assert_eq!(built.min(), Some(&min));
         assert_eq!(built.max(), Some(&max));
     }
@@ -154,33 +163,38 @@ fn only_a_bound_in_another_unit_is_refused() {
 #[trace("TC-936", "FR-387-AC-3")]
 fn bounded_quantity_types_are_equal_exactly_when_unit_and_bounds_are_equal() {
     let u = unit(1);
-    let reference = bounded(u, Some(0), Some(100));
-    let same = bounded(u, Some(0), Some(100));
+    let reference = bounded(u.clone(), Some(0), Some(100));
+    let same = bounded(u.clone(), Some(0), Some(100));
     assert!(reference == same);
     assert_eq!(hash_of(&reference), hash_of(&same));
 
     // Equal magnitudes in different spellings normalise to the same bound.
     let spelled = ValueType::bounded_quantity(
-        BoundedQuantityType::new(u, Some(amount(0, 5, u)), Some(amount(200, 2, u))).expect("valid"),
+        BoundedQuantityType::new(
+            u.clone(),
+            Some(amount(0, 5, u.clone())),
+            Some(amount(200, 2, u.clone())),
+        )
+        .expect("valid"),
     );
     assert!(reference == spelled);
     assert_eq!(hash_of(&reference), hash_of(&spelled));
 
     let differing = [
         bounded(unit(2), Some(0), Some(100)),
-        bounded(u, Some(1), Some(100)),
-        bounded(u, Some(0), Some(99)),
-        bounded(u, None, None),
-        bounded(u, Some(0), None),
-        bounded(u, None, Some(100)),
+        bounded(u.clone(), Some(1), Some(100)),
+        bounded(u.clone(), Some(0), Some(99)),
+        bounded(u.clone(), None, None),
+        bounded(u.clone(), Some(0), None),
+        bounded(u.clone(), None, Some(100)),
     ];
     for other in &differing {
         assert!(reference != *other);
     }
-    assert!(bounded(u, Some(0), None) != bounded(u, None, Some(100)));
-    assert!(bounded(u, None, None) != ValueType::Quantity(u));
-    assert!(ValueType::Quantity(u) != bounded(u, None, None));
-    assert!(bounded(u, None, None) != rational_type());
+    assert!(bounded(u.clone(), Some(0), None) != bounded(u.clone(), None, Some(100)));
+    assert!(bounded(u.clone(), None, None) != ValueType::Quantity(u.clone()));
+    assert!(ValueType::Quantity(u.clone()) != bounded(u.clone(), None, None));
+    assert!(bounded(u.clone(), None, None) != rational_type());
     for each in [&reference, &differing[3]] {
         assert!(*each != ValueType::option(each.clone()));
         assert!(ValueType::option(each.clone()) != *each);
@@ -206,16 +220,16 @@ fn a_bounded_quantity_type_compares_by_its_whole_nested_chain() {
             ))),
         ]
     };
-    for (left, right) in nested(bounded(u, Some(0), Some(100)))
+    for (left, right) in nested(bounded(u.clone(), Some(0), Some(100)))
         .iter()
-        .zip(nested(bounded(u, Some(0), Some(100))))
+        .zip(nested(bounded(u.clone(), Some(0), Some(100))))
     {
         assert!(*left == right);
         assert_eq!(hash_of(left), hash_of(&right));
     }
-    for (left, right) in nested(bounded(u, Some(0), Some(100)))
+    for (left, right) in nested(bounded(u.clone(), Some(0), Some(100)))
         .iter()
-        .zip(nested(bounded(u, Some(0), Some(99))))
+        .zip(nested(bounded(u.clone(), Some(0), Some(99))))
     {
         assert!(*left != right);
     }
@@ -250,12 +264,12 @@ impl Write for ParenCount {
 fn deep_bounded_quantity_types_clone_compare_hash_format_and_drop() {
     on_small_stack(|| {
         let u = unit(1);
-        let value_type = deep(bounded(u, Some(0), Some(100)));
+        let value_type = deep(bounded(u.clone(), Some(0), Some(100)));
         let copy = value_type.clone();
         assert!(value_type == copy);
         assert_eq!(hash_of(&value_type), hash_of(&copy));
 
-        let other = deep(bounded(u, Some(0), Some(99)));
+        let other = deep(bounded(u.clone(), Some(0), Some(99)));
         assert!(value_type != other);
 
         let mut sink = ParenCount::default();
@@ -278,7 +292,7 @@ fn a_bounded_quantity_type_debug_prints_the_derived_layout() {
     let u = unit(1);
     let unit_text = format!("{u:?}");
     assert_eq!(
-        format!("{:?}", bounded(u, Some(0), Some(100))),
+        format!("{:?}", bounded(u.clone(), Some(0), Some(100))),
         format!(
             "BoundedQuantity(BoundedQuantityType {{ unit: {unit_text}, min: Some(Quantity {{ \
              magnitude: {ZERO}, unit: {unit_text} }}), max: Some(Quantity {{ magnitude: \
@@ -286,7 +300,7 @@ fn a_bounded_quantity_type_debug_prints_the_derived_layout() {
         )
     );
     assert_eq!(
-        format!("{:?}", bounded(u, None, None)),
+        format!("{:?}", bounded(u.clone(), None, None)),
         format!(
             "BoundedQuantity(BoundedQuantityType {{ unit: {unit_text}, min: None, max: None }})"
         )
@@ -318,7 +332,7 @@ fn a_bounded_quantity_type_alternate_debug_prints_the_nested_layout() {
         )
     };
     assert_eq!(
-        format!("{:#?}", bounded(u, Some(0), Some(100))),
+        format!("{:#?}", bounded(u.clone(), Some(0), Some(100))),
         format!(
             "BoundedQuantity(\n    BoundedQuantityType {{\n        unit: {unit_text},\n{}{}    \
              }},\n)",
@@ -327,7 +341,7 @@ fn a_bounded_quantity_type_alternate_debug_prints_the_nested_layout() {
         )
     );
     assert_eq!(
-        format!("{:#?}", bounded(u, None, None)),
+        format!("{:#?}", bounded(u.clone(), None, None)),
         format!(
             "BoundedQuantity(\n    BoundedQuantityType {{\n        unit: {unit_text},\n        \
              min: None,\n        max: None,\n    }},\n)"
@@ -339,40 +353,40 @@ fn a_bounded_quantity_type_alternate_debug_prints_the_nested_layout() {
 #[trace("TC-936", "FR-387-AC-7")]
 fn admission_is_the_inclusive_range_check() {
     let u = unit(1);
-    let closed = bounded(u, Some(0), Some(100));
+    let closed = bounded(u.clone(), Some(0), Some(100));
     for magnitude in [0, 50, 100] {
-        assert!(closed.admits(&quantity_value(magnitude, u)));
+        assert!(closed.admits(&quantity_value(magnitude, u.clone())));
     }
     for magnitude in [-1, 101] {
-        assert!(!closed.admits(&quantity_value(magnitude, u)));
+        assert!(!closed.admits(&quantity_value(magnitude, u.clone())));
     }
-    let from_one = bounded(u, Some(1), Some(100));
-    assert!(!from_one.admits(&Value::Quantity(amount(1, 2, u))));
-    assert!(from_one.admits(&Value::Quantity(amount(3, 2, u))));
+    let from_one = bounded(u.clone(), Some(1), Some(100));
+    assert!(!from_one.admits(&Value::Quantity(amount(1, 2, u.clone()))));
+    assert!(from_one.admits(&Value::Quantity(amount(3, 2, u.clone()))));
 
-    let open_above = bounded(u, Some(0), None);
-    assert!(open_above.admits(&quantity_value(1_000_000, u)));
-    assert!(!open_above.admits(&quantity_value(-1, u)));
-    let open_below = bounded(u, None, Some(100));
-    assert!(open_below.admits(&quantity_value(-1_000_000, u)));
-    assert!(!open_below.admits(&quantity_value(101, u)));
+    let open_above = bounded(u.clone(), Some(0), None);
+    assert!(open_above.admits(&quantity_value(1_000_000, u.clone())));
+    assert!(!open_above.admits(&quantity_value(-1, u.clone())));
+    let open_below = bounded(u.clone(), None, Some(100));
+    assert!(open_below.admits(&quantity_value(-1_000_000, u.clone())));
+    assert!(!open_below.admits(&quantity_value(101, u.clone())));
 }
 
 #[test]
 #[trace("TC-936", "FR-387-AC-8")]
 fn admission_refuses_other_units_and_non_quantities_unlike_the_unbounded_type() {
     let (u, other) = (unit(1), unit(2));
-    let closed = bounded(u, Some(0), Some(100));
+    let closed = bounded(u.clone(), Some(0), Some(100));
     for value in [
-        quantity_value(50, other),
+        quantity_value(50, other.clone()),
         text_value(),
         Value::Boolean(true),
         option_value(),
     ] {
         assert!(!closed.admits(&value));
     }
-    assert!(ValueType::Quantity(u).admits(&quantity_value(101, u)));
-    assert!(!closed.admits(&quantity_value(101, u)));
+    assert!(ValueType::Quantity(u.clone()).admits(&quantity_value(101, u.clone())));
+    assert!(!closed.admits(&quantity_value(101, u.clone())));
 }
 
 #[test]
@@ -383,7 +397,7 @@ fn identity_is_the_effective_bounds_whatever_the_caller_folded_them_from() {
     let fold = |chain: &[(i64, i64)]| {
         let min = chain.iter().map(|bound| bound.0).max().expect("chain");
         let max = chain.iter().map(|bound| bound.1).min().expect("chain");
-        bounded_type(u, Some(min), Some(max)).expect("valid")
+        bounded_type(u.clone(), Some(min), Some(max)).expect("valid")
     };
     let first = fold(&[(0, 200), (-5, 100)]);
     let second = fold(&[(0, 100)]);
@@ -392,15 +406,15 @@ fn identity_is_the_effective_bounds_whatever_the_caller_folded_them_from() {
     assert_eq!(first.min(), second.min());
     assert_eq!(first.max(), second.max());
 
-    let refined = bounded(u, Some(0), Some(50));
+    let refined = bounded(u.clone(), Some(0), Some(50));
     assert!(ValueType::bounded_quantity(first) != refined);
-    assert!(bounded(u, Some(0), Some(100)) != refined);
+    assert!(bounded(u.clone(), Some(0), Some(100)) != refined);
 
     // The only constructor refusal is a unit mismatch, never inverted bounds.
-    assert!(bounded_type(u, Some(5), Some(3)).is_ok());
-    assert!(bounded_type(u, Some(3), Some(3)).is_ok());
+    assert!(bounded_type(u.clone(), Some(5), Some(3)).is_ok());
+    assert!(bounded_type(u.clone(), Some(3), Some(3)).is_ok());
     assert_eq!(
-        BoundedQuantityType::new(u, Some(whole(0, unit(2))), None)
+        BoundedQuantityType::new(u.clone(), Some(whole(0, unit(2))), None)
             .expect_err("unit mismatch")
             .cause,
         IllTypedCause::MalformedBoundedQuantityType
@@ -411,15 +425,15 @@ fn identity_is_the_effective_bounds_whatever_the_caller_folded_them_from() {
 #[trace("TC-936", "FR-387-AC-10")]
 fn an_inverted_type_is_a_valid_empty_type_that_keeps_both_bounds() {
     let (u, other) = (unit(1), unit(2));
-    let inverted = bounded_type(u, Some(5), Some(3)).expect("valid, empty");
-    assert_eq!(inverted.min(), Some(&whole(5, u)));
-    assert_eq!(inverted.max(), Some(&whole(3, u)));
+    let inverted = bounded_type(u.clone(), Some(5), Some(3)).expect("valid, empty");
+    assert_eq!(inverted.min(), Some(&whole(5, u.clone())));
+    assert_eq!(inverted.max(), Some(&whole(3, u.clone())));
     let empty = ValueType::bounded_quantity(inverted);
     for magnitude in [2, 3, 4, 5, 100] {
-        assert!(!empty.admits(&quantity_value(magnitude, u)));
+        assert!(!empty.admits(&quantity_value(magnitude, u.clone())));
     }
     for value in [
-        quantity_value(4, other),
+        quantity_value(4, other.clone()),
         text_value(),
         Value::Boolean(true),
         option_value(),
@@ -427,10 +441,10 @@ fn an_inverted_type_is_a_valid_empty_type_that_keeps_both_bounds() {
         assert!(!empty.admits(&value));
     }
 
-    let same = bounded(u, Some(5), Some(3));
+    let same = bounded(u.clone(), Some(5), Some(3));
     assert!(empty == same);
     assert_eq!(hash_of(&empty), hash_of(&same));
-    assert!(empty != bounded(u, Some(4), Some(2)));
+    assert!(empty != bounded(u.clone(), Some(4), Some(2)));
 
     let text = format!("{empty:?}");
     assert!(text.contains("min: Some(") && text.contains("max: Some("));

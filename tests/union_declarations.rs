@@ -10,9 +10,9 @@ use ix_trace_rs::trace;
 use quire_exact::{
     compare_keys, evaluate_union, form, from_admitted_slots, plan_equality, planned_equality,
     union, CheckedInvariantCause, CollectionKind, CollectionType, Component, ConstructionCause,
-    ConstructionRefusal, Deferred, EffectiveId, FieldValue, Identifier, Integer, Meter, NodeKey,
-    ObjectId, ObjectReference, OptionValue, Outcome, Refusal, ScalarLimits, UnionMember,
-    UnionValue, UniverseId, Value, ValueType,
+    ConstructionRefusal, Deferred, EffectiveId, FieldValue, Integer, Meter, NodeKey, ObjectId,
+    ObjectReference, OptionValue, OriginalDeclarationKey, Outcome, PathSegment, Refusal,
+    ScalarLimits, UnionMember, UnionValue, UniverseId, Value, ValueType,
 };
 
 const P: u8 = 1;
@@ -21,7 +21,7 @@ const G: u8 = 3;
 const U: u8 = 9;
 
 fn key(byte: u8) -> NodeKey {
-    NodeKey::from_digest([byte; 32])
+    NodeKey::new("test", vec![PathSegment::Text(byte.to_string())], 0).unwrap()
 }
 
 fn meter() -> Meter {
@@ -59,18 +59,14 @@ fn g100() -> Value {
 
 fn reference(universe: u8) -> FieldValue {
     FieldValue::Present(Value::Reference(ObjectReference::new(
-        UniverseId::from_digest([universe; 32]),
-        EffectiveId::from_digest([7; 32]),
+        UniverseId::new(key(universe)),
+        EffectiveId::new(None, OriginalDeclarationKey::new("test", "7")),
         ObjectId::new("o1").unwrap(),
     )))
 }
 
 fn member(name: &str) -> UnionMember {
-    UnionMember::from_admitted(
-        key(U),
-        NodeKey::from_digest([name.len() as u8; 32]),
-        Identifier::new(name).unwrap(),
-    )
+    UnionMember::from_admitted(key(U), name).unwrap()
 }
 
 /// A one-position union whose payload is already admitted by the caller.
@@ -169,11 +165,7 @@ fn unlike_union_pairings_stay_checked_invariant_faults() {
         CheckedInvariantCause::ValueKindMismatch
     );
     let other_declaration = UnionValue::from_admitted(
-        UnionMember::from_admitted(
-            key(U + 1),
-            NodeKey::from_digest([4; 32]),
-            Identifier::new("Held").unwrap(),
-        ),
+        UnionMember::from_admitted(key(U + 1), "Held").unwrap(),
         vec![p100()],
     );
     assert_eq!(
@@ -184,7 +176,7 @@ fn unlike_union_pairings_stay_checked_invariant_faults() {
 
 #[trace("FR-377-AC-8")]
 #[test]
-fn union_payload_declarations_order_by_declaration_key_bytes() {
+fn union_payload_declarations_order_by_structural_declaration_key() {
     let (p, c, g) = (holding(p100()), holding(c100()), holding(g100()));
     assert_eq!(compare_keys(&p, &c), Some(Ordering::Less));
     assert_eq!(compare_keys(&c, &p), Some(Ordering::Greater));
@@ -214,11 +206,7 @@ fn union_payload_declarations_order_by_declaration_key_bytes() {
 #[test]
 fn unlike_unions_have_no_key_and_refuse_equality() {
     let other_declaration = UnionValue::from_admitted(
-        UnionMember::from_admitted(
-            key(U + 1),
-            NodeKey::from_digest([4; 32]),
-            Identifier::new("Held").unwrap(),
-        ),
+        UnionMember::from_admitted(key(U + 1), "Held").unwrap(),
         vec![p100()],
     );
     let held = holding(p100());
@@ -256,7 +244,7 @@ fn union_payload_key_order_sorts_set_and_keeps_ordered_set_supply_order() {
             .iter()
             .map(|value| match value {
                 Value::Union(union) => match &union.payload()[0] {
-                    Value::Composite(composite) => Some(composite.declaration()),
+                    Value::Composite(composite) => Some(composite.declaration().clone()),
                     _ => None,
                 },
                 _ => None,
@@ -291,7 +279,7 @@ fn admitted_union_keeps_a_descendant_payload_and_exact_paths_refuse_it() {
     let Value::Composite(payload) = &stored.payload()[0] else {
         panic!("a composite payload")
     };
-    assert_eq!(payload.declaration(), key(C));
+    assert_eq!(payload.declaration(), &key(C));
     assert_eq!(payload.slots().len(), 1);
 
     assert_eq!(

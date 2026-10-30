@@ -1,37 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Checked semantic node identity.
 //!
-//! A `NodeKey` is an opaque 32-byte digest in domain
-//! `quire.checked-semantic-node/v1`. Node ids are content-addressed over the
-//! preimage the caller defines: equal keys mean
-//! structurally identical nodes.
-//!
-//! Minting rule: the kernel `NodeKey` has one minting constructor,
-//! [`NodeKey::from_digest`], which takes an already-computed digest. It does not
-//! hash: the preimage schema, RFC 8785 JCS canonicalization and the SHA-256
-//! computation over that canonical form all stay with the caller, who passes the
-//! finished 32 bytes in. Only the checking stage calls it in production; this
-//! crate's own tests call it freely to exercise the type.
-//!
-//! Decoding rule: a key the checking stage already minted, read back out of an
-//! admitted package's bytes, is decoded with [`NodeKey::decode_admitted`], not
-//! minted. Its caller runs only after the admitted-package identity check has
-//! bound the key bytes, and a decoded key carries that check's provenance, not a
-//! fresh mint.
-//!
-//! A wire-read node id otherwise becomes a `NodeKey` only by lookup in a checked
-//! package, never by parsing a digest string directly: parsing a wire digest is
-//! the caller's concern. Bridging another digest type's bytes into a `NodeKey`
-//! has no canonical role either.
-//!
-//! Like `from_digest`, `decode_admitted` accepts any 32 bytes: the guarantee is
-//! the caller allow-list plus the verified binding, not the type.
+//! A `NodeKey` carries the structural identity of a node in an admitted package.
+//! Its owner, path, and ordinal compare componentwise as QSpec FR-322 specifies.
+//! The caller checks that the identity joins its admitted package; this leaf
+//! checks only the closed shape and never computes a digest.
 
-use alloc::string::String;
-use core::fmt;
+use alloc::{boxed::Box, string::String, vec::Vec};
+use core::{cmp::Ordering, fmt};
 
-/// Digest domain of every checked semantic node key.
-pub const NODE_KEY_DOMAIN: &str = "quire.checked-semantic-node/v1";
+/// The greatest node ordinal admitted by the checked-package V2 schema.
+pub const MAX_NODE_ORDINAL: u64 = 9_007_199_254_740_991;
 
 /// Whether `text` is `^[A-Za-z_][A-Za-z0-9_]*$`: the one definition of this
 /// character class, which every identifier-shaped field and [`Identifier`]
@@ -73,44 +52,276 @@ impl Identifier {
     }
 }
 
-/// An opaque `quire.checked-semantic-node/v1` node key.
+/// One segment of a structural node path. Text sorts before a nested node id.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PathSegment {
+    /// An exact UTF-8 segment, including the empty string where admitted.
+    Text(String),
+    /// An operand node identity nested in a derived node's path.
+    Node(Box<NodeKey>),
+}
+
+/// A malformed structural node identity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum InvalidNodeKey {
+    /// The owning package has no name.
+    #[error("a node identity requires a nonempty package")]
+    EmptyPackage,
+    /// The structural path has no segment.
+    #[error("a node identity requires a nonempty path")]
+    EmptyPath,
+    /// The ordinal exceeds the checked-package V2 schema maximum.
+    #[error("a node ordinal exceeds the checked-package V2 maximum")]
+    OrdinalOutOfRange,
+}
+
+/// A structural node identity from an admitted checked package.
 ///
 /// quire:canonical
-#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct NodeKey([u8; 32]);
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct NodeKey {
+    package: String,
+    // Preorder tokens. Each nested node header gives the span of its subtree;
+    // no owned token contains another token, so ordinary Clone and Drop are
+    // depth independent.
+    path: Vec<FlatSegment>,
+    direct_len: usize,
+    ordinal: u64,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum FlatSegment {
+    Text(String),
+    Node {
+        package: String,
+        direct_len: usize,
+        ordinal: u64,
+        span: usize,
+    },
+}
+
+#[derive(Clone, Copy)]
+struct NodeView<'a> {
+    package: &'a str,
+    path: &'a [FlatSegment],
+    direct_len: usize,
+    ordinal: u64,
+}
+
+struct CompareFrame<'a> {
+    left: NodeView<'a>,
+    right: NodeView<'a>,
+    left_index: usize,
+    right_index: usize,
+    left_remaining: usize,
+    right_remaining: usize,
+}
+
+impl<'a> CompareFrame<'a> {
+    fn new(left: NodeView<'a>, right: NodeView<'a>) -> Self {
+        Self {
+            left,
+            right,
+            left_index: 0,
+            right_index: 0,
+            left_remaining: left.direct_len,
+            right_remaining: right.direct_len,
+        }
+    }
+}
+
+impl Ord for NodeKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut frames = Vec::new();
+        frames.push(CompareFrame::new(self.view(), other.view()));
+        while let Some(frame) = frames.last_mut() {
+            match frame.left.package.cmp(frame.right.package) {
+                Ordering::Equal => {}
+                different => return different,
+            }
+            match (frame.left_remaining, frame.right_remaining) {
+                (0, 0) => {
+                    let order = frame.left.ordinal.cmp(&frame.right.ordinal);
+                    if !order.is_eq() {
+                        return order;
+                    }
+                    frames.pop();
+                    continue;
+                }
+                (0, _) => return Ordering::Less,
+                (_, 0) => return Ordering::Greater,
+                _ => {}
+            }
+            let left = &frame.left.path[frame.left_index];
+            let right = &frame.right.path[frame.right_index];
+            match (left, right) {
+                (FlatSegment::Text(a), FlatSegment::Text(b)) => {
+                    let order = a.cmp(b);
+                    if !order.is_eq() {
+                        return order;
+                    }
+                    frame.left_index += 1;
+                    frame.right_index += 1;
+                    frame.left_remaining -= 1;
+                    frame.right_remaining -= 1;
+                }
+                (FlatSegment::Text(_), FlatSegment::Node { .. }) => return Ordering::Less,
+                (FlatSegment::Node { .. }, FlatSegment::Text(_)) => return Ordering::Greater,
+                (
+                    FlatSegment::Node {
+                        package: left_package,
+                        direct_len: left_len,
+                        ordinal: left_ordinal,
+                        span: left_span,
+                    },
+                    FlatSegment::Node {
+                        package: right_package,
+                        direct_len: right_len,
+                        ordinal: right_ordinal,
+                        span: right_span,
+                    },
+                ) => {
+                    let left_path = frame.left.path;
+                    let right_path = frame.right.path;
+                    let left_node = NodeView {
+                        package: left_package,
+                        path: &left_path[frame.left_index + 1..frame.left_index + *left_span],
+                        direct_len: *left_len,
+                        ordinal: *left_ordinal,
+                    };
+                    let right_node = NodeView {
+                        package: right_package,
+                        path: &right_path[frame.right_index + 1..frame.right_index + *right_span],
+                        direct_len: *right_len,
+                        ordinal: *right_ordinal,
+                    };
+                    frame.left_index += *left_span;
+                    frame.right_index += *right_span;
+                    frame.left_remaining -= 1;
+                    frame.right_remaining -= 1;
+                    frames.push(CompareFrame::new(left_node, right_node));
+                }
+            }
+        }
+        Ordering::Equal
+    }
+}
+
+impl PartialOrd for NodeKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl NodeKey {
-    /// The minting constructor: wrap an already-computed
-    /// `quire.checked-semantic-node/v1` digest. The caller (the checking stage)
-    /// computes the digest over the canonical preimage; this type performs
-    /// no hashing and holds no preimage knowledge.
-    pub fn from_digest(digest: [u8; 32]) -> Self {
-        Self(digest)
+    /// Carry a node identity already admitted by the caller. This checks its
+    /// closed shape, but does not resolve the node against a package.
+    pub fn new(
+        package: impl Into<String>,
+        path: Vec<PathSegment>,
+        ordinal: u64,
+    ) -> Result<Self, InvalidNodeKey> {
+        let package = package.into();
+        if package.is_empty() {
+            return Err(InvalidNodeKey::EmptyPackage);
+        }
+        if path.is_empty() {
+            return Err(InvalidNodeKey::EmptyPath);
+        }
+        if ordinal > MAX_NODE_ORDINAL {
+            return Err(InvalidNodeKey::OrdinalOutOfRange);
+        }
+        let direct_len = path.len();
+        let mut flat = Vec::new();
+        for segment in path {
+            match segment {
+                PathSegment::Text(text) => flat.push(FlatSegment::Text(text)),
+                PathSegment::Node(node) => {
+                    let NodeKey {
+                        package,
+                        path,
+                        direct_len,
+                        ordinal,
+                    } = *node;
+                    flat.push(FlatSegment::Node {
+                        package,
+                        direct_len,
+                        ordinal,
+                        span: path.len() + 1,
+                    });
+                    flat.extend(path);
+                }
+            }
+        }
+        Ok(Self {
+            package,
+            path: flat,
+            direct_len,
+            ordinal,
+        })
     }
 
-    /// Decode a key the checking stage minted and an admitted package carries. It hashes nothing and
-    /// takes no preimage: it re-reads `digest`, the key's own bytes.
-    ///
-    /// Precondition: call it only on the bytes of a package that already
-    /// passed the admitted-package identity check (the verified
-    /// binding), so a forged package is refused before any of its keys is
-    /// decoded. The decoded key carries that check's provenance; it never
-    /// feeds a constructor that asserts `check` produced it. The guarantee
-    /// is the caller allow-list plus the
-    /// verified binding, not this type.
-    pub fn decode_admitted(digest: [u8; 32]) -> Self {
-        Self(digest)
+    /// The exact owning package name.
+    pub fn package(&self) -> &str {
+        &self.package
     }
 
-    /// The raw digest bytes.
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
+    /// The path segments in component order. This reconstructs owned segment
+    /// views from the flat carrier; each nested node remains flat.
+    pub fn path(&self) -> Vec<PathSegment> {
+        let mut result = Vec::with_capacity(self.direct_len);
+        let mut index = 0;
+        while index < self.path.len() {
+            match &self.path[index] {
+                FlatSegment::Text(text) => {
+                    result.push(PathSegment::Text(text.clone()));
+                    index += 1;
+                }
+                FlatSegment::Node {
+                    package,
+                    direct_len,
+                    ordinal,
+                    span,
+                } => {
+                    result.push(PathSegment::Node(Box::new(NodeKey {
+                        package: package.clone(),
+                        path: self.path[index + 1..index + *span].to_vec(),
+                        direct_len: *direct_len,
+                        ordinal: *ordinal,
+                    })));
+                    index += *span;
+                }
+            }
+        }
+        result
+    }
+
+    /// The ordinal within the owning package and path.
+    pub fn ordinal(&self) -> u64 {
+        self.ordinal
+    }
+
+    fn view(&self) -> NodeView<'_> {
+        NodeView {
+            package: &self.package,
+            path: &self.path,
+            direct_len: self.direct_len,
+            ordinal: self.ordinal,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(byte: u8) -> Self {
+        use alloc::string::ToString;
+
+        Self::new("test", Vec::from([PathSegment::Text(byte.to_string())]), 0)
+            .expect("test key has valid structural components")
     }
 }
 
 impl fmt::Display for NodeKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
+        write!(f, "{}:{:?}:{}", self.package, self.path, self.ordinal)
     }
 }
 
@@ -122,61 +333,165 @@ impl fmt::Debug for NodeKey {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
+    use ix_trace_rs::trace;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     use super::*;
 
-    fn digest(byte: u8) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        bytes
+    fn key(package: &str, path: Vec<PathSegment>, ordinal: u64) -> NodeKey {
+        NodeKey::new(package, path, ordinal).unwrap()
     }
 
-    /// Equal digests mint interchangeable
-    /// `NodeKey`s -- not just `==`, but
-    /// hashing equal (so either stands in for the other as a set/map key)
-    /// and ordering equal to zero. Unequal digests mint keys that order by
-    /// raw digest bytes, not merely compare unequal.
+    /// Trace: FR-389-AC-1, TC-938.
+    #[trace("FR-389-AC-1", "TC-938")]
     #[test]
-    fn equal_digest_bytes_mint_interchangeable_node_keys() {
+    fn structural_node_components_determine_equality_hash_and_order() {
         use std::collections::HashSet;
 
-        let a = NodeKey::from_digest(digest(1));
-        let b = NodeKey::from_digest(digest(1));
-        let c = NodeKey::from_digest(digest(2));
+        let path = vec![PathSegment::Text("Type".into())];
+        let a = key("Pkg", path.clone(), 0);
+        let b = key("Pkg", path.clone(), 0);
+        let c = key("Pkg", path, 1);
         assert_eq!(a, b);
-        assert_eq!(a.as_bytes(), b.as_bytes());
         assert_eq!(a.cmp(&b), core::cmp::Ordering::Equal);
-        assert_eq!(HashSet::from([a, b, c]).len(), 2);
+        assert_eq!(HashSet::from([a.clone(), b, c.clone()]).len(), 2);
         assert!(a < c);
+        assert!(key("A", vec![PathSegment::Text("Type".into())], 9) < a);
+        assert_ne!(
+            key("owner", vec![PathSegment::Text("Type".into())], 0),
+            key("importer", vec![PathSegment::Text("Type".into())], 0)
+        );
+        assert!(
+            key("Pkg", vec![PathSegment::Text("Type".into())], 0)
+                < key("Pkg", vec![PathSegment::Node(Box::new(a.clone()))], 0)
+        );
+        assert!(
+            key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("A".into())],
+                    0,
+                )))],
+                0,
+            ) < key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("B".into())],
+                    0,
+                )))],
+                0,
+            )
+        );
+        assert!(
+            key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("A".into())],
+                    0,
+                )))],
+                0,
+            ) < key(
+                "Pkg",
+                vec![PathSegment::Node(Box::new(key(
+                    "Pkg",
+                    vec![PathSegment::Text("A".into())],
+                    1,
+                )))],
+                0,
+            )
+        );
+        assert!(
+            a < key(
+                "Pkg",
+                vec![
+                    PathSegment::Text("Type".into()),
+                    PathSegment::Text("".into())
+                ],
+                0
+            )
+        );
+        let nested = PathSegment::Node(Box::new(key(
+            "Pkg",
+            vec![PathSegment::Text("child".into())],
+            0,
+        )));
+        assert!(
+            key(
+                "Pkg",
+                vec![nested.clone(), PathSegment::Text("a".into())],
+                0
+            ) < key("Pkg", vec![nested, PathSegment::Text("b".into())], 0)
+        );
     }
 
-    /// A key decoded from an admitted package's bytes is the
-    /// key `check` minted from the same digest -- equal, hashing equal and
-    /// ordering equal -- so a lookup by the decoded key finds the minted one.
+    /// Trace: FR-389-AC-2, TC-938.
+    #[trace("FR-389-AC-2", "TC-938")]
     #[test]
-    fn a_decoded_admitted_key_is_the_key_check_minted() {
-        use std::collections::HashSet;
-
-        let minted = NodeKey::from_digest(digest(7));
-        let decoded = NodeKey::decode_admitted(*minted.as_bytes());
-        assert_eq!(decoded, minted);
-        assert_eq!(decoded.cmp(&minted), core::cmp::Ordering::Equal);
-        assert!(HashSet::from([minted]).contains(&decoded));
-        assert_ne!(NodeKey::decode_admitted(digest(8)), minted);
+    fn malformed_structural_node_shape_refuses() {
+        let path = vec![PathSegment::Text(String::new())];
+        assert_eq!(
+            NodeKey::new("", path.clone(), 0),
+            Err(InvalidNodeKey::EmptyPackage)
+        );
+        assert_eq!(
+            NodeKey::new("Pkg", vec![], 0),
+            Err(InvalidNodeKey::EmptyPath)
+        );
+        assert_eq!(
+            NodeKey::new("Pkg", path.clone(), MAX_NODE_ORDINAL + 1),
+            Err(InvalidNodeKey::OrdinalOutOfRange)
+        );
+        assert_eq!(
+            key("Pkg", path, MAX_NODE_ORDINAL).ordinal(),
+            MAX_NODE_ORDINAL
+        );
     }
 
-    /// `Display` renders exactly 64 lowercase hex digits, the wire
-    /// spelling an emitter writes for `NodeId{digest}`.
+    #[trace("TC-938", "FR-389-AC-1", "FR-389-AC-7")]
     #[test]
-    fn display_is_64_lowercase_hex_digits() {
-        let key = NodeKey::from_digest(digest(0xab));
-        let rendered = key.to_string();
-        assert_eq!(rendered.len(), 64);
-        assert!(rendered
-            .chars()
-            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        assert!(rendered.ends_with("ab"));
+    fn deep_nested_path_clones_compares_hashes_formats_and_drops_on_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                let mut node = key("Pkg", vec![PathSegment::Text("root".into())], 0);
+                for _ in 0..10_000 {
+                    node = key("Pkg", vec![PathSegment::Node(Box::new(node))], 0);
+                }
+                let copy = node.clone();
+                assert_eq!(node, copy);
+                assert_eq!(node.cmp(&copy), core::cmp::Ordering::Equal);
+                let mut changed = copy.clone();
+                *changed.path.last_mut().expect("nested path has a root") =
+                    FlatSegment::Text("root2".into());
+                assert!(node < changed);
+                let hash = |value: &NodeKey| {
+                    let mut hasher = DefaultHasher::new();
+                    value.hash(&mut hasher);
+                    hasher.finish()
+                };
+                assert_eq!(hash(&node), hash(&copy));
+                assert!(alloc::format!("{node:?}").starts_with("NodeKey("));
+                let rebuilt = key(node.package(), node.path(), node.ordinal());
+                assert_eq!(rebuilt, node);
+                let [PathSegment::Node(parent)] =
+                    <[PathSegment; 1]>::try_from(node.path()).unwrap()
+                else {
+                    panic!("one nested path segment")
+                };
+                assert_eq!(parent.path().len(), 1);
+                drop(parent);
+                drop(copy);
+                drop(changed);
+                drop(rebuilt);
+                drop(node);
+            })
+            .expect("spawn small stack")
+            .join()
+            .expect("deep path operations complete");
     }
 
     /// A name that is not `^[A-Za-z_][A-Za-z0-9_]*$` is refused at

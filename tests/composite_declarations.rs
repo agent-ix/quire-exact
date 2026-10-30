@@ -10,9 +10,9 @@ use quire_exact::{
     from_admitted_slots, member_equal, plan_equality, planned_equality, planned_equality_with_plan,
     retain_composite, CheckedInvariantCause, CollectionKind, CollectionType, CollectionValue,
     Component, ConstructionCause, ConstructionRefusal, Deferred, EffectiveId, FieldDeclaration,
-    FieldExpression, FieldValue, IeeeValue, Integer, LimitKind, MemberId, Meter, NodeKey, ObjectId,
-    ObjectReference, OptionValue, Outcome, PopulationId, Presence, Refusal, ScalarLimits,
-    UniverseId, Value, ValueType,
+    FieldExpression, FieldValue, IeeeValue, Integer, LimitKind, MemberId, MemberOwner, Meter,
+    NodeKey, ObjectId, ObjectReference, OptionValue, OriginalDeclarationKey, Outcome, PathSegment,
+    PopulationId, Presence, Refusal, ScalarLimits, UniverseId, Value, ValueType,
 };
 
 fn meter() -> Meter {
@@ -31,7 +31,7 @@ fn meter() -> Meter {
 }
 
 fn key(byte: u8) -> NodeKey {
-    NodeKey::from_digest([byte; 32])
+    NodeKey::new("test", vec![PathSegment::Text(byte.to_string())], 0).unwrap()
 }
 
 const P: u8 = 1;
@@ -70,8 +70,8 @@ fn g100() -> Value {
 
 fn reference(universe: u8) -> FieldValue {
     FieldValue::Present(Value::Reference(ObjectReference::new(
-        UniverseId::from_digest([universe; 32]),
-        EffectiveId::from_digest([7; 32]),
+        UniverseId::new(key(universe)),
+        EffectiveId::new(None, OriginalDeclarationKey::new("test", "7")),
         ObjectId::new("o1").unwrap(),
     )))
 }
@@ -146,7 +146,7 @@ fn declarations(value: &Value) -> Vec<NodeKey> {
         .elements()
         .iter()
         .map(|element| match element {
-            Value::Composite(composite) => composite.declaration(),
+            Value::Composite(composite) => composite.declaration().clone(),
             other => panic!("expected a composite, got {other:?}"),
         })
         .collect()
@@ -222,8 +222,8 @@ fn skipped_slots_never_report_a_foreign_reference() {
 
     let p_ref2 = rec(P, vec![reference(2)]);
     let expected = Refusal::ForeignReference {
-        required: UniverseId::from_digest([1; 32]),
-        supplied: UniverseId::from_digest([2; 32]),
+        required: UniverseId::new(key(1)),
+        supplied: UniverseId::new(key(2)),
     };
     assert_eq!(plan_equality(&p_ref, &p_ref2), Err(expected.clone()));
     assert_eq!(
@@ -278,8 +278,8 @@ fn different_declarations_inside_wrappers_are_unequal() {
 fn faults_that_remain_still_refuse() {
     let populations = || {
         (
-            Value::Population(PopulationId::from_digest([1; 32])),
-            Value::Population(PopulationId::from_digest([2; 32])),
+            Value::Population(PopulationId::new(key(1))),
+            Value::Population(PopulationId::new(key(2))),
         )
     };
     let others = [
@@ -385,7 +385,7 @@ fn ordering(left: &Value, right: &Value) -> Option<Ordering> {
 }
 
 /// Trace: FR-377-AC-1
-#[trace("TC-925", "FR-377-AC-1")]
+#[trace("TC-925", "FR-377-AC-1", "FR-389-AC-8")]
 #[test]
 fn declaration_key_orders_before_slots() {
     let cases = [
@@ -404,14 +404,9 @@ fn declaration_key_orders_before_slots() {
 /// Trace: FR-377-AC-2
 #[trace("TC-925", "FR-377-AC-2")]
 #[test]
-fn first_differing_declaration_byte_decides() {
-    let with_last = |last: u8| {
-        let mut digest = [1_u8; 32];
-        digest[31] = last;
-        NodeKey::from_digest(digest)
-    };
-    let k0 = comp(with_last(0), vec![int(9)]);
-    let k1 = comp(with_last(1), vec![int(9)]);
+fn first_differing_declaration_component_decides() {
+    let k0 = comp(key(0), vec![int(9)]);
+    let k1 = comp(key(1), vec![int(9)]);
     assert_eq!(ordering(&k0, &k1), Some(Ordering::Less));
     assert_eq!(ordering(&k1, &k0), Some(Ordering::Greater));
 
@@ -420,12 +415,14 @@ fn first_differing_declaration_byte_decides() {
     assert_eq!(ordering(&hi, &lo), Some(Ordering::Greater));
     assert_eq!(ordering(&lo, &hi), Some(Ordering::Less));
 
-    let mut first_low = [9_u8; 32];
-    first_low[0] = 1;
-    let mut first_high = [1_u8; 32];
-    first_high[0] = 2;
-    let a = comp(NodeKey::from_digest(first_low), vec![]);
-    let b = comp(NodeKey::from_digest(first_high), vec![]);
+    let a = comp(
+        NodeKey::new("a", vec![PathSegment::Text("z".into())], 0).unwrap(),
+        vec![],
+    );
+    let b = comp(
+        NodeKey::new("b", vec![PathSegment::Text("a".into())], 0).unwrap(),
+        vec![],
+    );
     assert_eq!(ordering(&a, &b), Some(Ordering::Less));
 }
 
@@ -622,13 +619,13 @@ fn from_admitted_option_stores_a_descendant_payload_unchanged() {
     let Some(Value::Composite(payload)) = option.payload() else {
         panic!("composite payload expected");
     };
-    assert_eq!(payload.declaration(), key(C));
+    assert_eq!(payload.declaration(), &key(C));
     assert!(pairs(option.payload().unwrap(), &c100()).unwrap().1);
 }
 
 fn record_shape() -> Vec<FieldDeclaration> {
     vec![FieldDeclaration::new(
-        MemberId::from_digest([9; 32]),
+        MemberId::new(MemberOwner::Node(key(R)), "inner").unwrap(),
         "inner",
         ValueType::Composite(key(P)),
         Presence::Required,
@@ -648,11 +645,11 @@ fn from_admitted_slots_keeps_a_descendant_slot_and_retains_once() {
     let Value::Composite(composite) = &retained else {
         panic!("composite expected");
     };
-    assert_eq!(composite.declaration(), key(R));
+    assert_eq!(composite.declaration(), &key(R));
     let FieldValue::Present(Value::Composite(slot)) = &composite.slots()[0] else {
         panic!("present composite slot expected");
     };
-    assert_eq!(slot.declaration(), key(C));
+    assert_eq!(slot.declaration(), &key(C));
     #[cfg(feature = "test-support")]
     assert_eq!(
         log(&meter),
@@ -676,7 +673,7 @@ fn p_deferred() -> Deferred<'static> {
 fn exact_paths_refuse_a_descendant_and_accept_the_declared_type() {
     let collection_type = coll_type(CollectionKind::Sequence);
     let element = ValueType::Composite(key(P));
-    let field = MemberId::from_digest([9; 32]);
+    let field = MemberId::new(MemberOwner::Node(key(R)), "inner").unwrap();
 
     let refused = construct_collection(&collection_type, vec![c_deferred()], &mut meter());
     assert_eq!(
@@ -703,7 +700,7 @@ fn exact_paths_refuse_a_descendant_and_accept_the_declared_type() {
     let record = evaluate_record(
         &record_shape(),
         key(R),
-        vec![(field, FieldExpression::Evaluate(c_deferred()))],
+        vec![(field.clone(), FieldExpression::Evaluate(c_deferred()))],
         &mut meter(),
     )
     .expect("construction");

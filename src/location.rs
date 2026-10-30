@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Source occurrence identity: `Origin` and `Location`.
 //!
-//! The kernel provenance shape names a node id and an occurrence key and carries
-//! no bytes. The occurrence key is `(NodeKey, role, ordinal)`. `Origin` and
+//! The kernel provenance shape names a structural node id and an occurrence
+//! key. The occurrence key is `(NodeKey, role, ordinal)`. `Origin` and
 //! `Location` say which source occurrence of which checked node a value or
 //! outcome traces back to.
 //!
 //! `Role` is a lexical-string newtype rather than a closed enum: the set of
-//! occurrence roles ("declaration", "reference", "default", ...) is the caller's
-//! preimage schema's to define and extend, and the kernel takes no position on
+//! occurrence roles ("declaration", "reference", "default", ...) is defined
+//! and extended by the caller; the kernel takes no position on
 //! which roles exist -- it only carries the role the caller attached.
 //!
 //! **`Role`'s `String` has no length bound.** This is deliberate: a role's
-//! spelling is a small, fixed vocabulary word that the caller's preimage schema
+//! spelling is a small, fixed vocabulary word that the caller's occurrence vocabulary
 //! names at check time, not a value
 //! materialized from caller-supplied, runtime-metered evaluation input the way a
 //! `Decimal`'s scale or a `Text`'s bytes are. Nothing on any evaluation path
@@ -24,7 +24,7 @@ use core::fmt;
 
 use crate::node::NodeKey;
 
-/// A source occurrence's role, as the caller's preimage schema names it (e.g.
+/// A source occurrence's role, as the caller's occurrence vocabulary names it (e.g.
 /// `"declaration"`, `"reference"`). The kernel does not enumerate roles; it
 /// carries whichever lexical role string the caller attached to the occurrence.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -107,8 +107,8 @@ impl Location {
     }
 
     /// The located node.
-    pub fn node(&self) -> NodeKey {
-        self.node
+    pub fn node(&self) -> &NodeKey {
+        &self.node
     }
 
     /// The occurrence within that node.
@@ -122,20 +122,14 @@ mod tests {
 
     use super::*;
 
-    fn digest(byte: u8) -> [u8; 32] {
-        let mut bytes = [0_u8; 32];
-        bytes[31] = byte;
-        bytes
-    }
-
     /// two locations naming the same node and the same
     /// `(role, ordinal)` occurrence are equal; a different ordinal makes
     /// them distinct.
     #[test]
     fn location_equality_follows_node_and_occurrence() {
-        let node = NodeKey::from_digest(digest(1));
-        let a = Location::new(node, Origin::new(Role::from("declaration"), 0));
-        let b = Location::new(node, Origin::new(Role::from("declaration"), 0));
+        let node = NodeKey::fixture(1);
+        let a = Location::new(node.clone(), Origin::new(Role::from("declaration"), 0));
+        let b = Location::new(node.clone(), Origin::new(Role::from("declaration"), 0));
         let c = Location::new(node, Origin::new(Role::from("declaration"), 1));
         assert_eq!(a, b);
         assert_ne!(a, c);

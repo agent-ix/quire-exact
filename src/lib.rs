@@ -2,8 +2,8 @@
 //! `quire-exact`: the exact-value kernel, a `no_std` + `alloc` leaf that
 //! depends on no other crate in the quire ecosystem.
 //!
-//! The crate holds checked identity ([`NodeKey`] and the seven opaque digest
-//! identities, such as [`EffectiveId`]), provenance ([`Location`]), kernel
+//! The crate holds checked structural identity ([`NodeKey`] and value
+//! identities such as [`EffectiveId`]), provenance ([`Location`]), kernel
 //! outcomes and refusals ([`Outcome`], [`Refusal`]), bounds and accounting
 //! ([`Meter`], [`BoundedInteger`], [`CardinalityBound`]), and the exact
 //! semantic value kernel ([`Value`]/[`ValueType`] and every value-family
@@ -13,12 +13,9 @@
 //! `pub use` facade on this page, so the module names above are plain text,
 //! not links.
 //!
-//! It depends on no wire format, hashing or canonicalization crate. Every
-//! digest identity ([`NodeKey`], [`EffectiveId`], [`UniverseId`],
-//! [`ObjectId`], [`UnitId`], [`VariantId`], [`MemberId`], [`PopulationId`])
-//! is minted by wrapping an already-computed digest, through its one public
-//! `from_digest` constructor (the two-domain [`UnitId`] has one constructor
-//! per domain), and never by hashing internally.
+//! It depends on no wire format, hashing or canonicalization crate. Its
+//! identity constructors carry caller-admitted structural components and
+//! never derive identities from digests.
 //!
 //! [`Value`]/[`ValueType`]: `ValueType::admits` never pairs
 //! `ValueType::Population(Option<u64>)` with `Value::Population(PopulationId)`
@@ -122,9 +119,8 @@ pub use equality::{
     plan_equality, planned_equality, planned_equality_with_plan, EqualityEvaluation, EqualityPlan,
 };
 pub use identity::{
-    EffectiveId, EmptyObjectIdentity, MemberId, ObjectId, PopulationId, UnitDomain, UnitId,
-    UniverseId, VariantId, COMPOUND_UNIT_DOMAIN, EFFECTIVE_ID_DOMAIN, MEMBER_ID_DOMAIN,
-    POPULATION_ID_DOMAIN, UNIVERSE_ID_DOMAIN, VARIANT_ID_DOMAIN,
+    EffectiveId, EmptyMemberName, EmptyObjectIdentity, EmptyVariantName, MemberId, MemberOwner,
+    ObjectId, OriginalDeclarationKey, PopulationId, UnitDomain, UnitId, UniverseId, VariantId,
 };
 pub use ieee::{
     compare_ieee, convert_ieee_width, evaluate_ieee, exact_to_ieee, ieee_intrinsic_identities,
@@ -144,7 +140,10 @@ pub use native_integer::{
     NativeIntegerEndpoint, NativeIntegerInterval, NativeIntegerOperandPosition,
     NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
 };
-pub use node::{is_identifier, Identifier, InvalidIdentifier, NodeKey, NODE_KEY_DOMAIN};
+pub use node::{
+    is_identifier, Identifier, InvalidIdentifier, InvalidNodeKey, NodeKey, PathSegment,
+    MAX_NODE_ORDINAL,
+};
 pub use numeric::{
     evaluate_boolean, evaluate_integer_arithmetic, evaluate_rational_arithmetic, order_numbers,
     rational_arithmetic_bits, retain_boolean, ArithmeticOperator, BooleanConnective,
