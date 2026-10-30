@@ -33,12 +33,15 @@ use crate::accounting::length_amount;
 /// An exact, arbitrary-precision mathematical integer.
 ///
 /// Values that fit `i128` are stored inline, with separate private i64 and
-/// i128 payloads. The first [`as_big`](Self::as_big)
-/// call lazily initializes one retained immutable `BigInt` image; clones of an
-/// inline value preserve its payload class and begin with an empty image cache. The safe
-/// `once_cell::race::OnceBox` may construct multiple candidates concurrently,
-/// retains one, and drops every losing candidate. Values outside `i128` retain
-/// their `BigInt` directly.
+/// i128 payloads. Ordinary values outside `i128` retain their `BigInt` directly.
+/// A fallible copy of a large value instead retains separately owned limbs;
+/// it does not construct a `BigInt` during [`try_clone`](Self::try_clone).
+/// For inline values and fallibly copied large values, the first
+/// [`as_big`](Self::as_big) call lazily initializes an immutable `BigInt` image
+/// and may allocate. Later calls borrow the retained image. Cloning either
+/// representation preserves its payload class and starts with an empty image
+/// cache. The safe `once_cell::race::OnceBox` may construct multiple candidates
+/// concurrently, retains one, and drops every losing candidate.
 ///
 /// quire:canonical
 pub struct Integer(IntegerRepr);
@@ -1111,9 +1114,11 @@ impl Integer {
 
     /// The arbitrary-precision integer (IEEE exact conversions).
     ///
-    /// For an inline value, this initializes and retains its immutable `BigInt`
-    /// image on first access. That may allocate; later borrows return the same
-    /// object for the lifetime of `self`.
+    /// For an inline value or a large value produced by [`try_clone`](Self::try_clone),
+    /// the first access initializes and retains an immutable `BigInt` image.
+    /// That may allocate. An ordinarily constructed large value already retains
+    /// its `BigInt`. Later borrows return the same object for the lifetime of
+    /// `self`.
     pub fn as_big(&self) -> &BigInt {
         match &self.0 {
             IntegerRepr::Small64 { value, cache } => {
