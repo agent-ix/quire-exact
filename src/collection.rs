@@ -369,6 +369,127 @@ pub fn form_collection(
     )))
 }
 
+/// A caller-owned schema admission check for one collection element.
+///
+/// The caller authenticates its declaration registry and checks nested slots;
+/// the kernel checks the exact outer type before invoking this authority.
+/// A refusal cause is retained at the element's source index.
+pub type ElementAdmission<'a> = dyn FnMut(&ValueType, &Value) -> Result<(), ConstructionCause> + 'a;
+
+/// Build a typed prestate from completed occurrences in authored order.
+///
+/// The authority must validate nested content against the caller's checked
+/// schema. An absent authority refuses even for an empty collection. Exact
+/// element and authority checks finish before membership or bound work.
+pub fn build_typed_prestate(
+    collection_type: &CollectionType,
+    occurrences: Vec<Value>,
+    meter: &mut Meter,
+    authority: Option<&mut ElementAdmission<'_>>,
+) -> Result<Outcome<Value>, ConstructionRefusal> {
+    let Some(authority) = authority else {
+        return Err(ConstructionRefusal {
+            component: Component::Value,
+            cause: ConstructionCause::MissingAdmissionAuthority,
+        });
+    };
+    for (index, value) in occurrences.iter().enumerate() {
+        if !collection_type.element.admits(value) {
+            return Err(ConstructionRefusal {
+                component: Component::Element(index),
+                cause: ConstructionCause::TypeMismatch,
+            });
+        }
+        if let Err(cause) = authority(&collection_type.element, value) {
+            return Err(ConstructionRefusal {
+                component: Component::Element(index),
+                cause,
+            });
+        }
+    }
+    form_collection(collection_type, occurrences, meter)
+}
+
+/// Inspect a produced collection without replacing or normalizing its value.
+///
+/// The returned view borrows the original collection. The caller authenticates
+/// `authority` against its checked schema; a missing authority refuses. Exact
+/// outer and element types are checked before collection membership and bound
+/// charges. A denied charge yields `Incomplete` without a view.
+pub fn inspect_typed_poststate<'a>(
+    collection_type: &CollectionType,
+    value: &'a Value,
+    meter: &mut Meter,
+    authority: Option<&mut ElementAdmission<'_>>,
+) -> Result<Outcome<&'a CollectionValue>, ConstructionRefusal> {
+    let Value::Collection(collection) = value else {
+        return Err(ConstructionRefusal {
+            component: Component::Value,
+            cause: ConstructionCause::TypeMismatch,
+        });
+    };
+    if collection.collection_type() != collection_type {
+        return Err(ConstructionRefusal {
+            component: Component::Value,
+            cause: ConstructionCause::TypeMismatch,
+        });
+    }
+    let Some(authority) = authority else {
+        return Err(ConstructionRefusal {
+            component: Component::Value,
+            cause: ConstructionCause::MissingAdmissionAuthority,
+        });
+    };
+    let elements = collection.elements();
+    for (index, element) in elements.iter().enumerate() {
+        if !collection_type.element.admits(element) {
+            return Err(ConstructionRefusal {
+                component: Component::Element(index),
+                cause: ConstructionCause::TypeMismatch,
+            });
+        }
+        if let Err(cause) = authority(&collection_type.element, element) {
+            return Err(ConstructionRefusal {
+                component: Component::Element(index),
+                cause,
+            });
+        }
+    }
+    if collection_type.kind == CollectionKind::OrderedSet {
+        for (index, candidate) in elements.iter().enumerate() {
+            for member in &elements[..index] {
+                match member_equal_stop(candidate, member, meter) {
+                    Ok(true) => {
+                        return Err(ConstructionRefusal {
+                            component: Component::Element(index),
+                            cause: ConstructionCause::DuplicateMember,
+                        });
+                    }
+                    Ok(false) => {}
+                    Err(stop) => return Ok(Outcome::from_stop(Err(stop))),
+                }
+            }
+        }
+    }
+    let count = length_amount(elements.len());
+    if let Err(incomplete) = meter
+        .charge(Charge::new(ChargePoint::CollectionBound).size(LimitKind::ValueOccurrences, count))
+    {
+        return Ok(Outcome::Incomplete(incomplete));
+    }
+    if let Some(bound) = collection_type.bound {
+        if let Some(violation) = bound.violation(count) {
+            return Ok(Outcome::Refused(Refusal::CardinalityOutOfBound {
+                violation,
+                kind: collection_type.kind,
+                bound,
+                count,
+            }));
+        }
+    }
+    Ok(Outcome::Completed(collection))
+}
+
 /// Form a collection of `collection_type` from completed occurrences in
 /// source or visiting order: membership comparisons, `collection.bound`,
 /// the bound check, canonical order and `collection.result-retain`. The
