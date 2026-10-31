@@ -1388,6 +1388,7 @@ mod tests {
                 construction_probe::reset();
                 let ordered: BTreeSet<_> = keys.into_iter().collect();
                 let visits = construction_probe::snapshot().compare_visits;
+                std::println!("shape {shape}, count {count}, deep visits {visits}");
                 assert_eq!(ordered.len(), count);
                 assert!(
                     visits <= count * 32,
