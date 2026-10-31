@@ -1310,7 +1310,7 @@ mod tests {
                         package,
                         vec![
                             PathSegment::Node(chain),
-                            PathSegment::Text((depth % 3).to_string()),
+                            PathSegment::Text(alloc::format!("{}", depth % 3)),
                         ],
                         (depth % 7) as u64,
                     );
