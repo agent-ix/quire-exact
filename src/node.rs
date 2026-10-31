@@ -620,11 +620,11 @@ fn terminal_before_nested(
     if !package_order.is_eq() {
         return Some(package_order);
     }
-    for index in 0..=nested_at {
+    for (index, wrapper) in path.iter().enumerate().take(nested_at + 1) {
         let Some(segment) = terminal.inner.path.get(index) else {
             return Some(Ordering::Less);
         };
-        let order = match (segment, &path[index]) {
+        let order = match (segment, wrapper) {
             (FlatSegment::Text(a), FlatSegment::Text(b)) => a.cmp(b),
             (FlatSegment::Node(_), FlatSegment::Text(_)) => Ordering::Greater,
             (FlatSegment::Text(_), FlatSegment::Node(_)) => Ordering::Less,
