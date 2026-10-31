@@ -1437,8 +1437,8 @@ mod tests {
             for package in ["a", "b"] {
                 let mut chain = key(
                     package,
-                    base.into_iter()
-                        .map(|text| PathSegment::Text(text.into()))
+                    base.iter()
+                        .map(|text| PathSegment::Text((*text).into()))
                         .collect(),
                     0,
                 );
