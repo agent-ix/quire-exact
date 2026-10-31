@@ -24,3 +24,11 @@ Independent scoped gap-analysis review of quire-exact PR #116. Ticket: QSL-1319.
 ## Coverage
 
 Examined FR-389-AC-1/11/12/14 and TC-938 against the changed NodeKey constructor, Hash implementation, fallible clone and deep hash test. The existing Eq/Ord/Drop paths and test controls were read for context. No CI, dependency, manifest, or public API file changed. `quire matrix` and `quire coverage --strict` were run at the frozen head; code-review relied on author-reported focused fmt, Clippy, and test results and did not repeat Cargo gates. No plan was supplied. Plan completion: not assessed.
+
+## Dispositions
+
+At fix head 1b0d8a8b454c57788682d04e9ea62ea7fcbbb82b, the single blank line before FR-389-AC-14 was removed without changing the criterion text or test code. `quire matrix --scope . --format json` now mints FR-389-AC-14 and binds both test functions at `src/node.rs:1651` and `:1710`. The finding is resolved; the original conditional verdict records the frozen review head.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-14 is now a row of the acceptance-criteria table, and the computed matrix binds both trace tags. |
