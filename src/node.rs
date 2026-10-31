@@ -948,6 +948,7 @@ impl NodeKey {
                 ordinal: frame.source.inner.ordinal,
                 structural_hash: frame.source.inner.structural_hash,
                 token_count: frame.source.inner.token_count,
+                text_chain_depth: frame.source.inner.text_chain_depth,
                 drop_frame: Some(drop_frame),
             })
             .map_err(|_| IdentityCopyError::Allocation {
@@ -1304,7 +1305,7 @@ mod tests {
             for text in ["", "leaf", "z"] {
                 let mut chain = key(package, vec![PathSegment::Text(text.into())], 0);
                 samples.push(chain.clone());
-                for depth in 1..=64 {
+                for depth in 1_usize..=64 {
                     chain = key(
                         package,
                         vec![
