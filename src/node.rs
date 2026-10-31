@@ -373,6 +373,111 @@ enum ComparePart<'a> {
     Done,
 }
 
+// The inline frames make the common mixed path a single walk without changing
+// the zero-allocation comparison contract. Deeper branching uses the existing
+// index-based traversal, which has no depth limit.
+const COMPARE_INLINE_DEPTH: usize = 1_024;
+
+#[derive(Clone, Copy)]
+struct CompareFrame<'a> {
+    node: &'a NodeKey,
+    index: usize,
+    phase: u8,
+}
+
+struct CompareCursor<'a> {
+    frames: [CompareFrame<'a>; COMPARE_INLINE_DEPTH],
+    depth: usize,
+    pending_child: Option<&'a NodeKey>,
+}
+
+impl<'a> CompareCursor<'a> {
+    fn new(node: &'a NodeKey) -> Self {
+        Self {
+            frames: [CompareFrame {
+                node,
+                index: 0,
+                phase: 0,
+            }; COMPARE_INLINE_DEPTH],
+            depth: 1,
+            pending_child: None,
+        }
+    }
+
+    fn skip_shared_child(&mut self) {
+        self.pending_child = None;
+    }
+
+    // None means the inline frames filled; the caller restarts the comparison
+    // with the index-based traversal.
+    fn next_part(&mut self) -> Option<(ComparePart<'a>, Option<&'a NodeKey>)> {
+        if let Some(child) = self.pending_child.take() {
+            if self.depth == COMPARE_INLINE_DEPTH {
+                return None;
+            }
+            self.frames[self.depth] = CompareFrame {
+                node: child,
+                index: 0,
+                phase: 0,
+            };
+            self.depth += 1;
+        }
+
+        loop {
+            if self.depth == 0 {
+                return Some((ComparePart::Done, None));
+            }
+            let frame = &mut self.frames[self.depth - 1];
+            match frame.phase {
+                0 => {
+                    frame.phase = 1;
+                    return Some((ComparePart::Package(&frame.node.inner.package), None));
+                }
+                1 => match frame.node.inner.path.get(frame.index) {
+                    Some(FlatSegment::Text(text)) => {
+                        frame.index += 1;
+                        return Some((ComparePart::Text(text), None));
+                    }
+                    Some(FlatSegment::Node(child)) => {
+                        frame.index += 1;
+                        self.pending_child = Some(child);
+                        return Some((ComparePart::NodeStart, Some(child)));
+                    }
+                    None => frame.phase = 2,
+                },
+                2 => {
+                    frame.phase = 3;
+                    return Some((ComparePart::PathEnd, None));
+                }
+                3 => {
+                    frame.phase = 4;
+                    return Some((ComparePart::Ordinal(frame.node.inner.ordinal), None));
+                }
+                _ => self.depth -= 1,
+            }
+        }
+    }
+}
+
+fn compare_streaming(left: &NodeKey, right: &NodeKey) -> Option<Ordering> {
+    let mut a = CompareCursor::new(left);
+    let mut b = CompareCursor::new(right);
+    loop {
+        let (left_part, left_child) = a.next_part()?;
+        let (right_part, right_child) = b.next_part()?;
+        let order = left_part.cmp(&right_part);
+        if !order.is_eq() || left_part == ComparePart::Done {
+            return Some(order);
+        }
+        if let (Some(left_child), Some(right_child)) = (left_child, right_child) {
+            if Arc::ptr_eq(&left_child.inner, &right_child.inner) {
+                a.skip_shared_child();
+                b.skip_shared_child();
+            }
+        }
+    }
+}
+
 fn compare_part_at(mut node: &NodeKey, mut index: usize) -> ComparePart<'_> {
     loop {
         if index == 0 {
@@ -444,6 +549,13 @@ impl Ord for NodeKey {
                 return deferred_ordinal;
             }
         }
+        if let Some(order) = compare_streaming(left, right) {
+            return if order.is_eq() {
+                deferred_ordinal
+            } else {
+                order
+            };
+        }
         let mut index = 0;
         loop {
             let a = compare_part_at(left, index);
@@ -463,7 +575,7 @@ impl Ord for NodeKey {
 
 impl PartialEq for NodeKey {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other).is_eq()
+        self.inner.structural_hash == other.inner.structural_hash && self.cmp(other).is_eq()
     }
 }
 
@@ -1213,6 +1325,79 @@ mod tests {
             .unwrap()
             .join()
             .unwrap();
+    }
+
+    /// Trace: FR-389-AC-13, FR-389-AC-14, TC-938.
+    #[trace("FR-389-AC-13", "FR-389-AC-14", "TC-938")]
+    #[test]
+    fn mixed_path_comparison_preserves_order_past_inline_depth() {
+        let nested = |leaf: &str, depth: usize| {
+            let mut node = key("leaf", vec![PathSegment::Text(leaf.into())], 0);
+            for _ in 0..depth {
+                node = key(
+                    "outer",
+                    vec![PathSegment::Node(node), PathSegment::Text("tail".into())],
+                    0,
+                );
+            }
+            node
+        };
+
+        let depth = COMPARE_INLINE_DEPTH + 1;
+        let left = nested("a", depth);
+        let equal = nested("a", depth);
+        let greater = nested("b", depth);
+        assert_unallocated_order(&left, &equal, Ordering::Equal);
+        assert_unallocated_order(&left, &greater, Ordering::Less);
+        assert_eq!(left, equal);
+        assert_ne!(left, greater);
+
+        let shared = nested("a", COMPARE_INLINE_DEPTH);
+        let left = key(
+            "owner",
+            vec![
+                PathSegment::Node(shared.clone()),
+                PathSegment::Text("a".into()),
+            ],
+            0,
+        );
+        let right = key(
+            "owner",
+            vec![PathSegment::Node(shared), PathSegment::Text("b".into())],
+            0,
+        );
+        assert_unallocated_order(&left, &right, Ordering::Less);
+    }
+
+    /// Trace: FR-389-AC-13, TC-938.
+    #[trace("FR-389-AC-13", "TC-938")]
+    #[test]
+    #[ignore = "bounded performance lane; run on a quiet host"]
+    fn mixed_path_comparison_has_bounded_time_at_depth_1000() {
+        use std::time::{Duration, Instant};
+
+        let mut left = key("leaf", vec![PathSegment::Text("a".into())], 0);
+        let mut right = key("leaf", vec![PathSegment::Text("a".into())], 0);
+        for _ in 0..1_000 {
+            left = key(
+                "outer",
+                vec![PathSegment::Node(left), PathSegment::Text("tail".into())],
+                0,
+            );
+            right = key(
+                "outer",
+                vec![PathSegment::Node(right), PathSegment::Text("tail".into())],
+                0,
+            );
+        }
+        let start = Instant::now();
+        for _ in 0..100 {
+            assert_eq!(left.cmp(&right), Ordering::Equal);
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "100 depth-1000 comparisons exceeded the bounded performance lane"
+        );
     }
 
     /// Trace: FR-389-AC-2, TC-938.
