@@ -518,43 +518,82 @@ fn compare_part_at(mut node: &NodeKey, mut index: usize) -> ComparePart<'_> {
     }
 }
 
+fn single_nested_child(node: &NodeKey) -> Option<(usize, &NodeKey)> {
+    let mut found = None;
+    for (index, segment) in node.inner.path.iter().enumerate() {
+        if let FlatSegment::Node(child) = segment {
+            if found.is_some() {
+                return None;
+            }
+            found = Some((index, child));
+        }
+    }
+    found
+}
+
+fn text_segments_order(left: &[FlatSegment], right: &[FlatSegment]) -> Ordering {
+    for (left_segment, right_segment) in left.iter().zip(right) {
+        let (FlatSegment::Text(left_text), FlatSegment::Text(right_text)) =
+            (left_segment, right_segment)
+        else {
+            unreachable!("single_nested_child ensures these slices contain only text");
+        };
+        let order = left_text.cmp(right_text);
+        if !order.is_eq() {
+            return order;
+        }
+    }
+    left.len().cmp(&right.len())
+}
+
 impl Ord for NodeKey {
     fn cmp(&self, other: &Self) -> Ordering {
         if Arc::ptr_eq(&self.inner, &other.inner) {
             return Ordering::Equal;
         }
-        // A derived chain commonly wraps one operand at every level. Keep
-        // only the deepest differing ordinal while descending that chain:
-        // the child is compared before its parent's ordinal.
+        // A derived chain commonly wraps one operand at every level, with
+        // text around it. Prefix text precedes the child; suffix text and the
+        // ordinal follow it. Only the deepest differing local order is kept.
         let mut left = self;
         let mut right = other;
-        let mut deferred_ordinal = Ordering::Equal;
-        while let (Some(FlatSegment::Node(left_child)), Some(FlatSegment::Node(right_child))) =
-            (left.inner.path.first(), right.inner.path.first())
+        let mut deferred_order = Ordering::Equal;
+        while let (Some((left_index, left_child)), Some((right_index, right_child))) =
+            (single_nested_child(left), single_nested_child(right))
         {
-            if left.inner.path.len() != 1 || right.inner.path.len() != 1 {
-                break;
-            }
             let package_order = left.inner.package.cmp(&right.inner.package);
             if !package_order.is_eq() {
                 return package_order;
             }
-            let ordinal_order = left.inner.ordinal.cmp(&right.inner.ordinal);
-            if !ordinal_order.is_eq() {
-                deferred_ordinal = ordinal_order;
+            if left_index != right_index {
+                break;
+            }
+            let prefix_order = text_segments_order(
+                &left.inner.path[..left_index],
+                &right.inner.path[..right_index],
+            );
+            if !prefix_order.is_eq() {
+                return prefix_order;
+            }
+            let suffix_order = text_segments_order(
+                &left.inner.path[left_index + 1..],
+                &right.inner.path[right_index + 1..],
+            );
+            let local_order = if suffix_order.is_eq() {
+                left.inner.ordinal.cmp(&right.inner.ordinal)
+            } else {
+                suffix_order
+            };
+            if !local_order.is_eq() {
+                deferred_order = local_order;
             }
             left = left_child;
             right = right_child;
             if Arc::ptr_eq(&left.inner, &right.inner) {
-                return deferred_ordinal;
+                return deferred_order;
             }
         }
         if let Some(order) = compare_streaming(left, right) {
-            return if order.is_eq() {
-                deferred_ordinal
-            } else {
-                order
-            };
+            return if order.is_eq() { deferred_order } else { order };
         }
         let mut index = 0;
         loop {
@@ -562,11 +601,7 @@ impl Ord for NodeKey {
             let b = compare_part_at(right, index);
             let order = a.cmp(&b);
             if !order.is_eq() || a == ComparePart::Done {
-                return if order.is_eq() {
-                    deferred_ordinal
-                } else {
-                    order
-                };
+                return if order.is_eq() { deferred_order } else { order };
             }
             index += 1;
         }
@@ -1352,6 +1387,83 @@ mod tests {
         assert_eq!(left, equal);
         assert_ne!(left, greater);
 
+        let mut suffix_left = key("leaf", vec![PathSegment::Text("same".into())], 0);
+        let mut suffix_right = key("leaf", vec![PathSegment::Text("same".into())], 0);
+        for level in 0..depth {
+            let (left_tail, right_tail) = if level == 0 { ("a", "b") } else { ("z", "a") };
+            suffix_left = key(
+                "outer",
+                vec![
+                    PathSegment::Node(suffix_left),
+                    PathSegment::Text(left_tail.into()),
+                ],
+                0,
+            );
+            suffix_right = key(
+                "outer",
+                vec![
+                    PathSegment::Node(suffix_right),
+                    PathSegment::Text(right_tail.into()),
+                ],
+                0,
+            );
+        }
+        assert_unallocated_order(&suffix_left, &suffix_right, Ordering::Less);
+
+        let sibling = key("sibling", vec![PathSegment::Text("same".into())], 0);
+        let branching = |leaf: &str| {
+            let mut node = key("leaf", vec![PathSegment::Text(leaf.into())], 0);
+            for _ in 0..depth {
+                node = key(
+                    "outer",
+                    vec![PathSegment::Node(node), PathSegment::Node(sibling.clone())],
+                    0,
+                );
+            }
+            node
+        };
+        let branching_left = branching("a");
+        let branching_equal = branching("a");
+        let branching_greater = branching("b");
+        assert_unallocated_order(&branching_left, &branching_equal, Ordering::Equal);
+        assert_unallocated_order(&branching_left, &branching_greater, Ordering::Less);
+
+        let prefixed = |prefix: &str, leaf: &str| {
+            let mut node = key("leaf", vec![PathSegment::Text(leaf.into())], 0);
+            for _ in 0..depth {
+                node = key(
+                    "outer",
+                    vec![
+                        PathSegment::Text(prefix.into()),
+                        PathSegment::Node(node),
+                        PathSegment::Text("tail".into()),
+                    ],
+                    0,
+                );
+            }
+            node
+        };
+        let prefixed_left = prefixed("a", "b");
+        let prefixed_equal = prefixed("a", "b");
+        let prefixed_greater = prefixed("a", "c");
+        let prefix_greater = prefixed("b", "a");
+        assert_unallocated_order(&prefixed_left, &prefixed_equal, Ordering::Equal);
+        assert_unallocated_order(&prefixed_left, &prefixed_greater, Ordering::Less);
+        assert_unallocated_order(&prefixed_left, &prefix_greater, Ordering::Less);
+
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(move || {
+                let left = nested("a", 10_000);
+                let equal = nested("a", 10_000);
+                let greater = nested("b", 10_000);
+                assert_unallocated_order(&left, &equal, Ordering::Equal);
+                assert_unallocated_order(&left, &greater, Ordering::Less);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+
         let shared = nested("a", COMPARE_INLINE_DEPTH);
         let left = key(
             "owner",
@@ -1373,12 +1485,12 @@ mod tests {
     #[trace("FR-389-AC-13", "TC-938")]
     #[test]
     #[ignore = "bounded performance lane; run on a quiet host"]
-    fn mixed_path_comparison_has_bounded_time_at_depth_1000() {
+    fn mixed_path_comparison_has_bounded_time_past_inline_depth() {
         use std::time::{Duration, Instant};
 
         let mut left = key("leaf", vec![PathSegment::Text("a".into())], 0);
         let mut right = key("leaf", vec![PathSegment::Text("a".into())], 0);
-        for _ in 0..1_000 {
+        for _ in 0..4_000 {
             left = key(
                 "outer",
                 vec![PathSegment::Node(left), PathSegment::Text("tail".into())],
@@ -1390,13 +1502,36 @@ mod tests {
                 0,
             );
         }
+        let mut prefixed_left = key("leaf", vec![PathSegment::Text("a".into())], 0);
+        let mut prefixed_right = key("leaf", vec![PathSegment::Text("a".into())], 0);
+        for _ in 0..4_000 {
+            prefixed_left = key(
+                "outer",
+                vec![
+                    PathSegment::Text("prefix".into()),
+                    PathSegment::Node(prefixed_left),
+                    PathSegment::Text("tail".into()),
+                ],
+                0,
+            );
+            prefixed_right = key(
+                "outer",
+                vec![
+                    PathSegment::Text("prefix".into()),
+                    PathSegment::Node(prefixed_right),
+                    PathSegment::Text("tail".into()),
+                ],
+                0,
+            );
+        }
         let start = Instant::now();
         for _ in 0..100 {
             assert_eq!(left.cmp(&right), Ordering::Equal);
+            assert_eq!(prefixed_left.cmp(&prefixed_right), Ordering::Equal);
         }
         assert!(
             start.elapsed() < Duration::from_secs(2),
-            "100 depth-1000 comparisons exceeded the bounded performance lane"
+            "200 depth-4000 comparisons exceeded the bounded performance lane"
         );
     }
 
