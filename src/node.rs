@@ -32,6 +32,7 @@ mod construction_probe {
         pub descendant_visits: usize,
         pub descendant_copies: usize,
         pub shallow_clones: usize,
+        pub compare_visits: usize,
     }
 
     std::thread_local! {
@@ -68,6 +69,9 @@ mod construction_probe {
     }
     pub(super) fn shallow_clone() {
         update(|counts| counts.shallow_clones += 1);
+    }
+    pub(super) fn compare_visit() {
+        update(|counts| counts.compare_visits += 1);
     }
 }
 
@@ -222,6 +226,7 @@ struct NodeData {
     ordinal: u64,
     structural_hash: u64,
     token_count: usize,
+    text_chain_depth: Option<usize>,
     drop_frame: Option<Box<DropFrame>>,
 }
 
@@ -522,6 +527,8 @@ fn largest_matching_child<'a>(
     left: &'a NodeKey,
     right: &'a NodeKey,
 ) -> Option<(usize, &'a NodeKey, &'a NodeKey)> {
+    #[cfg(test)]
+    construction_probe::compare_visit();
     let mut largest = None;
     for (index, (left_segment, right_segment)) in
         left.inner.path.iter().zip(&right.inner.path).enumerate()
@@ -572,54 +579,67 @@ fn path_segments_order(left: &[FlatSegment], right: &[FlatSegment]) -> Ordering 
     left.len().cmp(&right.len())
 }
 
+fn compare_structural(self_key: &NodeKey, other: &NodeKey) -> Ordering {
+    if Arc::ptr_eq(&self_key.inner, &other.inner) {
+        return Ordering::Equal;
+    }
+    // Descend the largest aligned child as a tail step. Earlier path
+    // segments sort before it; later segments and the ordinal sort after
+    // it. Only the deepest differing deferred order is retained.
+    let mut left = self_key;
+    let mut right = other;
+    let mut deferred_order = Ordering::Equal;
+    while let Some((index, left_child, right_child)) = largest_matching_child(left, right) {
+        let package_order = left.inner.package.cmp(&right.inner.package);
+        if !package_order.is_eq() {
+            return package_order;
+        }
+        let prefix_order =
+            path_segments_order(&left.inner.path[..index], &right.inner.path[..index]);
+        if !prefix_order.is_eq() {
+            return prefix_order;
+        }
+        let suffix_order = path_segments_order(
+            &left.inner.path[index + 1..],
+            &right.inner.path[index + 1..],
+        );
+        let local_order = if suffix_order.is_eq() {
+            left.inner.ordinal.cmp(&right.inner.ordinal)
+        } else {
+            suffix_order
+        };
+        if !local_order.is_eq() {
+            deferred_order = local_order;
+        }
+        left = left_child;
+        right = right_child;
+        if Arc::ptr_eq(&left.inner, &right.inner) {
+            return deferred_order;
+        }
+    }
+    if let Some(order) = compare_streaming(left, right) {
+        return if order.is_eq() { deferred_order } else { order };
+    }
+    let order = compare_indexed(left, right);
+    if order.is_eq() {
+        deferred_order
+    } else {
+        order
+    }
+}
+
 impl Ord for NodeKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        if Arc::ptr_eq(&self.inner, &other.inner) {
-            return Ordering::Equal;
-        }
-        // Descend the largest aligned child as a tail step. Earlier path
-        // segments sort before it; later segments and the ordinal sort after
-        // it. Only the deepest differing deferred order is retained.
-        let mut left = self;
-        let mut right = other;
-        let mut deferred_order = Ordering::Equal;
-        while let Some((index, left_child, right_child)) = largest_matching_child(left, right) {
-            let package_order = left.inner.package.cmp(&right.inner.package);
-            if !package_order.is_eq() {
-                return package_order;
-            }
-            let prefix_order =
-                path_segments_order(&left.inner.path[..index], &right.inner.path[..index]);
-            if !prefix_order.is_eq() {
-                return prefix_order;
-            }
-            let suffix_order = path_segments_order(
-                &left.inner.path[index + 1..],
-                &right.inner.path[index + 1..],
-            );
-            let local_order = if suffix_order.is_eq() {
-                left.inner.ordinal.cmp(&right.inner.ordinal)
-            } else {
-                suffix_order
-            };
-            if !local_order.is_eq() {
-                deferred_order = local_order;
-            }
-            left = left_child;
-            right = right_child;
-            if Arc::ptr_eq(&left.inner, &right.inner) {
-                return deferred_order;
+        if self.inner.package == other.inner.package {
+            if let (Some(left), Some(right)) =
+                (self.inner.text_chain_depth, other.inner.text_chain_depth)
+            {
+                if left != right {
+                    return left.cmp(&right);
+                }
             }
         }
-        if let Some(order) = compare_streaming(left, right) {
-            return if order.is_eq() { deferred_order } else { order };
-        }
-        let order = compare_indexed(left, right);
-        if order.is_eq() {
-            deferred_order
-        } else {
-            order
-        }
+        compare_structural(self, other)
     }
 }
 
@@ -760,12 +780,25 @@ impl NodeKey {
         })?;
         before_reserve(arc_request)?;
         let structural_hash = structural_hash(&package, &direct, ordinal);
+        // A leading nested node is compared before this node's remaining path
+        // and ordinal. Along a same-package chain ending in text, unequal
+        // depths therefore differ at Text versus Node without visiting the
+        // intervening nodes.
+        let text_chain_depth = match direct.first() {
+            Some(FlatSegment::Text(_)) => Some(0),
+            Some(FlatSegment::Node(child)) if child.inner.package == package => child
+                .inner
+                .text_chain_depth
+                .and_then(|depth| depth.checked_add(1)),
+            _ => None,
+        };
         let inner = Arc::try_new(NodeData {
             package,
             path: direct,
             ordinal,
             structural_hash,
             token_count,
+            text_chain_depth,
             drop_frame: Some(frame),
         })
         .map_err(|_| InvalidNodeKey::Allocation {
@@ -1236,6 +1269,63 @@ mod tests {
         assert_eq!(allocations.count_total, 0);
         assert_eq!(allocations.bytes_total, 0);
         assert_eq!(partial, Some(expected));
+    }
+
+    /// Trace: FR-389-AC-13, TC-938.
+    #[trace("FR-389-AC-13", "TC-938")]
+    #[test]
+    fn ordered_deep_chain_insertion_has_bounded_comparison_work() {
+        use std::collections::BTreeSet;
+
+        for count in [1_000, 2_000, 4_000, 8_000] {
+            let mut chain = key("p", vec![PathSegment::Text("leaf".into())], 0);
+            let mut keys = Vec::with_capacity(count);
+            for _ in 0..count {
+                chain = key("p", vec![PathSegment::Node(chain)], 0);
+                keys.push(chain.clone());
+            }
+            construction_probe::reset();
+            let ordered: BTreeSet<_> = keys.into_iter().collect();
+            let visits = construction_probe::snapshot().compare_visits;
+            assert_eq!(ordered.len(), count);
+            assert!(
+                visits <= count * 32,
+                "{count} keys needed {visits} deep comparison visits"
+            );
+        }
+    }
+
+    /// Trace: FR-389-AC-13, TC-938.
+    #[trace("FR-389-AC-13", "TC-938")]
+    #[test]
+    fn cached_chain_order_matches_structural_comparator() {
+        let mut samples = Vec::new();
+        for package in ["a", "b"] {
+            for text in ["", "leaf", "z"] {
+                let mut chain = key(package, vec![PathSegment::Text(text.into())], 0);
+                samples.push(chain.clone());
+                for depth in 1..=64 {
+                    chain = key(
+                        package,
+                        vec![
+                            PathSegment::Node(chain),
+                            PathSegment::Text((depth % 3).to_string()),
+                        ],
+                        (depth % 7) as u64,
+                    );
+                    if depth.is_multiple_of(8) || depth == 1 {
+                        samples.push(chain.clone());
+                    }
+                }
+            }
+        }
+        samples.push(key("a", vec![PathSegment::Node(samples[0].clone())], 1));
+        samples.push(key("other", vec![PathSegment::Node(samples[0].clone())], 0));
+        for left in &samples {
+            for right in &samples {
+                assert_eq!(left.cmp(right), compare_structural(left, right));
+            }
+        }
     }
 
     /// Trace: FR-389-AC-13, TC-938.
