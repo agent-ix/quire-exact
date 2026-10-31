@@ -220,6 +220,7 @@ struct NodeData {
     package: String,
     path: Vec<FlatSegment>,
     ordinal: u64,
+    structural_hash: u64,
     token_count: usize,
     drop_frame: Option<Box<DropFrame>>,
 }
@@ -470,41 +471,45 @@ impl Eq for NodeKey {}
 
 impl Hash for NodeKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        enum Part<'a> {
-            Node(&'a NodeKey),
-            Segment(&'a FlatSegment),
-            PathEnd,
-            Ordinal(u64),
+        self.inner.structural_hash.hash(state);
+    }
+}
+
+struct StructuralHasher(u64);
+
+impl Hasher for StructuralHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(0x100_0000_01b3);
         }
-        let mut pending = Vec::new();
-        pending.push(Part::Node(self));
-        while let Some(part) = pending.pop() {
-            match part {
-                Part::Node(node) => {
-                    0_u8.hash(state);
-                    node.inner.package.hash(state);
-                    pending.push(Part::Ordinal(node.inner.ordinal));
-                    pending.push(Part::PathEnd);
-                    for segment in node.inner.path.iter().rev() {
-                        pending.push(Part::Segment(segment));
-                    }
-                }
-                Part::Segment(FlatSegment::Text(text)) => {
-                    2_u8.hash(state);
-                    text.hash(state);
-                }
-                Part::Segment(FlatSegment::Node(node)) => {
-                    3_u8.hash(state);
-                    pending.push(Part::Node(node));
-                }
-                Part::PathEnd => 1_u8.hash(state),
-                Part::Ordinal(value) => {
-                    4_u8.hash(state);
-                    value.hash(state);
-                }
+    }
+}
+
+fn structural_hash(package: &str, path: &[FlatSegment], ordinal: u64) -> u64 {
+    let mut hasher = StructuralHasher(0xcbf2_9ce4_8422_2325);
+    0_u8.hash(&mut hasher);
+    package.hash(&mut hasher);
+    for segment in path {
+        match segment {
+            FlatSegment::Text(text) => {
+                2_u8.hash(&mut hasher);
+                text.hash(&mut hasher);
+            }
+            FlatSegment::Node(node) => {
+                3_u8.hash(&mut hasher);
+                node.inner.structural_hash.hash(&mut hasher);
             }
         }
     }
+    1_u8.hash(&mut hasher);
+    4_u8.hash(&mut hasher);
+    ordinal.hash(&mut hasher);
+    hasher.finish()
 }
 
 impl PartialOrd for NodeKey {
@@ -592,10 +597,12 @@ impl NodeKey {
             requested: usize::MAX,
         })?;
         before_reserve(arc_request)?;
+        let structural_hash = structural_hash(&package, &direct, ordinal);
         let inner = Arc::try_new(NodeData {
             package,
             path: direct,
             ordinal,
+            structural_hash,
             token_count,
             drop_frame: Some(frame),
         })
@@ -744,6 +751,7 @@ impl NodeKey {
                 package: frame.package,
                 path: frame.path,
                 ordinal: frame.source.inner.ordinal,
+                structural_hash: frame.source.inner.structural_hash,
                 token_count: frame.source.inner.token_count,
                 drop_frame: Some(drop_frame),
             })
@@ -1629,6 +1637,71 @@ mod tests {
             .expect("spawn small stack")
             .join()
             .expect("deep path operations complete");
+    }
+
+    /// Trace: FR-389-AC-1, FR-389-AC-11, FR-389-AC-12, FR-389-AC-14, TC-938.
+    #[trace(
+        "FR-389-AC-1",
+        "FR-389-AC-11",
+        "FR-389-AC-12",
+        "FR-389-AC-14",
+        "TC-938"
+    )]
+    #[test]
+    fn deep_structural_hash_writes_one_word_for_shared_and_independent_keys() {
+        struct CountingHasher {
+            bytes: usize,
+        }
+
+        impl Hasher for CountingHasher {
+            fn finish(&self) -> u64 {
+                self.bytes as u64
+            }
+
+            fn write(&mut self, bytes: &[u8]) {
+                self.bytes += bytes.len();
+            }
+        }
+
+        fn chain(depth: usize) -> NodeKey {
+            let mut node = key("leaf", vec![PathSegment::Text("x".into())], 0);
+            for _ in 0..depth {
+                node = key("owner", vec![PathSegment::Node(node)], 0);
+            }
+            node
+        }
+
+        fn hash_once(key: &NodeKey) -> (usize, u64) {
+            let mut counted = CountingHasher { bytes: 0 };
+            let allocations = allocation_counter::measure(|| key.hash(&mut counted));
+            assert_eq!(allocations.count_total, 0, "hash must not allocate");
+            let mut hasher = DefaultHasher::new();
+            key.hash(&mut hasher);
+            (counted.bytes, hasher.finish())
+        }
+
+        std::thread::Builder::new()
+            .stack_size(512 * 1024)
+            .spawn(|| {
+                for depth in [1_000, 10_000] {
+                    let shared = chain(depth);
+                    let same = chain(depth);
+                    let copied = shared.try_clone().expect("fallible copy of deep key");
+                    assert_eq!(shared, same, "independent keys at depth {depth}");
+                    assert_eq!(shared, copied, "copied key at depth {depth}");
+                    let (written, expected_hash) = hash_once(&shared);
+                    assert_eq!(
+                        written,
+                        core::mem::size_of::<u64>(),
+                        "hash work at depth {depth}"
+                    );
+                    assert_eq!(hash_once(&same), (written, expected_hash));
+                    assert_eq!(hash_once(&copied), (written, expected_hash));
+                }
+            })
+            .expect("spawn small stack")
+            .join()
+            .expect("deep hash operations complete");
     }
 
     /// Trace: FR-389-AC-14, TC-938.
