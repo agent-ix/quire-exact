@@ -55,6 +55,12 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
 
 Every reachable kernel failure reports its exact table cause, and all
 checked-invariant payloads stay internal faults with no catalog code or cause.
+The generated `GeneratedUnexpectedOutcome` name denotes a completed value
+rejected by the checker-issued result type, not an unhandled outcome arm.
+`GeneratedEnvironmentRejected` denotes the selected owner's actual declaration
+constructor rejection, not resource exhaustion. This kernel target tests their
+carrier and non-catalog mapping only; CG FR-042 owns the real producer controls
+and the generated-body versus leaf-failure boundary inspection in FR-369-AC-10.
 No test counts a manually constructed refusal as proof that a production
 raise site used that cause. The RT and external mapping criteria remain
 planned until their own tagged tests and inspection run.

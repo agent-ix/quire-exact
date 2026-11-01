@@ -9,6 +9,10 @@ relationships:
     type: references
   - target: ix://agent-ix/quire-exact/FR-089
     type: references
+  - target: ix://agent-ix/quire-contract-codegen/FR-042
+    type: references
+  - target: ix://agent-ix/quire-spec-language/FR-485
+    type: references
 ---
 # FR-369: Carry the precise cause of a checked-invariant failure
 
@@ -72,9 +76,9 @@ shared checked-oracle failures, not CG package or model types.
 | `GeneratedBodyPlaceholderInvoked` | A function declaration's pre-check placeholder body runs, which should be replaced before execution: `src/oracle/function/mod.rs`, `declared_functions` placeholder body. |
 | `GeneratedArgumentShapeMismatch` | A generated scalar or equality function body receives the wrong number or shape of arguments: `src/oracle/function/mod.rs`, `render_body` scalar/equality arms. |
 | `GeneratedOperandKindUnsupported` | A generated equality body receives a left operand outside its classified Boolean/Integer kinds: `src/oracle/function/mod.rs`, `render_body` equality arm. |
-| `GeneratedUnexpectedOutcome` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_CARRY_HELPER` and scalar/equality `render_body` adapters exhaustively match RT `Outcome`'s four arms (`Completed`, `Undefined`, `Refused`, `Incomplete`); there is no unexpected-outcome arm or reachable trigger today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedUnexpectedOutcome` | A generated function body produces `Completed(value)` and the admitted QSV environment's `admits` returns exactly `Ok(false)` for the selected callable's checker-issued `CallableSelection::signature().result()`. Emit the typed checked-invariant payload at the generated result occurrence. `Ok(true)` retains the original completed value; `Err(EnvironmentFailure)` decided no membership and is not this cause. `Undefined`, `Refused` and `Incomplete` keep their original arms, payloads, locations and admitted charges. This result-membership producer and its test-only wrong-completed-value mutation are PLANNED under CG FR-021-AC-38/40, FR-042-AC-2 and IR-709 after IR-595. An exhaustive outcome adapter, absent continuation value or test-injected refusal does not establish this trigger. |
 | `GeneratedIntervalInvalid` | A generated native integer bound cannot form a nonempty interval: `src/oracle/boolean_v1.rs`, `NATIVE_BOUND_HELPER`. |
-| `GeneratedEnvironmentRejected` | PLANNED under CG FR-042-AC-1/IR-709. The Boolean `NATIVE_EQUALITY_HELPER` calls planned kernel equality without constructing a type environment; the function `render_body` equality arm uses infallible `sv::TypeEnvironment::default()`. The equality oracle's fallible environment construction returns `EnvironmentError::Declaration` instead (`src/oracle/equality/mod.rs`, `environment_{symbol}`); none is a checked-invariant producer for this cause today. The named assignment remains required by FR-042-AC-1. |
+| `GeneratedEnvironmentRejected` | Generated function preparation constructs the QSV environment from the selected checked-closure owner's actual nominal declarations and receives exactly `EnvironmentFailure::Refused(InvalidDeclaration)`. Emit this typed cause at the declaration-construction occurrence before body operations or body charges, retaining the original rejection in diagnostic evidence and any previously admitted charge prefix. Healthy production submits each authentic declaration once; its test-only emitted-source mutation submits one unchanged owner declaration twice to the real constructor. Default/empty environments, invented declarations, injected failures and `Limit`/`Allocation`/`Capacity` provide no producer credit. PLANNED under CG FR-021-AC-39, FR-042-AC-3 and IR-709 after IR-595. |
 | `GeneratedTypeCheckRejected { cause }` | A generated equality oracle's declared comparison type fails shared semantic-value `check_type`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}` type checks. |
 | `GeneratedEqualityCheckRejected { cause }` | A generated equality body or oracle fails shared semantic-value `check_equality`; retain its kernel-owned `IllTypedCause`: `src/oracle/equality/mod.rs`, `oracle_{symbol}`; `src/oracle/function/mod.rs`, `render_body` equality arm. The Boolean `NATIVE_EQUALITY_HELPER` uses planned kernel equality and carries its stop unchanged. |
 | `GeneratedDescriptorReconstructionFailed` | A generated equality oracle receives a prepared descriptor with the wrong binding, expected package identity or context requirement, or an admitted context with the wrong package identity: `src/oracle/equality/mod.rs`, `oracle_{symbol}` prepared-environment check. Descriptor reconstruction errors while preparing that environment retain their separate typed `EnvironmentError` path. |
@@ -125,6 +129,43 @@ returning `ValueKindMismatch`; otherwise [FR-089](./FR-089-kernel-refuses-a-popu
 would lose its distinct cause. A constructor added later SHALL choose a
 specified cause or extend this closed table and its tests before merging.
 
+### Generated body carrier and leaf failure boundary
+
+The two generated-function triggers above SHALL follow the producer contract
+owned by [CG FR-042](ix://agent-ix/quire-contract-codegen/FR-042) and
+CG FR-021. At that body boundary the generated `quire_eval::Body::resume`
+SHALL return the located typed kernel payload inside
+`Ok(Transition::Done(Evaluation { outcome: FamilyOutcome::Evaluated(
+Outcome::Refused(Refusal::CheckedInvariant { cause })), .. }))`.
+The location SHALL name the original generated result occurrence for
+`GeneratedUnexpectedOutcome`, or the declaration-construction occurrence for
+`GeneratedEnvironmentRejected`. The leaf session forwards a host body's
+`Done` evaluation; it does not automatically promote this carrier to an
+`InternalFault`. The cause remains an internal failure with no catalog code
+or catalog cause. A downstream terminal consumer SHALL retain that
+classification and typed payload; the carrier's `Refused` arm SHALL NOT make
+it an ordinary catalog refusal, replay inconclusive result or successful proof.
+
+A generated checked-result mismatch SHALL NOT instead be reported as
+`Err(InternalFault)` or `BodyFailure::Fault`: those channels denote a broken
+body/scheduler invariant, not either specified generated result check.
+When QSV `admits` returns `Err(EnvironmentFailure)`, no membership decision
+exists; that failure SHALL retain its complete owner-typed payload through
+`BodyFailure::QsvEnvironment` and `CallFailure::Body`. For environment
+construction, only the exact `Refused(InvalidDeclaration)` trigger above
+selects `GeneratedEnvironmentRejected`; every other failure SHALL keep its
+owner-defined typed path. Limits, allocation and capacity failures SHALL NOT
+be relabelled as either checked-invariant cause, a completed value or a body
+invariant fault. Cancellation SHALL retain the signal observed by the same
+QSV operation, distinct from un-cancelled work exhaustion. The leaf owns this
+failure transport; Exact adds no dependency on its types and defines no copy
+of that envelope. A genuine body implementation invariant uses
+`BodyFailure::Fault` / `CallFailure::Body`; a leaf scheduler invariant uses
+`CallFailure::Fault`. Neither channel supplies evidence for the generated
+checked-result causes.
+
+### Received-payload interpretation
+
 For **every** `CheckedInvariant` cause, `Refusal::code()` and
 `Refusal::cause()` SHALL return `None`. The typed cause SHALL remain available
 to Rust callers through the variant payload and `Refusal` equality; neither
@@ -134,8 +175,10 @@ an internal fault, not an ordinary refusal record. At S6a,
 `Machine::stopped` SHALL return `Err(InternalFault)` with code
 `runtime_invariant`, stage `S6a` and invariant `checked-program-invariant`
 for either located or unlocated stops; it returns no `Evaluation` holding the
-checked-invariant refusal. The public call path SHALL carry that fault as
-`CallFailure::Fault`. A replay fault SHALL settle as `Failed`, category
+checked-invariant refusal. The QSL reference interpreter's public call path SHALL carry that fault as
+`CallFailure::Fault`. The generated host-body carrier above is a separate
+boundary: it retains the located typed payload in its `Done` evaluation,
+without changing the internal-failure classification. A replay fault SHALL settle as `Failed`, category
 internal failure, basis unavailable; an ordinary replay refusal remains
 `Inconclusive`. A fault is neither a proof nor a certification rejection.
 `CancelCause::{Requested, Deadline}` remains a separate incomplete outcome.
@@ -163,11 +206,16 @@ states this narrow boundary.
 | FR-369-AC-1 | The public `Refusal::CheckedInvariant` has a required `CheckedInvariantCause` payload whose closed variant set and four typed `IllTypedCause` payloads equal the thirty-two table rows; `CheckedInvariantCause` implements the stated traits, and the old unit constructor does not compile. | Test |
 | FR-369-AC-2 | Every kernel producer in collection, value, division and equality returns exactly its table cause; two population values return `PopulationPair`, a population paired with another kind returns `ValueKindMismatch`, and unlike collection kinds return `CollectionKindMismatch`. Two composites of different declarations return `false` and a composite paired with a non-composite returns `ValueKindMismatch` (FR-376-AC-1, FR-376-AC-6). | Test |
 | FR-369-AC-5 | For every typed checked-invariant cause, `Refusal::code()` and `Refusal::cause()` return `None`, and `Eq` distinguishes otherwise equal refusals whose causes differ. Ordinary kernel refusal codes and causes are unchanged. | Test |
-| FR-369-AC-6 | Every received typed cause follows QSL's existing internal-fault path: no refusal record or `Evaluation`, `runtime_invariant`/`S6a`/`checked-program-invariant` at S6a, `CallFailure::Fault` at the public call, and `Failed` with unavailable basis for an internal replay fault. It never becomes an ordinary replay refusal, `Inconclusive`, `Incomplete(Cancelled)`, a proved result or a certification rejection; an unknown received cause retains fault provenance. | Inspection |
+| FR-369-AC-6 | Every typed cause interpreted by QSL's reference `Machine::stopped` follows its existing internal-fault path: no refusal record or `Evaluation`, `runtime_invariant`/`S6a`/`checked-program-invariant` at S6a, `CallFailure::Fault` at that public interpreter call, and `Failed` with unavailable basis for an internal replay fault. Neither a received interpreter stop nor the generated-body carrier in AC-10 becomes an ordinary replay refusal, `Inconclusive`, `Incomplete(Cancelled)`, a proved result or a certification rejection; an unknown received cause retains fault provenance. | Inspection |
 | FR-369-AC-8 | The public carrier contains no QSL model/checker/catalog type or dependency on RT or QSV, RT and QSV own no second refusal enum or compatibility shim, and an exhaustive source inventory finds every kernel, RT, QSV and CG production checked-invariant constructor assigned exactly one cause from the two tables. | Inspection |
+| FR-369-AC-10 | Inspection against CG FR-021-AC-38..40 / FR-042-AC-2/3 finds the same two generated-function triggers, checker-issued result type and genuine owner declaration inputs. A proven wrong completed value or exact invalid-declaration rejection uses the located typed kernel payload in `Ok(Transition::Done(Evaluation))`; undecided QSV failures retain `BodyFailure::QsvEnvironment` / `CallFailure::Body`, never either checked-invariant cause or `BodyFailure::Fault`. A body or scheduler implementation fault retains its distinct fault channel. All nine CG cause assignments and the closed thirty-two-cause carrier remain required. Exact carrier construction tests supply no evidence that the planned generated producers execute; CG owns those tests. | Inspection |
 
 ## Status
 
+The IR-1021 cause-table/rustdoc alignment specifies the generated host-body
+boundary separately from the reference interpreter's received-payload mapping.
+It neither implements CG's planned producer nor credits its execution or
+storage-failure evidence. IR-709 owns those controls after IR-595.
 The kernel carrier and kernel producer tests exist. `src/outcome.rs` exports
 the target thirty-two-cause enum without `CallDepthExceeded`, and the tagged
 `tests/checked_invariant.rs` controls cover the target shape. The RT FR-273
