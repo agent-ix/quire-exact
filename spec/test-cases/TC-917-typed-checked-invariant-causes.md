@@ -69,9 +69,8 @@ planned until their own tagged tests and inspection run.
 
 ## Status
 
-The target is the thirty-one-cause carrier after retirement of
-`GeneratedBodyPlaceholderInvoked`. The current carrier and exhaustive test
-still include that variant; their removal is implementation work under IR-709,
-not acceptance supplied by this specification-only correction. The remaining
-kernel carrier controls and the RT explicit-frame/work-fuel cutover and external
+`tests/checked_invariant.rs` exhaustively tests the thirty-one-cause carrier,
+checks that both removed constructors are rejected by the Rust compiler, and
+preserves the four typed nested payload controls. These carrier tests give no
+credit to CG's generated producer execution. The remaining RT and external
 producer controls retain their own evidence and ownership.
