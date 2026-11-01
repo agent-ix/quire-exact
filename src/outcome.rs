@@ -170,8 +170,6 @@ pub enum CheckedInvariantCause {
     EqualityEnumVariantUnresolved,
     /// Scale-zero placement retained a value other than an integer.
     ExpectedIntegerPlacement,
-    /// A generated declaration placeholder ran before replacement.
-    GeneratedBodyPlaceholderInvoked,
     /// A generated body received the wrong argument count or shape.
     GeneratedArgumentShapeMismatch,
     /// A generated equality operand has an unsupported kind.

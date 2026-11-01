@@ -222,10 +222,9 @@ boundary separately from the reference interpreter's received-payload mapping.
 It neither implements CG's planned producer nor credits its execution or
 storage-failure evidence. IR-709 owns those controls after IR-595.
 The kernel carrier and kernel producer tests exist. `src/outcome.rs` exports
-the pre-retirement thirty-two-cause enum without `CallDepthExceeded`.
-Removing the retired placeholder variant and updating the exhaustive
-`tests/checked_invariant.rs` controls remain implementation work under IR-709;
-this specification-only correction does not claim that code is delivered. The RT FR-273
+the thirty-one-cause enum without either `CallDepthExceeded` or the retired
+placeholder variant. `tests/checked_invariant.rs` matches the complete carrier
+and rejects both removed constructors through the Rust compiler. The RT FR-273
 explicit-frame/work-fuel cutover must remove its depth-stop producers before
 it pins this kernel API. IR-712 owns QSV producers, IR-709 owns CG producers
 and consumers, and QSL's direct constructor migration is required before it

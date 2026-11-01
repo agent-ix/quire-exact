@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Public checked-invariant carrier controls for FR-369.
 
+use ix_trace_rs::trace;
 use quire_exact::{CheckedInvariantCause, IllTypedCause, Refusal};
 
 // Independently authored exhaustive expectations, rather than a production list.
@@ -29,7 +30,6 @@ fn expected_name(cause: CheckedInvariantCause) -> &'static str {
         CheckedInvariantCause::EqualityUnitUnresolved => "equality-unit",
         CheckedInvariantCause::EqualityEnumVariantUnresolved => "equality-enum-variant",
         CheckedInvariantCause::ExpectedIntegerPlacement => "integer-placement",
-        CheckedInvariantCause::GeneratedBodyPlaceholderInvoked => "generated-placeholder",
         CheckedInvariantCause::GeneratedArgumentShapeMismatch => "generated-arguments",
         CheckedInvariantCause::GeneratedOperandKindUnsupported => "generated-operand",
         CheckedInvariantCause::GeneratedUnexpectedOutcome => "generated-outcome",
@@ -41,7 +41,7 @@ fn expected_name(cause: CheckedInvariantCause) -> &'static str {
     }
 }
 
-/// Trace: FR-369-AC-1, FR-369-AC-5, FR-096-AC-8
+#[trace("TC-917", "FR-369-AC-1", "FR-369-AC-5", "FR-096-AC-8")]
 #[test]
 fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
     fn cause_traits<T: Copy + Clone + std::fmt::Debug + Eq + std::hash::Hash + PartialEq>() {}
@@ -135,10 +135,6 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             "integer-placement",
         ),
         (
-            CheckedInvariantCause::GeneratedBodyPlaceholderInvoked,
-            "generated-placeholder",
-        ),
-        (
             CheckedInvariantCause::GeneratedArgumentShapeMismatch,
             "generated-arguments",
         ),
@@ -175,7 +171,7 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
             "generated-descriptor",
         ),
     ];
-    assert_eq!(cases.len(), 32);
+    assert_eq!(cases.len(), 31);
     let mut names = std::collections::BTreeSet::new();
     for (index, (cause, name)) in cases.iter().enumerate() {
         assert!(
@@ -197,7 +193,7 @@ fn all_typed_causes_are_distinct_internal_faults_with_required_traits() {
     }
 }
 
-/// Trace: FR-369-AC-1, FR-369-AC-5
+#[trace("TC-917", "FR-369-AC-1", "FR-369-AC-5")]
 #[test]
 fn comparison_payloads_retain_the_original_typed_cause() {
     let constructors: [fn(IllTypedCause) -> CheckedInvariantCause; 4] = [
@@ -236,7 +232,7 @@ fn comparison_payloads_retain_the_original_typed_cause() {
     }
 }
 
-/// Trace: FR-369-AC-1, FR-369-AC-5
+#[trace("TC-917", "FR-369-AC-1", "FR-369-AC-5")]
 #[test]
 fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cause() {
     use std::{fs, process::Command};
@@ -314,6 +310,19 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
     assert!(!removed.status.success());
     assert!(
         error.contains("E0599") && error.contains("CallDepthExceeded"),
+        "{error}"
+    );
+
+    let removed = compile(
+        "removed_placeholder_cause",
+        "use quire_exact::CheckedInvariantCause;\n\
+         pub fn cause() -> CheckedInvariantCause { CheckedInvariantCause::GeneratedBodyPlaceholderInvoked }",
+        false,
+    );
+    let error = String::from_utf8_lossy(&removed.stderr);
+    assert!(!removed.status.success());
+    assert!(
+        error.contains("E0599") && error.contains("GeneratedBodyPlaceholderInvoked"),
         "{error}"
     );
 
