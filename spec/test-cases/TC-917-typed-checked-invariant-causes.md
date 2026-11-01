@@ -18,13 +18,15 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
 
 ## Test Procedure
 
-1. Exhaustively match `CheckedInvariantCause` against thirty-two independently
+1. Exhaustively match `CheckedInvariantCause` against thirty-one independently
    named expectations, including `ScheduledComparisonRefused`,
    `EqualityQuantityConversionRejected`, `GeneratedTypeCheckRejected` and
    `GeneratedEqualityCheckRejected` with
    concrete kernel-owned `IllTypedCause` payloads. Reject a
    `CallDepthExceeded` variant: RT FR-273's final explicit-frame scheduler
    has no depth-specific outcome, and denied `work_units` is `Incomplete`.
+   Reject the retired `GeneratedBodyPlaceholderInvoked` variant: IR-595 removed
+   its owning placeholder, and no other trigger inherits it.
    Compile a use of the enum as `Copy`, `Clone`,
    `Debug`, `Eq`, `Hash` and `PartialEq`, and a `Refusal` as `Clone`, `Debug`,
    `Eq` and `PartialEq`. A source/compile check rejects construction of the
@@ -46,7 +48,7 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
    composites of different declarations do not, they give `false` under TC-924). Assert `CollectionKindMismatch`,
    `PopulationPair`, `ValueKindMismatch`, and `ValueKindMismatch` respectively.
    Check the pair is refused without a completed Boolean.
-5. For each of the thirty-two public cause variants, construct the typed
+5. For each of the thirty-one public cause variants, construct the typed
    `CheckedInvariant` and assert both catalog methods return `None` and that
    refusals with different causes compare unequal. Re-run FR-096's ordinary
    refusal table unchanged so the new path cannot erase a catalog code.
@@ -67,7 +69,9 @@ planned until their own tagged tests and inspection run.
 
 ## Status
 
-`tests/checked_invariant.rs` exhaustively tests the target thirty-two-cause enum,
-checks that `CallDepthExceeded` cannot be constructed, and tests the kernel
-carrier behavior. The RT explicit-frame/work-fuel cutover and external
-producer and mapping controls remain at their owning repositories.
+The target is the thirty-one-cause carrier after retirement of
+`GeneratedBodyPlaceholderInvoked`. The current carrier and exhaustive test
+still include that variant; their removal is implementation work under IR-709,
+not acceptance supplied by this specification-only correction. The remaining
+kernel carrier controls and the RT explicit-frame/work-fuel cutover and external
+producer controls retain their own evidence and ownership.
