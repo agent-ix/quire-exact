@@ -21,6 +21,8 @@ path = "src/lib.rs"
 test-support = []
 
 [dependencies]
+# Inline comparison frames are initialized only as the cursor visits them.
+arrayvec = { version = "0.7.6", default-features = false }
 allocator-api2 = { version = "0.2.21", default-features = false, features = ["alloc"] }
 num-bigint = { version = "0.4.8", default-features = false }
 num-integer = { version = "0.1.47", default-features = false }
