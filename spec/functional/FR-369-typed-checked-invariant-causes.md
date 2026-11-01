@@ -63,8 +63,8 @@ The public `CheckedInvariantCause` SHALL be a closed enum of the thirty-one vari
 | `ExpectedIntegerPlacement` | A scale-zero integer quantity placement yields a retained value that is not an integer: RT `src/exact/quantity.rs:541-546`; QSV `src/quantity.rs:795-800`. |
 
 The following eight causes specify CG's generated-oracle assignments.
-Six rows have current typed checked-invariant constructor sites at CG main
-`f935378e56cde1e7aaabe3d073669d9e58085bde`. The two result-membership and
+Six rows have current typed checked-invariant constructor sites in CG.
+The two result-membership and
 owner-declaration construction rows remain planned under IR-709. These causes
 name shared checked-oracle failures, not CG package or model types.
 
