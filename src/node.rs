@@ -16,6 +16,7 @@ use core::{
 };
 
 use allocator_api2::boxed::Box;
+use arrayvec::ArrayVec;
 use spin::Mutex;
 use triomphe::Arc;
 
@@ -399,20 +400,20 @@ struct CompareFrame<'a> {
 }
 
 struct CompareCursor<'a> {
-    frames: [CompareFrame<'a>; COMPARE_INLINE_DEPTH],
-    depth: usize,
+    frames: ArrayVec<CompareFrame<'a>, COMPARE_INLINE_DEPTH>,
     pending_child: Option<&'a NodeKey>,
 }
 
 impl<'a> CompareCursor<'a> {
     fn new(node: &'a NodeKey) -> Self {
+        let mut frames = ArrayVec::new();
+        frames.push(CompareFrame {
+            node,
+            index: 0,
+            phase: 0,
+        });
         Self {
-            frames: [CompareFrame {
-                node,
-                index: 0,
-                phase: 0,
-            }; COMPARE_INLINE_DEPTH],
-            depth: 1,
+            frames,
             pending_child: None,
         }
     }
@@ -425,22 +426,20 @@ impl<'a> CompareCursor<'a> {
     // with the index-based traversal.
     fn next_part(&mut self) -> Option<(ComparePart<'a>, Option<&'a NodeKey>)> {
         if let Some(child) = self.pending_child.take() {
-            if self.depth == COMPARE_INLINE_DEPTH {
+            if self.frames.is_full() {
                 return None;
             }
-            self.frames[self.depth] = CompareFrame {
+            self.frames.push(CompareFrame {
                 node: child,
                 index: 0,
                 phase: 0,
-            };
-            self.depth += 1;
+            });
         }
 
         loop {
-            if self.depth == 0 {
+            let Some(frame) = self.frames.last_mut() else {
                 return Some((ComparePart::Done, None));
-            }
-            let frame = &mut self.frames[self.depth - 1];
+            };
             match frame.phase {
                 0 => {
                     frame.phase = 1;
@@ -466,7 +465,9 @@ impl<'a> CompareCursor<'a> {
                     frame.phase = 4;
                     return Some((ComparePart::Ordinal(frame.node.inner.ordinal), None));
                 }
-                _ => self.depth -= 1,
+                _ => {
+                    self.frames.pop();
+                }
             }
         }
     }
@@ -1126,30 +1127,53 @@ mod tests {
             let mut left = key("P", vec![PathSegment::Text("leaf".into())], 0);
             let mut right = key("P", vec![PathSegment::Text("leaf".into())], 1);
             for _ in 0..depth {
-                left = key("P", vec![PathSegment::Node(left), PathSegment::Text("tail".into())], 0);
-                right = key("P", vec![PathSegment::Node(right), PathSegment::Text("tail".into())], 0);
+                left = key(
+                    "P",
+                    vec![PathSegment::Node(left), PathSegment::Text("tail".into())],
+                    0,
+                );
+                right = key(
+                    "P",
+                    vec![PathSegment::Node(right), PathSegment::Text("tail".into())],
+                    0,
+                );
             }
             let started = std::time::Instant::now();
             let allocations = allocation_counter::measure(|| {
                 for _ in 0..32 {
-                    assert_eq!(std::hint::black_box(&left).cmp(std::hint::black_box(&right)), Ordering::Less);
+                    assert_eq!(
+                        std::hint::black_box(&left).cmp(std::hint::black_box(&right)),
+                        Ordering::Less
+                    );
                     assert_eq!(right.cmp(&left), Ordering::Greater);
                 }
             });
-            std::println!("depth={depth} comparisons=64 elapsed={:?}", started.elapsed());
+            std::println!(
+                "depth={depth} comparisons=64 elapsed={:?}",
+                started.elapsed()
+            );
             assert_eq!(allocations.count_total, 0, "depth={depth}");
         }
-        let left = key("A", vec![], 0);
-        let right = key("B", vec![], 0);
+        let left = key("A", vec![PathSegment::Text("leaf".into())], 0);
+        let right = key("B", vec![PathSegment::Text("leaf".into())], 0);
         for count in [1_000, 10_000, 100_000] {
             let started = std::time::Instant::now();
             let allocations = allocation_counter::measure(|| {
                 for _ in 0..count {
-                    assert_eq!(compare_streaming(std::hint::black_box(&left), std::hint::black_box(&right)), Some(Ordering::Less));
+                    assert_eq!(
+                        compare_streaming(
+                            std::hint::black_box(&left),
+                            std::hint::black_box(&right)
+                        ),
+                        Some(Ordering::Less)
+                    );
                 }
             });
             assert_eq!(allocations.count_total, 0);
-            std::println!("early-mismatch comparisons={count} elapsed={:?}", started.elapsed());
+            std::println!(
+                "early-mismatch comparisons={count} elapsed={:?}",
+                started.elapsed()
+            );
         }
     }
 
