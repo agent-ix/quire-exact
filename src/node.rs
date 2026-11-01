@@ -1119,6 +1119,40 @@ mod tests {
         NodeKey::new(package, path, ordinal).unwrap()
     }
 
+    #[trace("TC-938", "FR-389-AC-13")]
+    #[test]
+    fn streaming_comparison_scales_with_compared_prefix_without_allocating() {
+        for depth in [0, 8, 64, 512, 1_024, 2_048] {
+            let mut left = key("P", vec![PathSegment::Text("leaf".into())], 0);
+            let mut right = key("P", vec![PathSegment::Text("leaf".into())], 1);
+            for _ in 0..depth {
+                left = key("P", vec![PathSegment::Node(left), PathSegment::Text("tail".into())], 0);
+                right = key("P", vec![PathSegment::Node(right), PathSegment::Text("tail".into())], 0);
+            }
+            let started = std::time::Instant::now();
+            let allocations = allocation_counter::measure(|| {
+                for _ in 0..32 {
+                    assert_eq!(std::hint::black_box(&left).cmp(std::hint::black_box(&right)), Ordering::Less);
+                    assert_eq!(right.cmp(&left), Ordering::Greater);
+                }
+            });
+            std::println!("depth={depth} comparisons=64 elapsed={:?}", started.elapsed());
+            assert_eq!(allocations.count_total, 0, "depth={depth}");
+        }
+        let left = key("A", vec![], 0);
+        let right = key("B", vec![], 0);
+        for count in [1_000, 10_000, 100_000] {
+            let started = std::time::Instant::now();
+            let allocations = allocation_counter::measure(|| {
+                for _ in 0..count {
+                    assert_eq!(compare_streaming(std::hint::black_box(&left), std::hint::black_box(&right)), Some(Ordering::Less));
+                }
+            });
+            assert_eq!(allocations.count_total, 0);
+            std::println!("early-mismatch comparisons={count} elapsed={:?}", started.elapsed());
+        }
+    }
+
     /// Trace: FR-389-AC-7, TC-938.
     #[trace("FR-389-AC-7", "TC-938")]
     #[test]
