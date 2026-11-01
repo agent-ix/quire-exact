@@ -176,11 +176,17 @@ pub enum CheckedInvariantCause {
     GeneratedArgumentShapeMismatch,
     /// A generated equality operand has an unsupported kind.
     GeneratedOperandKindUnsupported,
-    /// A generated outcome adapter received an unexpected arm.
+    /// A generated function's completed value is not admitted by its selected
+    /// callable's checker-issued result type: QSV `admits` returned `Ok(false)`.
+    /// An undecided QSV failure or an exhaustive outcome adapter is not this cause.
+    /// The generated body retains this typed payload at its result occurrence;
+    /// it does not replace the check with a body/scheduler `InternalFault`.
     GeneratedUnexpectedOutcome,
     /// Generated integer bounds did not form a nonempty interval.
     GeneratedIntervalInvalid,
-    /// A generated body could not form its type environment.
+    /// A generated function's genuine owner-declaration environment constructor
+    /// returned exactly `Refused(InvalidDeclaration)` before body work.
+    /// Resource failures and undecided membership retain their separate typed path.
     GeneratedEnvironmentRejected,
     /// A generated comparison type failed checking.
     GeneratedTypeCheckRejected {
