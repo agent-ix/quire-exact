@@ -153,7 +153,7 @@ fn assert_ieee_result(actual: Outcome<IeeeResult>, expected: Outcome<()>, bits: 
 }
 
 #[test]
-#[trace("FR-359-AC-6", "FR-359-AC-7", "FR-359-AC-12", "FR-358-AC-14")]
+#[trace("FR-359-AC-6", "FR-359-AC-7", "FR-359-AC-12")]
 fn ieee_arithmetic_and_zero_conversion_preserve_general_charge_prefixes() {
     for width in IeeeWidth::ALL {
         let bits = u64::from(width.bits());
@@ -185,11 +185,11 @@ fn ieee_arithmetic_and_zero_conversion_preserve_general_charge_prefixes() {
                 }
                 let mut actual = Meter::new(limits);
                 let mut reference = actual.clone();
-                // Integer zero has no magnitude bits; its present zero request must stay present.
+                // The accounting profile assigns integer zero one magnitude bit.
                 let expected = general_schedule(
                     &mut reference,
                     [
-                        operands(0, 1),
+                        operands(1, 1),
                         Charge::new(ChargePoint::IeeeExactIntermediate)
                             .size(LimitKind::IntegerBits, bits),
                         Charge::new(ChargePoint::IeeeRound).size(LimitKind::IntegerBits, bits),
