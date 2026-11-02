@@ -365,12 +365,17 @@ impl Refusal {
     }
 }
 
-/// The declared target an inexact decimal placement was refused at.
+/// The declared target carried by an exact-placement refusal.
+///
+/// `InexactDecimal` uses this to report its Decimal or integer placement
+/// target. `InexactConversion` uses it to report the Decimal or Int carrier
+/// of the carried-quantity target.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InexactTarget {
-    /// A `Decimal[lo, hi; smin, smax]` target.
+    /// A declared `Decimal[lo, hi; smin, smax]` target or carrier.
     Decimal(Box<DecimalType>),
-    /// An integer target (scale zero), rendered as its declared `Int[lo, hi]`.
+    /// An integer target (scale zero), rendered as its declared `Int[lo, hi]`
+    /// domain or carrier.
     Integer(Box<IntegerInterval>),
 }
 

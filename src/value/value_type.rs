@@ -627,6 +627,16 @@ mod tests {
         for other in differing {
             assert_ne!(exact_decimal, other);
         }
+
+        let exact_integer = carried(unit.clone(), integer(-2, 2, RoundingMode::Exact));
+        let equal_integer = carried(unit.clone(), integer(-2, 2, RoundingMode::Exact));
+        let differing_integer_bounds = carried(unit.clone(), integer(-3, 2, RoundingMode::Exact));
+        let differing_integer_rounding = carried(unit, integer(-2, 2, RoundingMode::NearestEven));
+
+        assert_eq!(exact_integer, equal_integer);
+        assert_eq!(hash_of(&exact_integer), hash_of(&equal_integer));
+        assert_ne!(exact_integer, differing_integer_bounds);
+        assert_ne!(exact_integer, differing_integer_rounding);
     }
 
     /// The `Debug` worklist is the one heap stack these walks keep, and it
