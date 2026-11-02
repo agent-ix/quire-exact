@@ -122,7 +122,7 @@ impl Cancel {
             let _ =
                 self.shared
                     .charges
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |charges| {
+                    .try_update(Ordering::Relaxed, Ordering::Relaxed, |charges| {
                         Some(charges.saturating_add(1))
                     });
         }

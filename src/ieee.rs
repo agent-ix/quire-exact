@@ -24,7 +24,7 @@ use num_bigint::{BigInt, BigUint, Sign};
 use num_integer::Integer as _;
 use num_traits::{One, Zero};
 
-use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
+use crate::accounting::{Charge, ChargePoint, LimitKind, Meter, UnitsCharge};
 use crate::comparison::{IllTyped, IllTypedCause};
 use crate::decimal::{Decimal, RoundingMode};
 use crate::integer::Integer;
@@ -944,11 +944,11 @@ fn charge_operands(meter: &mut Meter, width: IeeeWidth, arity: u64) -> Result<()
 }
 
 fn charge_operand_bits(meter: &mut Meter, integer_bits: u64, arity: u64) -> Result<(), Stop> {
-    meter.charge(
-        Charge::new(ChargePoint::IeeeOperands)
-            .size(LimitKind::IntegerBits, integer_bits)
-            .size(LimitKind::ValueOccurrences, arity),
-    )?;
+    meter.charge_units(UnitsCharge::two(
+        ChargePoint::IeeeOperands,
+        (LimitKind::IntegerBits, integer_bits),
+        (LimitKind::ValueOccurrences, arity),
+    ))?;
     Ok(())
 }
 
@@ -965,7 +965,7 @@ fn charge_exact_result(meter: &mut Meter, max_part_bits: u64) -> Result<(), Stop
 }
 
 fn charge_result(meter: &mut Meter) -> Result<(), Stop> {
-    meter.charge(Charge::new(ChargePoint::IeeeResultRetain).results(1))?;
+    meter.charge_units(UnitsCharge::new(ChargePoint::IeeeResultRetain).results(1))?;
     Ok(())
 }
 
