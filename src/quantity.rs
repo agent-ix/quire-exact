@@ -15,7 +15,9 @@
 
 use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
 use crate::comparison::{ComparisonOperator, IllTyped, IllTypedCause};
+use crate::decimal::{DecimalType, RoundingMode};
 use crate::identity::UnitId;
+use crate::integer::IntegerInterval;
 use crate::numeric::{evaluate_rational_arithmetic, rational_ordering_bits, RationalArithmetic};
 use crate::outcome::{Outcome, Stop};
 use crate::rational::Rational;
@@ -25,6 +27,53 @@ use crate::rational::Rational;
 pub struct Quantity {
     magnitude: Rational,
     unit: UnitId,
+}
+
+/// The bounded scalar representation carried by a quantity type.
+///
+/// The integer carrier stores its rounding mode separately because the
+/// integer domain itself has no scale or rounding metadata. Decimal carriers
+/// retain their complete declared type, including bounds, scale range and
+/// rounding mode.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum QuantityCarrier {
+    /// A bounded `Decimal[lo, hi; smin, smax; mode]` carrier.
+    Decimal(DecimalType),
+    /// A bounded `Int[lo, hi]` carrier with its placement mode.
+    Integer {
+        /// The inclusive integer range.
+        domain: IntegerInterval,
+        /// The rounding mode used at scale zero.
+        rounding: RoundingMode,
+    },
+}
+
+/// The structural type identity of `Quantity<unit, carrier>`.
+///
+/// Identity includes the unit, every carrier bound and scale, and the
+/// rounding mode. This is a type descriptor; the caller performs conversion
+/// and carrier membership when producing a carried quantity value.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CarriedQuantityType {
+    unit: UnitId,
+    carrier: QuantityCarrier,
+}
+
+impl CarriedQuantityType {
+    /// `Quantity<unit, carrier>` with already-checked carrier components.
+    pub fn new(unit: UnitId, carrier: QuantityCarrier) -> Self {
+        Self { unit, carrier }
+    }
+
+    /// The quantity unit.
+    pub fn unit(&self) -> &UnitId {
+        &self.unit
+    }
+
+    /// The bounded scalar carrier and its rounding mode.
+    pub fn carrier(&self) -> &QuantityCarrier {
+        &self.carrier
+    }
 }
 
 impl Quantity {

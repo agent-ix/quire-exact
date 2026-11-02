@@ -54,7 +54,7 @@ use crate::ieee::{FloatType, IeeeValue};
 use crate::integer::{Integer, IntegerInterval};
 use crate::node::NodeKey;
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
-use crate::quantity::{BoundedQuantityType, Quantity};
+use crate::quantity::{BoundedQuantityType, CarriedQuantityType, Quantity};
 use crate::rational::{Rational, RationalDomain};
 use crate::reference::ObjectReference;
 use crate::text::{Text, TextType};
@@ -359,6 +359,10 @@ pub enum ValueType {
     Float(FloatType),
     /// A quantity in exactly this unit.
     Quantity(UnitId),
+    /// A `Quantity<unit, carrier>` whose carrier identity is retained inline.
+    /// Conversion and carrier membership are performed by the caller's unit
+    /// evaluation layer.
+    CarriedQuantity(Arc<CarriedQuantityType>),
     /// A `Text[min, max; profile]`.
     Text(TextType),
     /// An unbounded native Unicode scalar sequence, compared without text normalization.
@@ -398,6 +402,11 @@ impl ValueType {
     /// `Quantity<U>[min, max]`.
     pub fn bounded_quantity(bounded: BoundedQuantityType) -> Self {
         Self::BoundedQuantity(Arc::new(bounded))
+    }
+
+    /// `Quantity<unit, carrier>` with structural carrier identity.
+    pub fn carried_quantity(carried: CarriedQuantityType) -> Self {
+        Self::CarriedQuantity(Arc::new(carried))
     }
 
     /// `Map<Text, values>[bound]`.
@@ -467,6 +476,7 @@ impl ValueType {
                 | Self::Decimal(_)
                 | Self::Float(_)
                 | Self::Quantity(_)
+                | Self::CarriedQuantity(_)
                 | Self::Text(_)
                 | Self::String
                 | Self::Uuid

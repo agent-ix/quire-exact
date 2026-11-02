@@ -202,7 +202,7 @@ pub enum CheckedInvariantCause {
 
 /// Why a defined result is refused. Refusals never carry the refused value.
 ///
-/// Each of the ten value refusals carries the declared target domain or IEEE
+/// Each value refusal carries the declared target domain, carrier, or IEEE
 /// width its catalog record renders, so the record is built
 /// from the variant and never from a message. Bigint domains and the node
 /// carried by each `UniverseId` are boxed, which keeps `Refusal` small; it is
@@ -214,6 +214,12 @@ pub enum Refusal {
     /// Strict `exact` rounding would discard a nonzero digit.
     InexactDecimal {
         /// The declared target the value was placed at.
+        target: InexactTarget,
+    },
+    /// A carried quantity conversion would discard a nonzero digit under its
+    /// `exact` carrier mode.
+    InexactConversion {
+        /// The declared carrier of the carried-quantity target.
         target: InexactTarget,
     },
     /// The normalized decimal coefficient is outside the target domain.
@@ -316,6 +322,7 @@ impl Refusal {
     pub fn code(&self) -> Option<&'static str> {
         match self {
             Self::InexactDecimal { .. } => Some("inexact_decimal"),
+            Self::InexactConversion { .. } => Some("inexact_conversion"),
             Self::DecimalOutOfDomain { .. } => Some("decimal_out_of_domain"),
             Self::DivisionOutOfDomain { .. } => Some("division_out_of_domain"),
             Self::ModuloOutOfDomain { .. } => Some("modulo_out_of_domain"),
@@ -338,6 +345,7 @@ impl Refusal {
     pub fn cause(&self) -> Option<&'static str> {
         match self {
             Self::InexactDecimal { .. } => Some("nonzero-discarded-digit"),
+            Self::InexactConversion { .. } => Some("inexact-conversion"),
             Self::DecimalOutOfDomain { .. }
             | Self::ModuloOutOfDomain { .. }
             | Self::TextLengthOutOfDomain { .. }
@@ -442,7 +450,7 @@ mod tests {
     /// TC-428 (FR-096-AC-8): every catalogued kernel refusal returns the
     /// code and cause of its row. The public carrier tests cover every
     /// checked-invariant cause's separate `None` mapping.
-    #[trace("TC-428", "FR-096-AC-8")]
+    #[trace("TC-428", "FR-096-AC-8", "FR-497-AC-7")]
     #[test]
     fn tc_428_every_record_building_refusal_names_code_and_cause() {
         use crate::integer::Integer;
@@ -475,13 +483,27 @@ mod tests {
             member,
         };
         let universe = UniverseId::fixture(0);
-        let cases: [(Refusal, &str, &str); 14] = [
+        let cases: [(Refusal, &str, &str); 16] = [
             (
                 Refusal::InexactDecimal {
                     target: InexactTarget::Integer(interval()),
                 },
                 "inexact_decimal",
                 "nonzero-discarded-digit",
+            ),
+            (
+                Refusal::InexactConversion {
+                    target: InexactTarget::Integer(interval()),
+                },
+                "inexact_conversion",
+                "inexact-conversion",
+            ),
+            (
+                Refusal::InexactConversion {
+                    target: InexactTarget::Decimal(decimal()),
+                },
+                "inexact_conversion",
+                "inexact-conversion",
             ),
             (
                 Refusal::DecimalOutOfDomain { target: decimal() },
@@ -574,5 +596,13 @@ mod tests {
             assert_eq!(refusal.code(), Some(code), "{refusal:?}");
             assert_eq!(refusal.cause(), Some(cause), "{refusal:?}");
         }
+
+        let refusal = Refusal::InexactConversion {
+            target: InexactTarget::Integer(interval()),
+        };
+        assert_eq!(
+            Outcome::<()>::from_stop(Err(Stop::Refused(refusal.clone()))),
+            Outcome::Refused(refusal)
+        );
     }
 }

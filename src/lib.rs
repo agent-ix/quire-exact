@@ -157,8 +157,8 @@ pub use outcome::{
     BoundViolation, CheckedInvariantCause, InexactTarget, Outcome, Refusal, Undefined,
 };
 pub use quantity::{
-    compare_quantity, evaluate_quantity_arithmetic, BoundedQuantityType, Quantity,
-    QuantityArithmetic,
+    compare_quantity, evaluate_quantity_arithmetic, BoundedQuantityType, CarriedQuantityType,
+    Quantity, QuantityArithmetic, QuantityCarrier,
 };
 pub use rational::{NonPositiveDenominatorBound, Rational, RationalDomain, ZeroDenominator};
 pub use reference::ObjectReference;
