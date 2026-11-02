@@ -40,6 +40,7 @@ impl ValueType {
             | Self::Decimal(_)
             | Self::Float(_)
             | Self::Quantity(_)
+            | Self::CarriedQuantity(_)
             | Self::BoundedQuantity(_)
             | Self::Text(_)
             | Self::Enum(_)
@@ -71,6 +72,7 @@ impl ValueType {
             | Self::Decimal(_)
             | Self::Float(_)
             | Self::Quantity(_)
+            | Self::CarriedQuantity(_)
             | Self::BoundedQuantity(_)
             | Self::Text(_)
             | Self::Enum(_)
@@ -95,6 +97,7 @@ impl ValueType {
             (Self::Decimal(left), Self::Decimal(right)) => left == right,
             (Self::Float(left), Self::Float(right)) => left == right,
             (Self::Quantity(left), Self::Quantity(right)) => left == right,
+            (Self::CarriedQuantity(left), Self::CarriedQuantity(right)) => left == right,
             (Self::BoundedQuantity(left), Self::BoundedQuantity(right)) => left == right,
             (Self::Text(left), Self::Text(right)) => left == right,
             (Self::Enum(left), Self::Enum(right)) => left == right,
@@ -115,6 +118,7 @@ impl ValueType {
                 | Self::Decimal(_)
                 | Self::Float(_)
                 | Self::Quantity(_)
+                | Self::CarriedQuantity(_)
                 | Self::BoundedQuantity(_)
                 | Self::Text(_)
                 | Self::String
@@ -146,6 +150,7 @@ impl ValueType {
             Self::Decimal(declared) => declared.hash(state),
             Self::Float(declared) => declared.hash(state),
             Self::Quantity(unit) => unit.hash(state),
+            Self::CarriedQuantity(carried) => carried.hash(state),
             Self::BoundedQuantity(bounded) => bounded.hash(state),
             Self::Text(declared) => declared.hash(state),
             Self::Enum(shape) => shape.hash(state),
@@ -176,6 +181,7 @@ impl Clone for ValueType {
             Self::Decimal(declared) => Self::Decimal(declared.clone()),
             Self::Float(declared) => Self::Float(*declared),
             Self::Quantity(unit) => Self::Quantity(unit.clone()),
+            Self::CarriedQuantity(carried) => Self::CarriedQuantity(Arc::clone(carried)),
             Self::BoundedQuantity(bounded) => Self::BoundedQuantity(Arc::clone(bounded)),
             Self::Text(declared) => Self::Text(*declared),
             Self::Enum(shape) => Self::Enum(shape.clone()),
@@ -280,6 +286,7 @@ pub(super) fn schedule_type<'a>(stack: &mut Vec<Step<'a>>, value_type: &'a Value
         ValueType::Decimal(leaf) => ("Decimal", leaf),
         ValueType::Float(leaf) => ("Float", leaf),
         ValueType::Quantity(leaf) => ("Quantity", leaf),
+        ValueType::CarriedQuantity(leaf) => ("CarriedQuantity", leaf),
         ValueType::BoundedQuantity(leaf) => ("BoundedQuantity", leaf),
         ValueType::Text(leaf) => ("Text", leaf),
         ValueType::Enum(leaf) => ("Enum", leaf),
@@ -337,12 +344,13 @@ pub(super) fn schedule_map_type<'a>(stack: &mut Vec<Step<'a>>, map_type: &'a Map
 #[cfg(test)]
 mod tests {
     use super::super::{
-        DebugWriter, EffectiveId, EnumShape, FloatType, Integer, IntegerInterval, NodeKey,
-        RationalDomain, Step, TextType, UnitId, ValueType, VariantId,
+        CarriedQuantityType, DebugWriter, EffectiveId, EnumShape, FloatType, Integer,
+        IntegerInterval, NodeKey, RationalDomain, Step, TextType, UnitId, ValueType, VariantId,
     };
     use crate::collection::{CardinalityBound, CollectionKind, CollectionType};
     use crate::decimal::{DecimalType, RoundingMode};
     use crate::ieee::IeeeWidth;
+    use crate::quantity::QuantityCarrier;
     use crate::text::TextProfile;
     use alloc::vec::Vec;
     use core::cell::Cell;
@@ -427,6 +435,13 @@ mod tests {
             ValueType::Reference(EffectiveId::fixture(6)),
             ValueType::Population(Some(5)),
             ValueType::Population(None),
+            ValueType::carried_quantity(CarriedQuantityType::new(
+                UnitId::declared(NodeKey::fixture(11)),
+                QuantityCarrier::Integer {
+                    domain: interval(-2, 2),
+                    rounding: RoundingMode::Exact,
+                },
+            )),
             ValueType::collection(CollectionType::new(
                 CollectionKind::Sequence,
                 ValueType::Boolean,
@@ -518,8 +533,9 @@ mod tests {
         assert!(format!("{:?}", samples[11]).starts_with("Reference(EffectiveId("));
         assert_eq!(format!("{:?}", samples[12]), "Population(Some(5))");
         assert_eq!(format!("{:?}", samples[13]), "Population(None)");
+        assert!(format!("{:?}", samples[14]).starts_with("CarriedQuantity(CarriedQuantityType {"));
         assert_eq!(
-            format!("{:?}", samples[14]),
+            format!("{:?}", samples[15]),
             "Collection(CollectionType { kind: Sequence, element: Boolean, bound: None })"
         );
 
@@ -563,6 +579,64 @@ mod tests {
         };
         assert!(bounded(3) != bounded(4));
         assert_ne!(hash_of(&bounded(3)), hash_of(&bounded(4)));
+    }
+
+    /// A carried quantity's structural type identity includes its unit,
+    /// carrier kind and bounds, decimal scale range, and rounding mode.
+    #[test]
+    #[trace("FR-497-AC-1", "TC-1287")]
+    fn carried_quantity_type_identity_includes_its_complete_carrier() {
+        let unit = UnitId::declared(NodeKey::fixture(21));
+        let other_unit = UnitId::declared(NodeKey::fixture(22));
+        let decimal = |lower: i64, upper: i64, min_scale, max_scale, rounding| {
+            QuantityCarrier::Decimal(
+                DecimalType::new(
+                    Integer::from(lower),
+                    Integer::from(upper),
+                    min_scale,
+                    max_scale,
+                    rounding,
+                )
+                .expect("well formed decimal carrier"),
+            )
+        };
+        let integer = |lower, upper, rounding| QuantityCarrier::Integer {
+            domain: interval(lower, upper),
+            rounding,
+        };
+        let carried =
+            |unit, carrier| ValueType::carried_quantity(CarriedQuantityType::new(unit, carrier));
+
+        let exact_decimal = carried(unit.clone(), decimal(-100, 100, 2, 4, RoundingMode::Exact));
+        let differing = [
+            carried(unit.clone(), decimal(-99, 100, 2, 4, RoundingMode::Exact)),
+            carried(unit.clone(), decimal(-100, 99, 2, 4, RoundingMode::Exact)),
+            carried(unit.clone(), decimal(-100, 100, 1, 4, RoundingMode::Exact)),
+            carried(unit.clone(), decimal(-100, 100, 2, 3, RoundingMode::Exact)),
+            carried(
+                unit.clone(),
+                decimal(-100, 100, 2, 4, RoundingMode::NearestEven),
+            ),
+            carried(unit.clone(), integer(-2, 2, RoundingMode::Exact)),
+            carried(other_unit, decimal(-100, 100, 2, 4, RoundingMode::Exact)),
+        ];
+
+        let clone = exact_decimal.clone();
+        assert_eq!(exact_decimal, clone);
+        assert_eq!(hash_of(&exact_decimal), hash_of(&clone));
+        for other in differing {
+            assert_ne!(exact_decimal, other);
+        }
+
+        let exact_integer = carried(unit.clone(), integer(-2, 2, RoundingMode::Exact));
+        let equal_integer = carried(unit.clone(), integer(-2, 2, RoundingMode::Exact));
+        let differing_integer_bounds = carried(unit.clone(), integer(-3, 2, RoundingMode::Exact));
+        let differing_integer_rounding = carried(unit, integer(-2, 2, RoundingMode::NearestEven));
+
+        assert_eq!(exact_integer, equal_integer);
+        assert_eq!(hash_of(&exact_integer), hash_of(&equal_integer));
+        assert_ne!(exact_integer, differing_integer_bounds);
+        assert_ne!(exact_integer, differing_integer_rounding);
     }
 
     /// The `Debug` worklist is the one heap stack these walks keep, and it
