@@ -85,6 +85,20 @@ fn lifecycle_preserves_budget_denial_and_unread_amounts() {
     assert!(m.charge_plan(&Integer::from(2_u64)).is_err());
     assert_eq!(amounts(&interval(&m)), [0; 10]);
     m.charge_plan(&Integer::from(2_u64)).unwrap();
+    // Requested cancellation must stay unpolled during every control.
+    cancel.cancel(CancelCause::Requested);
+    let before = m.clone();
+    m.enable_charge_accounting();
+    let _ = m.take_charge_accounting();
+    let _ = m.disable_charge_accounting();
+    let _ = m.take_charge_accounting();
+    let _ = m.disable_charge_accounting();
+    m.enable_charge_accounting();
+    assert_eq!(cancel.tripped(), None);
+    assert_budget(&m, &before);
+    assert!(m.charge(charge(1, 0)).is_err());
+    assert_eq!(cancel.tripped(), Some(CancelCause::Requested));
+    assert_eq!(amounts(&interval(&m)), [0; 10]);
 }
 
 #[trace("TC-906", "FR-358-AC-17")]
