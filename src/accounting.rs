@@ -882,6 +882,31 @@ impl AdmittedCharge {
 #[cfg(feature = "test-support")]
 const _: () = assert!(!core::mem::needs_drop::<AdmittedCharge>());
 
+/// Successful admissions accumulated since capture was enabled or last taken.
+///
+/// Work and result units are sums; the eight semantic sizes are maxima of
+/// actual requests in this interval, independent of prior global maxima.
+/// Absent requests and explicit zero requests both contribute zero.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChargeAccounting {
+    amounts: [u64; LimitKind::COUNT],
+}
+
+impl ChargeAccounting {
+    fn empty() -> Self {
+        Self {
+            amounts: [0; LimitKind::COUNT],
+        }
+    }
+
+    /// The accumulated amount for one of the ten scalar limit kinds.
+    pub fn amount(&self, kind: LimitKind) -> u64 {
+        self.amounts[kind.index()]
+    }
+}
+
+const _: () = assert!(!core::mem::needs_drop::<ChargeAccounting>());
+
 /// A per-request scalar meter.
 ///
 /// **A count, not a log.** A production meter holds only fixed-size
@@ -890,8 +915,8 @@ const _: () = assert!(!core::mem::needs_drop::<AdmittedCharge>());
 /// denied point. The counters own no heap memory, so the meter that bounds an
 /// evaluation's work does not itself grow with that work; the const
 /// assertion below this type holds that in every production build. The meter
-/// also shares the caller's [`Cancel`] handle, a reference count that is no
-/// per-charge state. The ordered charge log
+/// optionally holds a fixed-size interval aggregate and shares the caller's
+/// [`Cancel`] handle, a reference count that is no per-charge state. The ordered charge log
 /// ([`Meter::admitted_charges`]) exists only under the `test-support`
 /// feature, which only a dev-dependency may enable.
 ///
@@ -899,6 +924,7 @@ const _: () = assert!(!core::mem::needs_drop::<AdmittedCharge>());
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Meter {
     counters: Counters,
+    charge_accounting: Option<ChargeAccounting>,
     /// The handle every charge polls, when the caller gave one.
     cancel: Option<Cancel>,
     #[cfg(feature = "test-support")]
@@ -934,12 +960,33 @@ impl Meter {
                 denied_point_admissions: 0,
                 admissions: 0,
             },
+            charge_accounting: None,
             cancel: None,
             #[cfg(feature = "test-support")]
             admitted: Vec::new(),
             #[cfg(feature = "test-support")]
             charge_log_truncated: false,
         }
+    }
+
+    /// Start an empty interval if disabled; preserve unread amounts if enabled.
+    /// This changes no budget, cancellation or denial state and allocates nothing.
+    pub fn enable_charge_accounting(&mut self) {
+        self.charge_accounting
+            .get_or_insert_with(ChargeAccounting::empty);
+    }
+
+    /// Return and clear the current interval, leaving capture enabled.
+    /// Returns `None` when disabled; an enabled empty interval has ten zeros.
+    pub fn take_charge_accounting(&mut self) -> Option<ChargeAccounting> {
+        self.charge_accounting
+            .as_mut()
+            .map(|accounting| core::mem::replace(accounting, ChargeAccounting::empty()))
+    }
+
+    /// Return the final interval and disable capture, or `None` if disabled.
+    pub fn disable_charge_accounting(&mut self) -> Option<ChargeAccounting> {
+        self.charge_accounting.take()
     }
 
     /// This meter, polling `cancel` at every charge. A cancelled
@@ -1114,6 +1161,7 @@ impl Meter {
         results: u64,
         #[cfg(feature = "test-support")] record: AdmittedCharge,
     ) {
+        self.capture_charge(&sizes, work, results);
         // Straight-line writes have no trip count independent of requests. A
         // size request naming a cumulative counter is validated above and
         // then superseded by that counter's own total below.
@@ -1156,6 +1204,34 @@ impl Meter {
             #[cfg(feature = "test-support")]
             record,
         );
+    }
+
+    fn capture_charge(&mut self, sizes: &[Option<u64>; LimitKind::COUNT], work: u64, results: u64) {
+        if let Some(accounting) = &mut self.charge_accounting {
+            for kind in LimitKind::ALL {
+                let slot = &mut accounting.amounts[kind.index()];
+                match kind {
+                    LimitKind::WorkUnits => {
+                        // Successful global totals are monotone and bounded by u64;
+                        // the interval contains a subset of their increments.
+                        *slot += work - self.counters.consumed[kind.index()];
+                    }
+                    LimitKind::ResultUnits => {
+                        *slot += results - self.counters.consumed[kind.index()];
+                    }
+                    LimitKind::IntegerBits
+                    | LimitKind::DecimalDigits
+                    | LimitKind::ScaleExpansion
+                    | LimitKind::TextInputBytes
+                    | LimitKind::TextScalars
+                    | LimitKind::NormalizedScalars
+                    | LimitKind::UnitEdges
+                    | LimitKind::ValueOccurrences => {
+                        *slot = (*slot).max(sizes[kind.index()].unwrap_or(0));
+                    }
+                }
+            }
+        }
     }
 
     fn observe_size(&mut self, kind: LimitKind, amount: Option<u64>) {
@@ -1213,6 +1289,13 @@ impl Meter {
         if remaining(LimitKind::ResultUnits) < Integer::one() {
             return Err(self.incomplete(LimitKind::ResultUnits, Integer::one(), point));
         }
+        let mut sizes = [None; LimitKind::COUNT];
+        sizes[kind.index()] = Some(size);
+        self.capture_charge(
+            &sizes,
+            self.consumed(LimitKind::WorkUnits) + 1,
+            self.consumed(LimitKind::ResultUnits),
+        );
         let slot = &mut self.counters.consumed[kind.index()];
         *slot = (*slot).max(size);
         let work = &mut self.counters.consumed[LimitKind::WorkUnits.index()];
