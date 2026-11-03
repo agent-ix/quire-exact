@@ -1,16 +1,16 @@
 ---
 id: TC-906
-title: "One-shot meter denial and bounded diagnostic charge log"
+title: "One-shot meter denial, bounded diagnostics and fixed-size interval capture"
 type: TC
 relationships:
   - target: ix://agent-ix/quire-exact/FR-358
     type: verifies
 ---
-# TC-906: One-shot meter denial and bounded diagnostic charge log
+# TC-906: One-shot meter denial, bounded diagnostics and fixed-size interval capture
 
 ## Description
 
-Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-15. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
+Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md) at the public meter seam. Scope: FR-358-AC-1 through AC-6 and AC-8 through AC-21. AC-7 was moved to [FR-368](../functional/FR-368-meter-charge-and-limit-vocabulary.md).
 
 ## Test Procedure
 
@@ -29,6 +29,13 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 11. For AC-14 under `test-support`, independently submit sizes 9 then 3, an absent-size charge, a charge with IntegerBits requests 9, 3 and zero together, then separate charges with reproducibly increasing positive counts of IntegerBits zero requests; inspect each fixed-size typed admission record and the separate high-water counter. Inspect the record type for fixed absent-or-present `u64` slots and absence of a heap-owned request collection; compare payload size independently of request count. Call `charge_plan` with pairs 2 on a sufficient meter and inspect its actual size record. On separate meters snapshot the records, counters, admission count and flag before an ordinary size refusal, ordinary work refusal, occurrence-1 injection and active cancellation, then compare those snapshots after each denial.
 12. For AC-15, admit 4097 one-work-unit charges whose semantic-size requests and per-admission maxima are independently specified, including repeated same-kind requests; use IntegerBits 8 at admission 4096 and 9 at admission 4097, with earlier IntegerBits requests at most 7 and sufficient limits. Inspect records and flag at both admissions and read exact accounting after the omitted record.
 
+13. For AC-16, in a default-feature build exercise disabled take/disable, admissions before enable, enabled empty takes, repeated enable with unread work, disable and re-enable. Snapshot limits, global counters, admissions, cancellation and denial state around every control operation; follow with cancellation and the pending selected denial to verify their behavior is preserved.
+14. For AC-17, use an independently written expected ten-counter schedule containing general charges and the unit-only fast path, distinct work/results, each of the eight size kinds, repeated requests, zeros and omissions. Compare every `amount(kind)`. Separately admit IntegerBits 9 before enabling, then admit 3 during capture and compare captured and global amounts.
+15. For AC-18, on separate active meters retain a known successful prefix before each ordinary work/result/size refusal, injected denial, cancellation and failed plan work/result/size check; compare all ten interval amounts before and after. Retry where permitted and check one successful extension. Independently admit a plan with pairs 2 under sufficient limits and inspect its work, results and ValueOccurrences amounts.
+16. For AC-19, replay the same explicit schedule on three meters with identical prior consumption: repeated-drain capture, uninterrupted capture and disabled capture. Include an empty drain, repeated enable and final disable. Recombine drained work/results by sum and sizes by maximum; compare against the independent schedule oracle, uninterrupted interval and unchanged global admission behavior.
+17. For AC-20, run 4097 one-work/one-result admissions in both default and test-support builds with a distinct largest size on the final admission. Read capture independently of the diagnostic accessor; under test-support also inspect the existing prefix and truncation flag at 4096 and 4097.
+18. For AC-21, inspect production types and control/commit paths for fixed-size heap-free capture with private fields, no stored history or caller metadata, no callbacks/trait objects and no new Meter generic/lifetime parameters. Check default construction and active interval operations for allocations, and verify the unchanged no_std and public trait contracts. Clone an active nonempty meter, drain one copy and confirm the other's unread interval remains intact.
+
 ## Expected Results
 
 1. The over-limit charge refuses without changing the first snapshot or advancing the named occurrence. The selected valid charge returns `Incomplete` at `FunctionCall` with `WorkUnits` as limit kind and preserves the second snapshot; its retry succeeds and updates accounting and the log once.
@@ -46,9 +53,18 @@ Verify [FR-358](../functional/FR-358-meter-denial-and-bounded-diagnostic-log.md)
 11. Recorded per-admission amounts remain 9 then 3 despite a meter maximum of 9. The mixed same-kind charge records present 9, and every all-zero charge records present zero, distinguishable from an absent kind. Repeated requests coalesce to their within-admission maximum with a fixed payload and no heap-owned request list, order or multiplicity. The admitted plan records ValueOccurrences 2 and no size entry derived from its work reservation. Each denied charge leaves all snapshotted admitted state unchanged.
 12. Exactly the first 4096 fixed-size records and their per-admission semantic-size maxima are retained, including IntegerBits 8 on record 4096; no record for admission 4097 is retained. The flag changes only at admission 4097, work and admissions both reach 4097 and the IntegerBits maximum becomes 9.
 
+13. Disabled controls return None; enabled empty takes return Some with ten zeros. Repeated enable retains unread amounts; disable returns the final interval and re-enable starts empty. All global budget, cancellation and denial behavior remains unchanged with no overhead charge.
+14. All ten amounts match actual successful admissions: work/results sum, sizes take request maxima, repeated kinds coalesce and absent/zero contribute zero. Captured IntegerBits is 3 despite global IntegerBits remaining 9.
+15. Every unsuccessful attempt leaves the preceding interval unchanged. Successful retries contribute once. The plan contributes work 1, results 0 and ValueOccurrences 2, never work 4 or result 1.
+16. Returned partitions conserve the explicit schedule's actual call usage, including with prior shared-meter consumption, without changing any admission result or global accounting.
+17. Both builds capture all 4097 admissions and the last size request. The test-support diagnostic log independently retains its unchanged 4096-entry prefix and truncation behavior.
+18. Capture is fixed-size and heap-free in default and active modes; public trait and no_std contracts remain intact. Clones own independent copied interval state.
+
 ## Status
 
 PR #9 adds executable Trace bindings for FR-358-AC-8 through AC-11. Run `quire matrix` for the current criterion-to-test mapping.
 FR-358-AC-12 and AC-13 have direct public-meter Trace bindings for the exact injected record and ordinary-limit precedence. Run `quire matrix` for the current criterion-to-test mapping.
 
 FR-358-AC-14 and AC-15 remain planned for IR-667; the specification does not claim their implementation or executable bindings. Test-support callers adapt directly to the enriched record surface.
+
+FR-358-AC-16 through AC-21 are planned for IR-1280. This specification adds no executable bindings and does not claim the QSL-1548 consumer report or FR-520-AC-11 complete. TC-931 continues to own FR-359 request-proportional accounting/proof checks; these new interval cases belong here.

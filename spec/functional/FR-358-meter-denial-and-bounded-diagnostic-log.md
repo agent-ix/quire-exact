@@ -1,14 +1,14 @@
 ---
 id: FR-358
-title: "A meter denies one named occurrence and bounds its diagnostic charge log"
+title: "A meter denies one named occurrence, bounds diagnostics and captures fixed-size intervals"
 type: FR
 relationships: []
 ---
-# FR-358: A meter denies one named occurrence and bounds its diagnostic charge log
+# FR-358: A meter denies one named occurrence, bounds diagnostics and captures fixed-size intervals
 
 ## Description
 
-The `quire-exact` meter SHALL deny an injected, named charge exactly once at its selected 1-based occurrence. Where `test-support` is enabled, the meter SHALL bound the admitted-charge log to 4096 entries without changing exact accounting. The public `InjectedDenial::occurrence` SHALL be `NonZeroU64`, making zero unrepresentable.
+The `quire-exact` meter SHALL deny an injected, named charge exactly once at its selected 1-based occurrence. Where `test-support` is enabled, the meter SHALL bound the admitted-charge log to 4096 entries without changing exact accounting. The public `InjectedDenial::occurrence` SHALL be `NonZeroU64`, making zero unrepresentable. The production meter SHALL expose optional fixed-size interval accounting of successful admissions, disabled by default.
 
 ## Behavior
 
@@ -51,6 +51,51 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 4. An injected denial shall report `Incomplete { limit_kind: WorkUnits, limit: w, consumed: w, next_charge: n, charge_point: P }`, where `w` is the admitted work consumed immediately before the denied charge and `P` is the selected point. The record shall be independent of the configured `ScalarLimits.work_units`: `n` is the denied charge's own work amount for `charge`, or the `pairs + 2` availability reservation for `charge_plan` at `equality.plan`. A successful `charge_plan` commits one work unit, but its injected denial reports the reservation it checked, not that eventual commit.
 5. At the selected occurrence, an injected denial shall take precedence over an ordinary `ScalarLimits` counter refusal of that same charge, including a plan reservation that exceeds the remaining work. An active cancellation is checked before injection and is outside this ordinary-limit precedence rule.
 
+6. The public, non-generic `Meter` SHALL expose `enable_charge_accounting(&mut self)`, `take_charge_accounting(&mut self) -> Option<ChargeAccounting>` and `disable_charge_accounting(&mut self) -> Option<ChargeAccounting>`.
+
+   Enabling disabled capture SHALL start an empty interval without incorporating earlier admissions.
+
+   Enabling already active capture SHALL preserve its unread amounts.
+
+   Taking active capture SHALL return its current aggregate and reset only the interval to empty while leaving capture enabled.
+
+   Taking disabled capture SHALL return `None`.
+
+   Disabling active capture SHALL return its final aggregate and disable capture.
+
+   Disabling already disabled capture SHALL return `None`.
+
+   An enabled empty interval SHALL return `Some` with ten zeros.
+7. The public `ChargeAccounting` SHALL expose `amount(&self, kind: LimitKind) -> u64` for all ten kinds.
+
+   Its private state SHALL contain fixed-size, heap-free counters only, without charge points, ordered history, caller identities or arbitrary metadata.
+
+   For each interval, `WorkUnits` and `ResultUnits` SHALL sum the actual successfully committed increments.
+
+   Each of the eight semantic-size kinds named in behavior 2 SHALL retain the maximum actual validated request admitted during that interval, coalescing repeated same-kind requests.
+
+   An absent request and an explicit zero SHALL both contribute zero.
+
+   Capture SHALL observe actual requests independently of the meter's prior consumed maxima, rather than differences of global high-water values.
+8. While capture is active, every successful admission through ordinary `charge`, its unit-only fast path and `charge_plan` SHALL contribute exactly once.
+
+   A successful `charge_plan` SHALL contribute work 1, results 0 and its actual `ValueOccurrences` request, never its `pairs + 2` work reservation or result availability check.
+
+   Ordinary refusals, injected denials, cancellation and failed plan reservations SHALL leave the interval unchanged and preserve the successful prefix.
+
+   Capture SHALL continue aggregating admissions after diagnostic entry 4096, independently of diagnostic-log truncation.
+9. Enabling, taking and disabling capture SHALL leave limits, consumed counters, admission counts, cancellation state and injected-denial state unchanged.
+
+   Capture control operations SHALL charge no accounting overhead.
+
+   The fixed-size capture SHALL introduce no allocation, request-count cap, admission cap, callback, trait object, lifetime parameter or generic parameter into `Meter`.
+
+   `Meter` SHALL retain `Clone`, `Debug`, `Eq`, `PartialEq`, `Send`, `Sync` and no_std compatibility.
+
+   Cloning SHALL copy the enabled/disabled state and unread aggregate as independent owned state.
+
+   The production meter SHALL remain a count rather than an admitted-charge log.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -69,14 +114,22 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 | FR-358-AC-13 | With an occurrence-1 injected denial selected, make the same `charge` independently fail an ordinary semantic-size counter and make a `charge_plan` with `pairs = 2` independently fail its work reservation under a configured work limit of 3 after two admitted work units, with all other limits sufficient. In each case, the injected `WorkUnits` record is returned before the ordinary refusal: `limit = consumed` equals the pre-charge work, `next_charge` is the charge's work amount or the plan's reservation respectively, and every consumed counter and admission count remain unchanged. The criterion does not override cancellation, which is checked before injection. | Test |
 | FR-358-AC-14 | Under `test-support` and sufficient limits, admit an IntegerBits request of 9 followed by 3 and then a charge with no size request. The records expose respectively 9, 3 and no IntegerBits request while the consumed IntegerBits maximum remains 9. A separate charge with IntegerBits requests 9, 3 and zero exposes present 9; a charge with any positive number of IntegerBits zero requests exposes present zero. Both have the same fixed payload size as a single-request record, with no heap-owned request collection and no retained request list, order or multiplicity. A successful `charge_plan` with pairs 2 records ValueOccurrences 2 and no size request for its four-unit work reservation. Independently attempt an ordinary size refusal, an ordinary work refusal, an injected denial and cancellation; each preserves the preceding record prefix, every counter, admission count and truncation flag. | Test |
 | FR-358-AC-15 | Under `test-support`, admit 4097 one-work-unit charges with independently chosen semantic-size requests, including repeated same-kind requests and distinct amounts at admissions 4096 and 4097. The single record log contains exactly the first 4096 fixed-size records with their points and per-admission semantic-size maxima in admission order; truncation is false at admission 4096 and true at 4097. Work consumption and admission count reach 4097, including the omitted record; existing size maxima still include the 4097th charge. | Test |
+| FR-358-AC-16 | In a default-feature build, a fresh meter returns `None` from take and disable. Admit work before enabling, enable capture, take twice and observe `Some` with all ten amounts zero both times. After an admission, enable again and verify the unread amounts survive. Disable returns that final aggregate, subsequent take/disable return `None`, and re-enable starts with zeros. Each control operation preserves limits, all consumed counters, admission count, cancellation and injected-denial state and consumes no work. | Test |
+| FR-358-AC-17 | With sufficient limits and capture enabled, exercise ordinary general and unit-only charges with independently specified work/result increments and all eight semantic-size kinds, including repeated same-kind requests, explicit zeros and absent kinds. The aggregate exposes the sum of actual work/results and the maximum actual request for each size, through `amount` for all ten kinds. Separately admit IntegerBits 9 while disabled, enable, admit IntegerBits 3 and verify the interval reports 3 while global consumption remains 9. | Test |
+| FR-358-AC-18 | With an active nonempty interval, independently attempt ordinary work, result and semantic-size refusals, an injected denial, cancellation, and failed plan work/result/size availability checks. Each leaves the entire interval equal to its pre-attempt value. A later successful admission extends the preceding successful prefix exactly once. On a sufficient meter, `charge_plan` with pairs 2 adds exactly work 1, results 0 and ValueOccurrences 2, rather than reservation work 4 or result 1. | Test |
+| FR-358-AC-19 | On one shared meter with prior consumption, partition a fixed successful charge schedule across repeated takes, including an empty interval, repeated enable and a final disable. Summing the returned work/results and taking per-kind maxima of the eight sizes equals the independently expected actual schedule usage and an uninterrupted capture of that schedule; prior consumption remains excluded. Perform the same schedule with capture disabled and verify identical admission/refusal outcomes, global consumed counters and admission counts. | Test |
+| FR-358-AC-20 | In default-feature and test-support builds, an enabled interval aggregates 4097 one-work/one-result admissions, with an independently specified largest semantic-size request on admission 4097: work/results equal 4097 and the size includes that last request. Under test-support, the existing ordered diagnostic prefix remains exactly 4096 records and its existing truncation flag changes only at 4097. | Test |
+| FR-358-AC-21 | Inspect the production capture and `ChargeAccounting` types for private fixed-size heap-free state and absence of history, caller metadata, callbacks, trait objects or new Meter lifetime/generic parameters. Default construction and enabled capture/control operations allocate no heap storage. Verify the unchanged no_std build and Meter's Clone/Debug/Eq/PartialEq/Send/Sync contracts; cloning active capture copies unread amounts independently, so draining one clone does not drain the other. | Inspection |
 
 ## Status
+
+AC-16 through AC-21 are planned for IR-1280; this spec-only amendment supplies no implementation or executable bindings. The kernel interval primitive does not complete QSL-1548 or `ix://agent-ix/quire-spec-language/FR-520` AC-11. QSL owns binder routing, read-presence entries (including zero-charge and Unavailable reads), per-call conservation and the semantic `accounting_version`; none belongs in the kernel capture.
 
 PR #9 adds executable Trace bindings for AC-8 through AC-11. AC-7 was retired to FR-368; its ID is not reused. AC-12 and AC-13 have direct public-meter Trace bindings for the injected record and ordinary-limit precedence, including cancellation remaining first. AC-14 and AC-15 specify the IR-667 enriched test-support log and remain planned until executable bindings land; this specification does not claim runtime conformance. Test-support callers must adapt directly to typed records when implementation lands. Run `quire matrix` for the current criterion-to-test mapping.
 
 ## Dependencies
 
-- The `quire-exact` implementation is in `src/accounting.rs`. This requirement adds a one-shot denial and a bounded test-support diagnostic log; it does not add a compatibility layer or copy downstream code.
+- The `quire-exact` implementation is in `src/accounting.rs`. This requirement adds a one-shot denial, a bounded test-support diagnostic log and optional fixed-size production interval accounting; it does not add a compatibility layer or copy downstream code.
 - `ix://agent-ix/quire-spec-language` tests use both `admitted_charges()` and `InjectedDenial` with integer occurrence literals or values, so its callers must construct nonzero occurrences when they adopt this field type.
 - `ix://agent-ix/quire-contract-runtime` has a local meter copy and already uses `NonZeroU64`; RT #95 is the downstream pin-and-replace work and must consume the authoritative crate rather than vendor it.
 - `ix://agent-ix/quire-contract-codegen` uses the runtime's `NonZeroU64` denial in tests. No direct usage was found in `ix://agent-ix/quire-contract-ir` or the locally available `quire-driver` checkout.
