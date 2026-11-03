@@ -148,6 +148,9 @@ fn every_refusal_preserves_prefix_and_plan_records_actual_commit() {
                 let prefix = interval(&m);
                 assert!(m.charge_plan(&Integer::from(2_u64)).is_err());
                 assert_eq!(interval(&m), prefix);
+                m.charge(charge(1, 0)).unwrap();
+                assert_eq!(interval(&m).amount(LimitKind::WorkUnits), 10);
+                assert_eq!(interval(&m).amount(LimitKind::ResultUnits), 2);
                 continue;
             }
             7 => {
@@ -155,6 +158,9 @@ fn every_refusal_preserves_prefix_and_plan_records_actual_commit() {
                 let prefix = interval(&m);
                 assert!(m.charge_plan(&Integer::from(2_u64)).is_err());
                 assert_eq!(interval(&m), prefix);
+                m.charge(charge(1, 0)).unwrap();
+                assert_eq!(interval(&m).amount(LimitKind::WorkUnits), 3);
+                assert_eq!(interval(&m).amount(LimitKind::ResultUnits), 10);
                 continue;
             }
             _ => m.charge(
@@ -273,6 +279,18 @@ fn clones_are_independent_and_capture_controls_allocate_nothing() {
         m.enable_charge_accounting();
         let _ = m.take_charge_accounting();
         let _ = m.disable_charge_accounting();
+    });
+    assert_eq!(info.count_total, 0);
+    // Warm the diagnostic Vec when present; interval capture itself must not
+    // allocate on either the common admission path or the control paths.
+    let mut active = Meter::new(limits());
+    active.charge(charge(1, 1)).unwrap();
+    active.enable_charge_accounting();
+    let admission = charge(2, 3).size(LimitKind::IntegerBits, 7);
+    let info = allocation_counter::measure(|| {
+        active.charge(admission).unwrap();
+        let captured = active.take_charge_accounting().unwrap();
+        assert_eq!(amounts(&captured), [7, 0, 0, 0, 0, 0, 0, 0, 2, 3]);
     });
     assert_eq!(info.count_total, 0);
 }

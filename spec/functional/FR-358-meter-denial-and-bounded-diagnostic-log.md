@@ -123,7 +123,7 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 
 ## Status
 
-AC-16 through AC-21 are planned for IR-1280; this spec-only amendment supplies no implementation or executable bindings. The kernel interval primitive does not complete QSL-1548 or `ix://agent-ix/quire-spec-language/FR-520` AC-11. QSL owns binder routing, read-presence entries (including zero-charge and Unavailable reads), per-call conservation and the semantic `accounting_version`; none belongs in the kernel capture.
+AC-16 through AC-21 have public-meter executable bindings in `tests/ir1280_charge_accounting.rs` for the IR-1280 implementation. The kernel interval primitive does not complete QSL-1548 or `ix://agent-ix/quire-spec-language/FR-520` AC-11. QSL owns binder routing, read-presence entries (including zero-charge and Unavailable reads), per-call conservation and the semantic `accounting_version`; none belongs in the kernel capture.
 
 PR #9 adds executable Trace bindings for AC-8 through AC-11. AC-7 was retired to FR-368; its ID is not reused. AC-12 and AC-13 have direct public-meter Trace bindings for the injected record and ordinary-limit precedence, including cancellation remaining first. AC-14 and AC-15 specify the IR-667 enriched test-support log and remain planned until executable bindings land; this specification does not claim runtime conformance. Test-support callers must adapt directly to typed records when implementation lands. Run `quire matrix` for the current criterion-to-test mapping.
 

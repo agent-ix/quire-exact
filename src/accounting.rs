@@ -915,8 +915,8 @@ const _: () = assert!(!core::mem::needs_drop::<ChargeAccounting>());
 /// denied point. The counters own no heap memory, so the meter that bounds an
 /// evaluation's work does not itself grow with that work; the const
 /// assertion below this type holds that in every production build. The meter
-/// optionally holds a fixed-size interval aggregate and shares the caller's [`Cancel`] handle, a reference count that is no
-/// per-charge state. The ordered charge log
+/// optionally holds a fixed-size interval aggregate and shares the caller's
+/// [`Cancel`] handle, a reference count that is no per-charge state. The ordered charge log
 /// ([`Meter::admitted_charges`]) exists only under the `test-support`
 /// feature, which only a dev-dependency may enable.
 ///
