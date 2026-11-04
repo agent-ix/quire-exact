@@ -691,7 +691,7 @@ mod tests {
     use super::*;
     use crate::accounting::ScalarLimits;
 
-    fn generous_meter() -> Meter {
+    pub(super) fn generous_meter() -> Meter {
         Meter::new(ScalarLimits {
             integer_bits: u64::MAX,
             decimal_digits: u64::MAX,
@@ -852,27 +852,13 @@ mod tests {
 
 #[cfg(test)]
 mod float_membership_tests {
+    use super::tests::generous_meter as meter;
     use super::*;
-    use crate::accounting::{InjectedDenial, ScalarLimits};
+    use crate::accounting::InjectedDenial;
     use crate::ieee::{FloatType, IeeeValue, IeeeWidth};
     use crate::value::OptionValue;
     use core::num::NonZeroU64;
     use ix_trace_rs::trace;
-
-    fn meter() -> Meter {
-        Meter::new(ScalarLimits {
-            integer_bits: u64::MAX,
-            decimal_digits: u64::MAX,
-            scale_expansion: u64::MAX,
-            text_input_bytes: u64::MAX,
-            text_scalars: u64::MAX,
-            normalized_scalars: u64::MAX,
-            unit_edges: u64::MAX,
-            value_occurrences: u64::MAX,
-            work_units: u64::MAX,
-            result_units: u64::MAX,
-        })
-    }
 
     #[trace("FR-393-AC-1")]
     #[test]
