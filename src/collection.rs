@@ -36,7 +36,7 @@ use core::cell::Cell;
 use core::cmp::Ordering;
 
 use crate::accounting::{length_amount, Charge, ChargePoint, LimitKind, Meter};
-use crate::equality::plan_pairs;
+use crate::equality::plan_membership_pairs;
 use crate::integer::Integer;
 use crate::key::compare_keys;
 use crate::outcome::{BoundViolation, CheckedInvariantCause, Outcome, Refusal, Stop};
@@ -632,7 +632,9 @@ fn coalesce(
 }
 
 /// One charged membership comparison of candidate `c` with member `m`,
-/// under `collection.member-walk`/`collection.member-test`. `pub`, not
+/// under `collection.member-walk`/`collection.member-test`. Float leaves use
+/// width-specific bit identity, including NaN payloads and signed zero.
+/// This membership relation does not enable ordinary float equality. `pub`, not
 /// `pub(crate)`: its caller (an evaluator,
 /// for `Contains`) is a separate crate from this one.
 pub fn member_equal(candidate: &Value, member: &Value, meter: &mut Meter) -> Outcome<bool> {
@@ -650,13 +652,13 @@ fn member_equal_stop(candidate: &Value, member: &Value, meter: &mut Meter) -> Re
             .work(candidate_occ.add(&member_occ)),
     )?;
     // `member` is the universe already in force (the collection's), and
-    // `candidate` the value tested against it, so `plan_pairs(member,
+    // `candidate` the value tested against it, so `plan_membership_pairs(member,
     // candidate)` -- not the reverse -- keeps a `ForeignReference`'s
     // `required` naming the collection's own universe and `supplied` the
     // probe's (the `required`/`supplied` convention;
-    // `plan_pairs` is symmetric, so this does not change the pair count or
+    // `plan_membership_pairs` is symmetric, so this does not change the pair count or
     // result).
-    let plan = plan_pairs(member, candidate).map_err(Stop::Refused)?;
+    let plan = plan_membership_pairs(member, candidate).map_err(Stop::Refused)?;
     meter.charge(
         Charge::new(ChargePoint::CollectionMemberTest)
             .exact_size(LimitKind::ValueOccurrences, plan.pairs.clone())
@@ -845,5 +847,255 @@ mod tests {
         assert_eq!(incomplete.charge_point, ChargePoint::CollectionBound);
         assert_eq!(incomplete.limit_kind, LimitKind::ValueOccurrences);
         assert_eq!(incomplete.limit, 999);
+    }
+}
+
+#[cfg(test)]
+mod float_membership_tests {
+    use super::*;
+    use crate::accounting::{InjectedDenial, ScalarLimits};
+    use crate::ieee::{FloatType, IeeeValue, IeeeWidth};
+    use crate::value::OptionValue;
+    use core::num::NonZeroU64;
+    use ix_trace_rs::trace;
+
+    fn meter() -> Meter {
+        Meter::new(ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: u64::MAX,
+            work_units: u64::MAX,
+            result_units: u64::MAX,
+        })
+    }
+
+    #[trace("FR-393-AC-1")]
+    #[test]
+    fn membership_compares_all_float_bits_at_both_widths() {
+        for (same, different) in [
+            (
+                IeeeValue::binary32(0x7fc00001),
+                IeeeValue::binary32(0x7fc00002),
+            ),
+            (
+                IeeeValue::binary32(0x7fc00001),
+                IeeeValue::binary32(0xffc00001),
+            ),
+            (
+                IeeeValue::binary32(0x7f800001),
+                IeeeValue::binary32(0x7fc00001),
+            ),
+            (IeeeValue::binary32(0), IeeeValue::binary32(0x80000000)),
+            (
+                IeeeValue::binary32(0x7f800000),
+                IeeeValue::binary32(0xff800000),
+            ),
+            (
+                IeeeValue::binary64(0x7ff8000000000001),
+                IeeeValue::binary64(0x7ff8000000000002),
+            ),
+            (
+                IeeeValue::binary64(0x7ff8000000000001),
+                IeeeValue::binary64(0xfff8000000000001),
+            ),
+            (
+                IeeeValue::binary64(0x7ff0000000000001),
+                IeeeValue::binary64(0x7ff8000000000001),
+            ),
+            (
+                IeeeValue::binary64(0),
+                IeeeValue::binary64(0x8000000000000000),
+            ),
+            (
+                IeeeValue::binary64(0x7ff0000000000000),
+                IeeeValue::binary64(0xfff0000000000000),
+            ),
+        ] {
+            assert!(matches!(
+                member_equal(&Value::Float(same), &Value::Float(same), &mut meter()),
+                Outcome::Completed(true)
+            ));
+            assert!(matches!(
+                member_equal(&Value::Float(same), &Value::Float(different), &mut meter()),
+                Outcome::Completed(false)
+            ));
+        }
+    }
+
+    #[trace("FR-393-AC-1")]
+    #[test]
+    fn collection_formation_coalesces_only_identical_float_patterns() {
+        for kind in [CollectionKind::Sequence, CollectionKind::OrderedSet] {
+            let ty = CollectionType::new(
+                kind,
+                ValueType::Float(FloatType::exact(IeeeWidth::Binary64)),
+                None,
+            );
+            let patterns = [
+                0x7ff8000000000001,
+                0x7ff8000000000001,
+                0x7ff8000000000002,
+                0,
+                0x8000000000000000,
+            ];
+            let input = patterns
+                .map(|bits| Value::Float(IeeeValue::binary64(bits)))
+                .to_vec();
+            let value = form_collection(&ty, input, &mut meter())
+                .unwrap()
+                .completed()
+                .unwrap();
+            let Value::Collection(value) = value else {
+                panic!("collection result")
+            };
+            let observed: Vec<_> = value
+                .elements()
+                .iter()
+                .map(|value| {
+                    let Value::Float(value) = value else {
+                        panic!("float member")
+                    };
+                    value.bits()
+                })
+                .collect();
+            assert_eq!(
+                observed.len(),
+                if matches!(kind, CollectionKind::Set | CollectionKind::OrderedSet) {
+                    4
+                } else {
+                    5
+                }
+            );
+            for bits in [
+                0x7ff8000000000001,
+                0x7ff8000000000002,
+                0,
+                0x8000000000000000,
+            ] {
+                assert!(observed.contains(&bits));
+            }
+            if kind == CollectionKind::Sequence {
+                assert_eq!(observed, patterns);
+            }
+            if kind == CollectionKind::OrderedSet {
+                assert_eq!(
+                    observed,
+                    [patterns[0], patterns[2], patterns[3], patterns[4]]
+                );
+            }
+        }
+    }
+
+    #[trace("FR-393-AC-2", "FR-393-AC-3")]
+    #[test]
+    fn nested_float_membership_retains_pair_schedule_without_short_circuiting() {
+        let ty = CollectionType::new(
+            CollectionKind::Sequence,
+            ValueType::Float(FloatType::exact(IeeeWidth::Binary64)),
+            None,
+        );
+        let nested = |bits| {
+            let value = form_grouped(
+                &ty,
+                vec![
+                    Value::Float(IeeeValue::binary64(bits)),
+                    Value::Float(IeeeValue::binary64(0)),
+                ],
+                &mut meter(),
+            )
+            .completed()
+            .unwrap();
+            OptionValue::present(ValueType::collection(ty.clone()), value).unwrap()
+        };
+        let left = nested(0x7ff8000000000001);
+        let right = nested(0x7ff8000000000002);
+        let mut observed = meter();
+        assert!(matches!(
+            member_equal(&left, &right, &mut observed),
+            Outcome::Completed(false)
+        ));
+        // Option + collection + both leaves = four occurrence pairs,
+        // even though the first leaf mismatches.
+        assert_eq!(observed.admission_count(), 2);
+        assert_eq!(observed.consumed(LimitKind::WorkUnits), 12);
+        assert_eq!(observed.consumed(LimitKind::ResultUnits), 0);
+        #[cfg(feature = "test-support")]
+        {
+            let mut expected = meter();
+            expected
+                .charge(
+                    Charge::new(ChargePoint::CollectionMemberWalk)
+                        .exact_size(LimitKind::ValueOccurrences, Integer::from(4_u64))
+                        .work(Integer::from(8_u64)),
+                )
+                .unwrap();
+            expected
+                .charge(
+                    Charge::new(ChargePoint::CollectionMemberTest)
+                        .exact_size(LimitKind::ValueOccurrences, Integer::from(4_u64))
+                        .work(Integer::from(4_u64)),
+                )
+                .unwrap();
+            assert_eq!(observed.admitted_charges(), expected.admitted_charges());
+        }
+    }
+
+    #[trace("FR-393-AC-3")]
+    #[test]
+    fn float_membership_denials_preserve_admitted_prefix() {
+        let value = Value::Float(IeeeValue::binary64(0x7ff8000000000001));
+        for (point, admitted, work) in [
+            (ChargePoint::CollectionMemberWalk, 0, 0),
+            (ChargePoint::CollectionMemberTest, 1, 2),
+        ] {
+            let mut observed = meter().with_injected_denial(InjectedDenial {
+                point,
+                occurrence: NonZeroU64::new(1).unwrap(),
+            });
+            assert!(
+                matches!(member_equal(&value, &value, &mut observed), Outcome::Incomplete(cause) if cause.charge_point == point)
+            );
+            assert_eq!(observed.admission_count(), admitted);
+            assert_eq!(observed.consumed(LimitKind::WorkUnits), work);
+            assert_eq!(observed.consumed(LimitKind::ResultUnits), 0);
+        }
+    }
+
+    #[trace("FR-393-AC-4")]
+    #[test]
+    fn membership_keeps_typed_malformed_refusals_and_ordinary_float_ineligibility() {
+        let left = Value::Float(IeeeValue::binary32(0));
+        for right in [Value::Float(IeeeValue::binary64(0)), Value::Boolean(false)] {
+            let mut observed = meter();
+            assert!(matches!(
+                member_equal(&left, &right, &mut observed),
+                Outcome::Refused(Refusal::CheckedInvariant {
+                    cause: CheckedInvariantCause::ValueKindMismatch
+                })
+            ));
+            assert_eq!(observed.admission_count(), 1);
+        }
+        assert!(matches!(
+            crate::equality::plan_equality(&left, &left),
+            Err(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::ValueKindMismatch
+            })
+        ));
+        let nested = OptionValue::present(
+            ValueType::Float(FloatType::exact(IeeeWidth::Binary32)),
+            left,
+        )
+        .unwrap();
+        assert!(matches!(
+            crate::equality::plan_equality(&nested, &nested),
+            Err(Refusal::CheckedInvariant {
+                cause: CheckedInvariantCause::ValueKindMismatch
+            })
+        ));
     }
 }
