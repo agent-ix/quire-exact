@@ -14,7 +14,7 @@
 //! one declaration continue by slots in declaration order.
 //!
 //! **`Value::Float` has no key, matching its exclusion from `=`.**
-//! [`crate::equality`]'s own leaf match excludes `Value::Float` the same
+//! [`crate::equality`]'s ordinary leaf relation excludes `Value::Float` the same
 //! way this module's `leaf` function does -- both fall through to their
 //! catch-all refusal arm. IEEE equality (`NaN != NaN`, `-0.0 == 0.0`) is not
 //! the total-order `=` this key and the generic equality plan give every

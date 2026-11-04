@@ -491,7 +491,6 @@ fn equal_keys_exactly_when_values_are_equal() {
     }
 }
 
-/// Trace: FR-377-AC-6
 #[trace("TC-925", "FR-377-AC-6")]
 #[test]
 fn pairs_without_a_key_stay_unkeyed_and_refuse() {
@@ -518,7 +517,11 @@ fn pairs_without_a_key_stay_unkeyed_and_refuse() {
     let unavailable = Refusal::CheckedInvariant {
         cause: CheckedInvariantCause::CanonicalKeyUnavailable,
     };
-    for (left, right) in [(float(), float2()), (p100(), integer), (p100(), bad)] {
+    for (left, right, expected) in [
+        (float(), float2(), unavailable.clone()),
+        (p100(), integer, mismatch()),
+        (p100(), bad, mismatch()),
+    ] {
         let collection_type = coll_type(CollectionKind::Set);
         let grouped = form_grouped(
             &collection_type,
@@ -527,7 +530,7 @@ fn pairs_without_a_key_stay_unkeyed_and_refuse() {
         );
         assert_eq!(refusal_of(grouped), unavailable);
         let formed = form(&collection_type, vec![left, right], &mut meter());
-        assert_eq!(refusal_of(formed), mismatch());
+        assert_eq!(refusal_of(formed), expected);
     }
 }
 

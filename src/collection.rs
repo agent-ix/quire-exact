@@ -1049,6 +1049,15 @@ mod float_membership_tests {
     #[test]
     fn float_membership_denials_preserve_admitted_prefix() {
         let value = Value::Float(IeeeValue::binary64(0x7ff8000000000001));
+        #[cfg(feature = "test-support")]
+        let expected = {
+            let mut expected = meter();
+            assert!(matches!(
+                member_equal(&value, &value, &mut expected),
+                Outcome::Completed(true)
+            ));
+            expected
+        };
         for (point, admitted, work) in [
             (ChargePoint::CollectionMemberWalk, 0, 0),
             (ChargePoint::CollectionMemberTest, 1, 2),
@@ -1063,6 +1072,11 @@ mod float_membership_tests {
             assert_eq!(observed.admission_count(), admitted);
             assert_eq!(observed.consumed(LimitKind::WorkUnits), work);
             assert_eq!(observed.consumed(LimitKind::ResultUnits), 0);
+            #[cfg(feature = "test-support")]
+            assert_eq!(
+                observed.admitted_charges(),
+                &expected.admitted_charges()[..usize::try_from(admitted).unwrap()]
+            );
         }
     }
 
