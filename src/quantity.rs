@@ -20,7 +20,7 @@ use crate::identity::UnitId;
 use crate::integer::IntegerInterval;
 use crate::numeric::{evaluate_rational_arithmetic, rational_ordering_bits, RationalArithmetic};
 use crate::outcome::{Outcome, Stop};
-use crate::rational::Rational;
+use crate::rational::{Rational, RationalDomain};
 
 /// A quantity value: a magnitude in exactly one unit.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -32,9 +32,9 @@ pub struct Quantity {
 /// The bounded scalar representation carried by a quantity type.
 ///
 /// The integer carrier stores its rounding mode separately because the
-/// integer domain itself has no scale or rounding metadata. Decimal carriers
-/// retain their complete declared type, including bounds, scale range and
-/// rounding mode.
+/// integer domain itself has no scale or rounding metadata. Decimal and
+/// rational carriers retain their complete declared types, including bounds,
+/// scale range and rounding mode where applicable.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum QuantityCarrier {
     /// A bounded `Decimal[lo, hi; smin, smax; mode]` carrier.
@@ -46,6 +46,8 @@ pub enum QuantityCarrier {
         /// The rounding mode used at scale zero.
         rounding: RoundingMode,
     },
+    /// A bounded `Rational[nmin, nmax; dmin, dmax]` carrier, with exact mode.
+    Rational(RationalDomain),
 }
 
 /// The structural type identity of `Quantity<unit, carrier>`.
