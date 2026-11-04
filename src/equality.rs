@@ -177,6 +177,25 @@ enum Pair<'a> {
 /// different slot counts, two populations and two collections of different
 /// kinds are malformed, and refuse with the checked invariant.
 pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Refusal> {
+    plan_pairs_with_relation(left, right, LeafRelation::Ordinary)
+}
+
+/// Collection membership uses bit identity at float leaves, including nested ones.
+pub(crate) fn plan_membership_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Refusal> {
+    plan_pairs_with_relation(left, right, LeafRelation::Membership)
+}
+
+#[derive(Clone, Copy)]
+enum LeafRelation {
+    Ordinary,
+    Membership,
+}
+
+fn plan_pairs_with_relation(
+    left: &Value,
+    right: &Value,
+    relation: LeafRelation,
+) -> Result<PlannedPairs, Refusal> {
     let mut pairs = Integer::zero();
     let mut equal = true;
     let mut pending = vec![Pair::Values(left, right)];
@@ -193,6 +212,11 @@ pub(crate) fn plan_pairs(left: &Value, right: &Value) -> Result<PlannedPairs, Re
             Pair::Values(left, right) => (left, right),
         };
         let leaf = match (left, right) {
+            (Value::Float(l), Value::Float(r))
+                if matches!(relation, LeafRelation::Membership) && l.width() == r.width() =>
+            {
+                l == r
+            }
             (Value::Boolean(l), Value::Boolean(r)) => l == r,
             (Value::Integer(l), Value::Integer(r)) => l == r,
             (Value::Rational(l), Value::Rational(r)) => l == r,

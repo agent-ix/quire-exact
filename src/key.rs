@@ -14,17 +14,16 @@
 //! one declaration continue by slots in declaration order.
 //!
 //! **`Value::Float` has no key, matching its exclusion from `=`.**
-//! [`crate::equality`]'s own leaf match excludes `Value::Float` the same
+//! [`crate::equality`]'s ordinary leaf relation excludes `Value::Float` the same
 //! way this module's `leaf` function does -- both fall through to their
 //! catch-all refusal arm. IEEE equality (`NaN != NaN`, `-0.0 == 0.0`) is not
 //! the total-order `=` this key and the generic equality plan give every
 //! other leaf type, so IEEE comparison stays [`crate::compare_ieee`]'s own
 //! `IeeeComparison` (`NumericEqual`/`TotalOrder`/`BitIdentical`), never this
-//! key or `=`. `crate::collection`'s set/bag coalescing groups occurrences by
-//! `equality.rs`'s charged member comparison, not this key, so a Float set
-//! or bag of one element still forms; the same `Refusal::CheckedInvariant`
-//! that would stop this key on a Float pair also stops the first
-//! two-element membership comparison there.
+//! key or `=`. Collection membership separately compares float leaves by
+//! bit identity, but this key still has no float ordering. Thus ordered-set
+//! coalescing can use that membership relation; set/bag formation still
+//! refuses when canonical ordering requires a float key.
 //!
 //! `Value::Enum` is [`crate::value::EnumMember`] here -- a bare
 //! [`crate::identity::VariantId`] paired with its zero-based canonical rank --
