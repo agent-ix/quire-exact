@@ -442,6 +442,13 @@ mod tests {
                     rounding: RoundingMode::Exact,
                 },
             )),
+            ValueType::carried_quantity(CarriedQuantityType::new(
+                UnitId::declared(NodeKey::fixture(12)),
+                QuantityCarrier::Rational(
+                    RationalDomain::new(interval(-2, 2), interval(1, 4))
+                        .expect("well formed rational carrier"),
+                ),
+            )),
             ValueType::collection(CollectionType::new(
                 CollectionKind::Sequence,
                 ValueType::Boolean,
@@ -604,6 +611,15 @@ mod tests {
             domain: interval(lower, upper),
             rounding,
         };
+        let rational = |numerator_lower, numerator_upper, denominator_lower, denominator_upper| {
+            QuantityCarrier::Rational(
+                RationalDomain::new(
+                    interval(numerator_lower, numerator_upper),
+                    interval(denominator_lower, denominator_upper),
+                )
+                .expect("well formed rational carrier"),
+            )
+        };
         let carried =
             |unit, carrier| ValueType::carried_quantity(CarriedQuantityType::new(unit, carrier));
 
@@ -618,7 +634,10 @@ mod tests {
                 decimal(-100, 100, 2, 4, RoundingMode::NearestEven),
             ),
             carried(unit.clone(), integer(-2, 2, RoundingMode::Exact)),
-            carried(other_unit, decimal(-100, 100, 2, 4, RoundingMode::Exact)),
+            carried(
+                other_unit.clone(),
+                decimal(-100, 100, 2, 4, RoundingMode::Exact),
+            ),
         ];
 
         let clone = exact_decimal.clone();
@@ -631,12 +650,27 @@ mod tests {
         let exact_integer = carried(unit.clone(), integer(-2, 2, RoundingMode::Exact));
         let equal_integer = carried(unit.clone(), integer(-2, 2, RoundingMode::Exact));
         let differing_integer_bounds = carried(unit.clone(), integer(-3, 2, RoundingMode::Exact));
-        let differing_integer_rounding = carried(unit, integer(-2, 2, RoundingMode::NearestEven));
+        let differing_integer_rounding =
+            carried(unit.clone(), integer(-2, 2, RoundingMode::NearestEven));
 
         assert_eq!(exact_integer, equal_integer);
         assert_eq!(hash_of(&exact_integer), hash_of(&equal_integer));
         assert_ne!(exact_integer, differing_integer_bounds);
         assert_ne!(exact_integer, differing_integer_rounding);
+
+        let exact_rational = carried(unit.clone(), rational(-3, 7, 1, 12));
+        let equal_rational = carried(unit.clone(), rational(-3, 7, 1, 12));
+        assert_eq!(exact_rational, equal_rational);
+        assert_eq!(hash_of(&exact_rational), hash_of(&equal_rational));
+        for differing in [
+            carried(unit.clone(), rational(-2, 7, 1, 12)),
+            carried(unit.clone(), rational(-3, 6, 1, 12)),
+            carried(unit.clone(), rational(-3, 7, 2, 12)),
+            carried(unit.clone(), rational(-3, 7, 1, 11)),
+            carried(other_unit, rational(-3, 7, 1, 12)),
+        ] {
+            assert_ne!(exact_rational, differing);
+        }
     }
 
     /// The `Debug` worklist is the one heap stack these walks keep, and it
