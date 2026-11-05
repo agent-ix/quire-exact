@@ -34,3 +34,13 @@ FR-394 adds a kernel-owned unary IEEE operation. Examined its statement, four AC
 ## Analysis
 
 The added file copies the upstream normative vector set into local AC-1/2. No source or test code changed, so Rust, gap-analysis and test lanes do not apply.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Commit e016de5e replaces the copied QSpec bit-vector and mode matrix in AC-1/AC-2 with references to QSpec FR-148-AC-11. AC-1 states the kernel-owned sign-mask invariant and public API; AC-2 checks empty flags and provenance. AC-3 uses a distinct kernel meter control. |
+
+**FND-001 after excerpt (AC-1):** For each binary32 and binary64 bit pattern identified by [QSpec FR-148-AC-11](ix://agent-ix/quire-specification/FR-148), public `evaluate_ieee(IeeeOperation::Negate(value), mode, meter)` completes with the same width and bits equal to the operand bits XOR the width's sign mask (`0x80000000` or `0x8000000000000000`). `IeeeOperation::Negate(value).kind()` is `IeeeOperationKind::Negate`; a second public negation returns the original bits, including each NaN's signaling bit and payload. The test asserts completed value bits for every input.
+
+**Current verdict:** PASS. No new findings in the fix diff; the historical review finding remains above.
