@@ -2337,7 +2337,7 @@ mod tests {
                 0,
                 &mut |_| { panic!("shape refusal precedes reservation") }
             ),
-            Err(NodeKeyConstructionError::Construction(
+            Err(NodeKeyConstructionError::<()>::Construction(
                 InvalidNodeKey::EmptyPackage
             ))
         );
@@ -2345,7 +2345,7 @@ mod tests {
             NodeKey::try_new_with("owner".into(), Vec::new(), 0, &mut |_| {
                 panic!("shape refusal precedes reservation")
             }),
-            Err(NodeKeyConstructionError::Construction(
+            Err(NodeKeyConstructionError::<()>::Construction(
                 InvalidNodeKey::EmptyPath
             ))
         );
@@ -2356,7 +2356,7 @@ mod tests {
                 MAX_NODE_ORDINAL + 1,
                 &mut |_| panic!("shape refusal precedes reservation")
             ),
-            Err(NodeKeyConstructionError::Construction(
+            Err(NodeKeyConstructionError::<()>::Construction(
                 InvalidNodeKey::OrdinalOutOfRange
             ))
         );
