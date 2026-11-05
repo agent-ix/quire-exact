@@ -342,6 +342,8 @@ impl<'a> From<ExactScalar<'a>> for IeeeOperand<'a> {
 /// convertible to [`IeeeOperand`] is accepted and type-checked.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum IeeeOperation<O = IeeeValue> {
+    /// Flip the operand's sign bit without rounding or changing its payload.
+    Negate(O),
     /// `a + b`.
     Add(O, O),
     /// `a - b`.
@@ -360,6 +362,7 @@ impl<O> IeeeOperation<O> {
     /// The operation's kind.
     pub fn kind(&self) -> IeeeOperationKind {
         match self {
+            Self::Negate(..) => IeeeOperationKind::Negate,
             Self::Add(..) => IeeeOperationKind::Add,
             Self::Subtract(..) => IeeeOperationKind::Subtract,
             Self::Multiply(..) => IeeeOperationKind::Multiply,
@@ -371,6 +374,7 @@ impl<O> IeeeOperation<O> {
 
     fn try_map<P, E>(self, mut f: impl FnMut(O) -> Result<P, E>) -> Result<IeeeOperation<P>, E> {
         Ok(match self {
+            Self::Negate(a) => IeeeOperation::Negate(f(a)?),
             Self::Add(a, b) => IeeeOperation::Add(f(a)?, f(b)?),
             Self::Subtract(a, b) => IeeeOperation::Subtract(f(a)?, f(b)?),
             Self::Multiply(a, b) => IeeeOperation::Multiply(f(a)?, f(b)?),
@@ -394,6 +398,7 @@ fn ieee_operand<'a>(operand: impl Into<IeeeOperand<'a>>) -> Result<IeeeValue, Il
 impl IeeeOperation {
     fn arity(self) -> u64 {
         match self {
+            Self::Negate(..) => 1,
             Self::Add(..) | Self::Subtract(..) | Self::Multiply(..) | Self::Divide(..) => 2,
             Self::SquareRoot(..) => 1,
             Self::FusedMultiplyAdd(..) => 3,
@@ -403,6 +408,7 @@ impl IeeeOperation {
     /// The first operand and the rest, for the width check.
     fn operands(self) -> (IeeeValue, Vec<IeeeValue>) {
         match self {
+            Self::Negate(a) => (a, Vec::new()),
             Self::Add(a, b) | Self::Subtract(a, b) | Self::Multiply(a, b) | Self::Divide(a, b) => {
                 (a, vec![b])
             }
@@ -440,6 +446,8 @@ impl IeeeComparison {
 /// Every IEEE operation a package item may require of a backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IeeeOperationKind {
+    /// Bitwise sign negation.
+    Negate,
     /// Addition.
     Add,
     /// Subtraction.
@@ -468,7 +476,8 @@ pub enum IeeeOperationKind {
 
 impl IeeeOperationKind {
     /// Every kind.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
+        Self::Negate,
         Self::Add,
         Self::Subtract,
         Self::Multiply,
@@ -486,6 +495,7 @@ impl IeeeOperationKind {
     /// The reserved qualified intrinsic identity, for the five QSpec-FR-148 intrinsics.
     pub fn intrinsic_identity(self) -> Option<&'static str> {
         match self {
+            Self::Negate => None,
             Self::SquareRoot => Some("quire::value::ieee::sqrt"),
             Self::FusedMultiplyAdd => Some("quire::value::ieee::fma"),
             Self::NumericEqual => Some("quire::value::ieee::numericEqual"),
@@ -504,6 +514,7 @@ impl IeeeOperationKind {
     /// Whether the operation applies a rounding direction.
     pub fn rounds(self) -> bool {
         match self {
+            Self::Negate => false,
             Self::Add
             | Self::Subtract
             | Self::Multiply
@@ -1035,7 +1046,19 @@ fn arithmetic(
     let format = width.format();
     charge_operands(meter, width, operation.arity())?;
     let provenance = IeeeProvenance { width, rounding };
+    if let IeeeOperation::Negate(value) = operation {
+        charge_result(meter)?;
+        return Ok(IeeeResult {
+            value: IeeeValue {
+                width,
+                bits: value.bits ^ format.sign_mask(),
+            },
+            flags: IeeeFlags::EMPTY,
+            provenance,
+        });
+    }
     let plan = match operation {
+        IeeeOperation::Negate(_) => unreachable!("negation returned before arithmetic planning"),
         IeeeOperation::Add(a, b) => classify(format, [a, b]).map(|[a, b]| plan_add(format, a, b)),
         IeeeOperation::Subtract(a, b) => {
             classify(format, [a, b]).map(|[a, b]| plan_add(format, a, b.negated()))

@@ -540,9 +540,14 @@ mod tests {
         assert!(format!("{:?}", samples[11]).starts_with("Reference(EffectiveId("));
         assert_eq!(format!("{:?}", samples[12]), "Population(Some(5))");
         assert_eq!(format!("{:?}", samples[13]), "Population(None)");
-        assert!(format!("{:?}", samples[14]).starts_with("CarriedQuantity(CarriedQuantityType {"));
+        let integer_carried = format!("{:?}", samples[14]);
+        assert!(integer_carried.starts_with("CarriedQuantity(CarriedQuantityType {"));
+        assert!(integer_carried.contains("carrier: Integer {"));
+        let rational_carried = format!("{:?}", samples[15]);
+        assert!(rational_carried.starts_with("CarriedQuantity(CarriedQuantityType {"));
+        assert!(rational_carried.contains("carrier: Rational("));
         assert_eq!(
-            format!("{:?}", samples[15]),
+            format!("{:?}", samples[16]),
             "Collection(CollectionType { kind: Sequence, element: Boolean, bound: None })"
         );
 
