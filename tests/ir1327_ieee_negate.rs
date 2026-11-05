@@ -2,9 +2,11 @@
 //! Public IEEE sign negation and native meter evidence.
 
 use quire_exact::{
-    evaluate_ieee, ChargePoint, IeeeOperation, IeeeOperationKind, IeeeValue, IeeeWidth, Integer,
-    LimitKind, Meter, Outcome, RoundingMode, ScalarLimits,
+    evaluate_ieee, IeeeOperation, IeeeOperationKind, IeeeValue, IeeeWidth, Meter, RoundingMode,
+    ScalarLimits,
 };
+#[cfg(feature = "test-support")]
+use quire_exact::{ChargePoint, Integer, LimitKind, Outcome};
 
 fn limits(width: u64, work: u64) -> ScalarLimits {
     ScalarLimits {
@@ -98,6 +100,7 @@ fn negate_flips_only_sign_for_qspec_patterns_under_every_mode() {
 }
 
 /// Trace: FR-394-AC-3
+#[cfg(feature = "test-support")]
 #[test]
 fn negate_charges_only_operand_and_result_retention() {
     for (source, expected) in [
@@ -136,6 +139,7 @@ fn negate_charges_only_operand_and_result_retention() {
 }
 
 /// Trace: FR-394-AC-4
+#[cfg(feature = "test-support")]
 #[test]
 fn negate_denial_exposes_only_admitted_prefix() {
     for (width_limit, work_limit, point, kind, limit, consumed, next, admitted) in [
