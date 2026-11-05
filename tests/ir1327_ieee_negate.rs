@@ -145,12 +145,12 @@ fn negate_denial_exposes_only_admitted_prefix() {
     for (width_limit, work_limit, point, kind, limit, consumed, next, admitted) in [
         (
             32,
-            1,
+            1_u64,
             ChargePoint::IeeeResultRetain,
             LimitKind::WorkUnits,
             1,
             1,
-            1,
+            1_u64,
             vec![ChargePoint::IeeeOperands],
         ),
         (
