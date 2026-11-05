@@ -181,6 +181,15 @@ pub enum InvalidNodeKey {
     },
 }
 
+/// A policy-aware node-key construction failed at the caller policy or in the kernel.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NodeKeyConstructionError<PolicyRefusal> {
+    /// The caller's original refusal, before the corresponding reservation.
+    Policy(PolicyRefusal),
+    /// A malformed shape, unrepresentable byte request or native allocation failure.
+    Construction(InvalidNodeKey),
+}
+
 fn flat_reservation_bytes(count: usize) -> Result<usize, InvalidNodeKey> {
     count
         .checked_mul(core::mem::size_of::<FlatSegment>())
@@ -810,23 +819,39 @@ impl NodeKey {
         path: Vec<PathSegment>,
         ordinal: u64,
     ) -> Result<Self, InvalidNodeKey> {
-        Self::try_new_with(package, path, ordinal, &mut |_| Ok(()))
+        Self::try_new_with(package, path, ordinal, &mut |_| {
+            Ok::<(), core::convert::Infallible>(())
+        })
+        .map_err(|error| match error {
+            NodeKeyConstructionError::Policy(never) => match never {},
+            NodeKeyConstructionError::Construction(error) => error,
+        })
     }
 
-    fn try_new_with(
+    /// Construct a key from already owned components, presenting each internal
+    /// reservation's minimum additional payload bytes to `before_reserve` first.
+    /// A caller refusal remains distinct from invalid shape and native allocation
+    /// failure; package and path input allocations belong to the caller.
+    pub fn try_new_with<PolicyRefusal>(
         package: String,
         path: Vec<PathSegment>,
         ordinal: u64,
-        before_reserve: &mut impl FnMut(usize) -> Result<(), InvalidNodeKey>,
-    ) -> Result<Self, InvalidNodeKey> {
+        before_reserve: &mut impl FnMut(usize) -> Result<(), PolicyRefusal>,
+    ) -> Result<Self, NodeKeyConstructionError<PolicyRefusal>> {
         if package.is_empty() {
-            return Err(InvalidNodeKey::EmptyPackage);
+            return Err(NodeKeyConstructionError::Construction(
+                InvalidNodeKey::EmptyPackage,
+            ));
         }
         if path.is_empty() {
-            return Err(InvalidNodeKey::EmptyPath);
+            return Err(NodeKeyConstructionError::Construction(
+                InvalidNodeKey::EmptyPath,
+            ));
         }
         if ordinal > MAX_NODE_ORDINAL {
-            return Err(InvalidNodeKey::OrdinalOutOfRange);
+            return Err(NodeKeyConstructionError::Construction(
+                InvalidNodeKey::OrdinalOutOfRange,
+            ));
         }
         let mut token_count = 3_usize;
         for segment in &path {
@@ -834,21 +859,22 @@ impl NodeKey {
             construction_probe::direct_visit();
             let additional = match segment {
                 PathSegment::Text(_) => 1,
-                PathSegment::Node(node) => nested_token_count(node.inner.token_count)?,
+                PathSegment::Node(node) => nested_token_count(node.inner.token_count)
+                    .map_err(NodeKeyConstructionError::Construction)?,
             };
-            token_count =
-                token_count
-                    .checked_add(additional)
-                    .ok_or(InvalidNodeKey::Allocation {
-                        requested: usize::MAX,
-                    })?;
+            token_count = token_count.checked_add(additional).ok_or(
+                NodeKeyConstructionError::Construction(InvalidNodeKey::Allocation {
+                    requested: usize::MAX,
+                }),
+            )?;
         }
-        let requested = flat_reservation_bytes(path.len())?;
-        before_reserve(requested)?;
+        let requested =
+            flat_reservation_bytes(path.len()).map_err(NodeKeyConstructionError::Construction)?;
+        before_reserve(requested).map_err(NodeKeyConstructionError::Policy)?;
         let mut direct = Vec::new();
-        direct
-            .try_reserve_exact(path.len())
-            .map_err(|_| InvalidNodeKey::Allocation { requested })?;
+        direct.try_reserve_exact(path.len()).map_err(|_| {
+            NodeKeyConstructionError::Construction(InvalidNodeKey::Allocation { requested })
+        })?;
         for segment in path {
             #[cfg(test)]
             construction_probe::direct_move();
@@ -858,18 +884,22 @@ impl NodeKey {
             });
         }
         let frame_request = core::mem::size_of::<DropFrame>();
-        before_reserve(frame_request)?;
+        before_reserve(frame_request).map_err(NodeKeyConstructionError::Policy)?;
         let frame = Box::try_new(DropFrame {
             pending: Vec::new(),
             next: None,
         })
-        .map_err(|_| InvalidNodeKey::Allocation {
-            requested: frame_request,
+        .map_err(|_| {
+            NodeKeyConstructionError::Construction(InvalidNodeKey::Allocation {
+                requested: frame_request,
+            })
         })?;
-        let arc_request = node_arc_bytes().map_err(|_| InvalidNodeKey::Allocation {
-            requested: usize::MAX,
+        let arc_request = node_arc_bytes().map_err(|_| {
+            NodeKeyConstructionError::Construction(InvalidNodeKey::Allocation {
+                requested: usize::MAX,
+            })
         })?;
-        before_reserve(arc_request)?;
+        before_reserve(arc_request).map_err(NodeKeyConstructionError::Policy)?;
         let structural_hash = structural_hash(&package, &direct, ordinal);
         let chain_order = chain_order(&package, &direct);
         let inner = Arc::try_new(NodeData {
@@ -881,8 +911,10 @@ impl NodeKey {
             chain_order,
             drop_frame: Some(frame),
         })
-        .map_err(|_| InvalidNodeKey::Allocation {
-            requested: arc_request,
+        .map_err(|_| {
+            NodeKeyConstructionError::Construction(InvalidNodeKey::Allocation {
+                requested: arc_request,
+            })
         })?;
         Ok(Self { inner })
     }
@@ -2203,9 +2235,11 @@ mod tests {
             );
             assert_eq!(
                 result,
-                Err(InvalidNodeKey::Allocation {
-                    requested: new_requests[fail_at]
-                })
+                Err(NodeKeyConstructionError::Policy(
+                    InvalidNodeKey::Allocation {
+                        requested: new_requests[fail_at]
+                    }
+                ))
             );
             assert_eq!(call, fail_at + 1);
         }
@@ -2303,13 +2337,17 @@ mod tests {
                 0,
                 &mut |_| { panic!("shape refusal precedes reservation") }
             ),
-            Err(InvalidNodeKey::EmptyPackage)
+            Err(NodeKeyConstructionError::<()>::Construction(
+                InvalidNodeKey::EmptyPackage
+            ))
         );
         assert_eq!(
             NodeKey::try_new_with("owner".into(), Vec::new(), 0, &mut |_| {
                 panic!("shape refusal precedes reservation")
             }),
-            Err(InvalidNodeKey::EmptyPath)
+            Err(NodeKeyConstructionError::<()>::Construction(
+                InvalidNodeKey::EmptyPath
+            ))
         );
         assert_eq!(
             NodeKey::try_new_with(
@@ -2318,8 +2356,88 @@ mod tests {
                 MAX_NODE_ORDINAL + 1,
                 &mut |_| panic!("shape refusal precedes reservation")
             ),
-            Err(InvalidNodeKey::OrdinalOutOfRange)
+            Err(NodeKeyConstructionError::<()>::Construction(
+                InvalidNodeKey::OrdinalOutOfRange
+            ))
         );
+    }
+
+    /// Trace: FR-389-AC-15, TC-938.
+    #[trace("FR-389-AC-15", "TC-938")]
+    #[test]
+    fn policy_aware_construction_charges_before_reserve_and_preserves_value() {
+        #[derive(Debug, Eq, PartialEq)]
+        struct Denied;
+
+        let child = key("child", vec![PathSegment::Text("leaf".into())], 2);
+        let path = || {
+            vec![
+                PathSegment::Text("segment".into()),
+                PathSegment::Node(child.clone()),
+            ]
+        };
+        let ordinary = NodeKey::try_new("owner".into(), path(), 7).unwrap();
+        let mut requests = Vec::new();
+        let charged = NodeKey::try_new_with("owner".into(), path(), 7, &mut |requested| {
+            requests.push(requested);
+            Ok::<(), Denied>(())
+        })
+        .unwrap();
+        assert_eq!(
+            requests,
+            [
+                2 * core::mem::size_of::<FlatSegment>(),
+                core::mem::size_of::<DropFrame>(),
+                node_arc_bytes().unwrap(),
+            ]
+        );
+        assert_eq!(charged, ordinary);
+        assert_eq!(charged.cmp(&ordinary), Ordering::Equal);
+        let hash = |key: &NodeKey| {
+            let mut hasher = DefaultHasher::new();
+            key.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(hash(&charged), hash(&ordinary));
+
+        let package = String::from("owner");
+        let owned_path = path();
+        let mut observed = None;
+        let allocations = allocation_counter::measure(|| {
+            observed = Some(NodeKey::try_new_with(package, owned_path, 7, &mut |_| {
+                Err(Denied)
+            }));
+        });
+        assert_eq!(
+            observed,
+            Some(Err(NodeKeyConstructionError::Policy(Denied)))
+        );
+        assert_eq!(allocations.count_total, 0);
+        assert_eq!(allocations.bytes_total, 0);
+
+        for (package, path, ordinal, expected) in [
+            (String::new(), path(), 7, InvalidNodeKey::EmptyPackage),
+            (
+                String::from("owner"),
+                Vec::new(),
+                7,
+                InvalidNodeKey::EmptyPath,
+            ),
+            (
+                String::from("owner"),
+                path(),
+                MAX_NODE_ORDINAL + 1,
+                InvalidNodeKey::OrdinalOutOfRange,
+            ),
+        ] {
+            let result = NodeKey::try_new_with(package, path, ordinal, &mut |_| {
+                panic!("invalid shape must refuse before policy callback")
+            });
+            assert_eq!(
+                result,
+                Err(NodeKeyConstructionError::<Denied>::Construction(expected))
+            );
+        }
     }
 
     #[trace("TC-938", "FR-389-AC-1", "FR-389-AC-7")]
