@@ -56,3 +56,9 @@ CONDITIONAL: AC-24 has a trace binding but incomplete value oracles.
 ## Coverage
 
 Plan completion: not assessed. AC-22, AC-23 and AC-24 have computed nonignored test bindings. Reviewed actual general, unit-only and plan charge boundaries. Coder-reported focused tests, focused Clippy, spec validation and diff check accepted without rerun. Aggregate gates belong to lead.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Commit fed5e14 compares complete expected ChargeEvent values for all three Exact arithmetic and all three native ordering events, including work, results, reservations, ordered sizes and admission. |
