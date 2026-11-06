@@ -64,6 +64,29 @@ impl UnitsCharge {
 
 impl Meter {
     pub(crate) fn charge_units(&mut self, charge: UnitsCharge) -> Result<(), Incomplete> {
+        let request = self.charge_capture.as_ref().map(|capture| {
+            let size_requests = charge.first.iter().count() + charge.second.iter().count();
+            capture.can_record(size_requests).then(|| ChargeEvent {
+                point: charge.point,
+                work_units: Integer::from(charge.work),
+                result_units: Integer::from(charge.results),
+                work_reservation: None,
+                result_reservation: None,
+                sizes: charge
+                    .first
+                    .into_iter()
+                    .chain(charge.second)
+                    .map(|(kind, amount)| (kind, Integer::from(amount)))
+                    .collect(),
+                admission: ChargeAdmission::Denied,
+            })
+        });
+        let result = self.charge_units_inner(charge);
+        self.record_capture(request, result.is_ok());
+        result
+    }
+
+    fn charge_units_inner(&mut self, charge: UnitsCharge) -> Result<(), Incomplete> {
         let point = charge.point;
         if let Some(consumed) = self.injected_denial(point) {
             return Err(Incomplete {

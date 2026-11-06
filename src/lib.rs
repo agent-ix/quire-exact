@@ -100,8 +100,9 @@ mod value;
 #[cfg(feature = "test-support")]
 pub use accounting::AdmittedCharge;
 pub use accounting::{
-    length_amount, Charge, ChargeAccounting, ChargePoint, Incomplete, InjectedDenial, LimitKind,
-    Meter, ScalarLimits,
+    length_amount, Charge, ChargeAccounting, ChargeAdmission, ChargeCapture, ChargeEvent,
+    ChargePoint, Incomplete, InjectedDenial, LimitKind, Meter, ScalarLimits,
+    TruncatedChargeCapture,
 };
 pub use cancel::{Cancel, CancelCause, ChargeCount};
 pub use collection::{
