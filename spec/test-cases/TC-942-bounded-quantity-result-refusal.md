@@ -25,4 +25,4 @@ The endpoints complete in the target unit. `2/1` refuses without a value, retain
 
 ## Status
 
-Proposed.
+Implemented.

@@ -37,7 +37,7 @@ A caller has converted a quantity to unit `m` and has an exact magnitude of `2/1
 
 ## Status
 
-Proposed.
+Implemented.
 
 ## Dependencies
 
