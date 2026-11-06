@@ -53,3 +53,9 @@ CONDITIONAL: changed criterion tags exist, but the new branches lack behavioral 
 ## Coverage
 
 Plan completion: not assessed. Changed FR-395-AC-1 through AC-3 have computed nonignored trace bindings. Optional semantic fanout was not run. The final aggregate gate belongs to the lead.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The lower-outside result and three reversed-target magnitudes now have value assertions and trace tags. |

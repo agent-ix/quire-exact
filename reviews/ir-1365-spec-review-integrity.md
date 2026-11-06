@@ -62,3 +62,9 @@ FAIL: the new contract conflicts with FR-387-AC-2.
 ## Coverage
 
 Plan completion: not assessed. Changed FR-395-AC-1 through AC-3 have computed nonignored trace bindings. Optional semantic fanout was not run. The final aggregate gate belongs to the lead.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The reversed-target contract now preserves distinct empty intervals, and the constructor stores bounds without rejecting them. |

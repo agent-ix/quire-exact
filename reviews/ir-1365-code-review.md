@@ -63,3 +63,10 @@ FAIL: unmetered exact comparisons on public caller input.
 ## Coverage
 
 Plan completion: not assessed. Changed FR-395-AC-1 through AC-3 have computed nonignored trace bindings. Optional semantic fanout was not run. The final aggregate gate belongs to the lead.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | QuantityResultInterval::new now stores the supplied endpoints without comparing them. |
+| FND-002 | fixed | admit_quantity_result now calls the metered order_rationals helper for both endpoint comparisons. |

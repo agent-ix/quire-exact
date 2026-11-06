@@ -63,3 +63,10 @@ FAIL: conflicting bounded type semantics and incomplete acceptance coverage.
 ## Coverage
 
 Plan completion: not assessed. Changed FR-395-AC-1 through AC-3 have computed nonignored trace bindings. Optional semantic fanout was not run. The final aggregate gate belongs to the lead.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Behavior 1 now defines reversed bounds as a retained empty target, matching FR-387. |
+| FND-002 | fixed | AC-1 and AC-2 now include lower outside values; AC-4 covers reversed targets; AC-5 covers denied comparison charges. |
