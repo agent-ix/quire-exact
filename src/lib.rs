@@ -161,7 +161,6 @@ pub use outcome::{
 pub use quantity::{
     admit_quantity_result, compare_quantity, evaluate_quantity_arithmetic, BoundedQuantityType,
     CarriedQuantityType, Quantity, QuantityArithmetic, QuantityCarrier, QuantityResultInterval,
-    ReversedQuantityResultInterval,
 };
 pub use rational::{NonPositiveDenominatorBound, Rational, RationalDomain, ZeroDenominator};
 pub use reference::ObjectReference;

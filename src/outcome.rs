@@ -630,14 +630,11 @@ mod tests {
 
         let bound = Rational::from_integer(Integer::one());
         let quantity = Refusal::BoundedQuantityOutOfDomain {
-            target: Box::new(
-                QuantityResultInterval::new(
-                    crate::identity::UnitId::declared(crate::node::NodeKey::fixture(1)),
-                    bound.neg(),
-                    bound,
-                )
-                .expect("ordered bounds"),
-            ),
+            target: Box::new(QuantityResultInterval::new(
+                crate::identity::UnitId::declared(crate::node::NodeKey::fixture(1)),
+                bound.neg(),
+                bound,
+            )),
         };
         assert_eq!(quantity.code(), Some("rational_out_of_domain"));
         assert_eq!(quantity.cause(), Some("outside-domain"));
