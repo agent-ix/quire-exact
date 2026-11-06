@@ -368,6 +368,11 @@ mod tests {
 
         let outside = Quantity::new(Rational::from_integer(Integer::from(2_u64)), metres.clone());
         let refusal = admit_quantity_result(outside, &target).expect("same unit");
+        let Outcome::Refused(reason) = &refusal else {
+            panic!("outside result must refuse without a value");
+        };
+        assert_eq!(reason.code(), Some("rational_out_of_domain"));
+        assert_eq!(reason.cause(), Some("outside-domain"));
         let Outcome::Refused(Refusal::BoundedQuantityOutOfDomain { target: retained }) = refusal
         else {
             panic!("outside result must refuse without a value");
@@ -375,10 +380,6 @@ mod tests {
         assert_eq!(retained.unit(), &metres);
         assert_eq!(retained.min(), &min);
         assert_eq!(retained.max(), &max);
-        assert_eq!(
-            Refusal::BoundedQuantityOutOfDomain { target: retained }.code(),
-            Some("rational_out_of_domain")
-        );
     }
 
     /// adding two quantities in the same unit completes with the
