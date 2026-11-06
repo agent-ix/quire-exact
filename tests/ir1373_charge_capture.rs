@@ -126,17 +126,27 @@ fn capture_observes_opaque_exact_call_and_plan_boundary() {
     let capture = meter.disable_charge_capture().unwrap().unwrap();
     let events = capture.events();
     assert_eq!(events.len(), 4);
-    assert_eq!(events[0].point, ChargePoint::IntegerArithmeticOperands);
     assert_eq!(
-        events[0].sizes,
-        vec![
-            (LimitKind::IntegerBits, Integer::from(2_u64)),
-            (LimitKind::ValueOccurrences, Integer::from(2_u64)),
+        &events[..3],
+        &[
+            expected_event(
+                ChargePoint::IntegerArithmeticOperands,
+                1,
+                0,
+                &[
+                    (LimitKind::IntegerBits, 2),
+                    (LimitKind::ValueOccurrences, 2)
+                ],
+            ),
+            expected_event(
+                ChargePoint::IntegerArithmeticArithmetic,
+                1,
+                0,
+                &[(LimitKind::IntegerBits, 3)],
+            ),
+            expected_event(ChargePoint::IntegerArithmeticResultRetain, 1, 1, &[]),
         ]
     );
-    assert_eq!(events[1].point, ChargePoint::IntegerArithmeticArithmetic);
-    assert_eq!(events[2].point, ChargePoint::IntegerArithmeticResultRetain);
-    assert_eq!(events[2].result_units, Integer::one());
     assert_eq!(events[3].point, ChargePoint::EqualityPlan);
     assert_eq!(events[3].work_units, Integer::one());
     assert_eq!(events[3].result_units, Integer::from(0_u64));
@@ -189,15 +199,45 @@ fn capture_observes_direct_internal_units_boundary() {
     assert!(matches!(result, Outcome::Completed(true)));
     let capture = meter.disable_charge_capture().unwrap().unwrap();
     assert_eq!(capture.events().len(), 3);
-    assert_eq!(capture.events()[0].point, ChargePoint::OrderingOperands);
     assert_eq!(
-        capture.events()[0].sizes,
-        vec![
-            (LimitKind::IntegerBits, Integer::from(2_u64)),
-            (LimitKind::ValueOccurrences, Integer::from(2_u64)),
+        capture.events(),
+        &[
+            expected_event(
+                ChargePoint::OrderingOperands,
+                1,
+                0,
+                &[
+                    (LimitKind::IntegerBits, 2),
+                    (LimitKind::ValueOccurrences, 2)
+                ],
+            ),
+            expected_event(
+                ChargePoint::OrderingArithmetic,
+                1,
+                0,
+                &[(LimitKind::IntegerBits, 2)],
+            ),
+            expected_event(ChargePoint::OrderingResultRetain, 1, 1, &[]),
         ]
     );
-    assert_eq!(capture.events()[1].point, ChargePoint::OrderingArithmetic);
-    assert_eq!(capture.events()[2].point, ChargePoint::OrderingResultRetain);
-    assert_eq!(capture.events()[2].result_units, Integer::one());
+}
+
+fn expected_event(
+    point: ChargePoint,
+    work: u64,
+    results: u64,
+    sizes: &[(LimitKind, u64)],
+) -> quire_exact::ChargeEvent {
+    quire_exact::ChargeEvent {
+        point,
+        work_units: Integer::from(work),
+        result_units: Integer::from(results),
+        work_reservation: None,
+        result_reservation: None,
+        sizes: sizes
+            .iter()
+            .map(|(kind, amount)| (*kind, Integer::from(*amount)))
+            .collect(),
+        admission: ChargeAdmission::Admitted,
+    }
 }
