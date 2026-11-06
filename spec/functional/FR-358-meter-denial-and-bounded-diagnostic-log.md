@@ -8,7 +8,7 @@ relationships: []
 
 ## Description
 
-The `quire-exact` meter SHALL deny an injected, named charge exactly once at its selected 1-based occurrence. Where `test-support` is enabled, the meter SHALL bound the admitted-charge log to 4096 entries without changing exact accounting. The public `InjectedDenial::occurrence` SHALL be `NonZeroU64`, making zero unrepresentable. The production meter SHALL expose optional fixed-size interval accounting of successful admissions, disabled by default.
+The `quire-exact` meter SHALL deny an injected, named charge exactly once at its selected 1-based occurrence. Where `test-support` is enabled, the meter SHALL bound the admitted-charge log to 4096 entries without changing exact accounting. The public `InjectedDenial::occurrence` SHALL be `NonZeroU64`, making zero unrepresentable. The production meter SHALL expose optional fixed-size interval accounting of successful admissions and optional bounded per-charge event capture, both disabled by default.
 
 ## Behavior
 
@@ -47,7 +47,7 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 
    Arbitrarily many repeated or zero requests SHALL remain subject only to existing admission rules, without a new request-count denial or limit.
 
-3. In a production build, `Counters` shall remain fixed-size. It shall own no heap-allocated charge log. The production `Meter` shall contain no admitted-charge log.
+3. In a production build, `Counters` shall remain fixed-size. It shall own no heap-allocated charge log. The production `Meter` shall contain no admitted-charge log by default; its separately enabled bounded per-charge capture is specified in behavior 10.
 4. An injected denial shall report `Incomplete { limit_kind: WorkUnits, limit: w, consumed: w, next_charge: n, charge_point: P }`, where `w` is the admitted work consumed immediately before the denied charge and `P` is the selected point. The record shall be independent of the configured `ScalarLimits.work_units`: `n` is the denied charge's own work amount for `charge`, or the `pairs + 2` availability reservation for `charge_plan` at `equality.plan`. A successful `charge_plan` commits one work unit, but its injected denial reports the reservation it checked, not that eventual commit.
 5. At the selected occurrence, an injected denial shall take precedence over an ordinary `ScalarLimits` counter refusal of that same charge, including a plan reservation that exceeds the remaining work. An active cancellation is checked before injection and is outside this ordinary-limit precedence rule.
 
@@ -96,6 +96,12 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 
    The production meter SHALL remain a count rather than an admitted-charge log.
 
+10. The production `Meter` SHALL expose `enable_charge_capture(max_events, max_size_requests)`, `take_charge_capture()` and `disable_charge_capture()`. Enabling starts a new interval when disabled and preserves the active interval when already enabled. Taking returns the interval and resets it while keeping capture active with the same capacities; disabling returns the interval and ends capture. A disabled take or disable returns `None`. The event capture is independent of the fixed-size aggregate in behavior 6 and changes no charge outcome, counters, cancellation or injected-denial behavior.
+
+    The meter SHALL produce one ordered event for every actual `Meter::charge` and `Meter::charge_plan` boundary in an active interval, with its charge point, requested work and result increments, every semantic-size request in insertion order including repeated kinds and exact integer amounts, and an admitted or denied decision. For `charge_plan`, the event SHALL record its actual one-work, zero-result commitment request, the exact `ValueOccurrences` pair request, and separate work `pairs + 2` and result one availability reservations; reservations do not become committed increments. The meter SHALL record denied boundaries, including cancellation and injection, without changing accounting.
+
+    Capture SHALL retain only a complete event prefix within both caller-provided capacities. The meter SHALL omit a boundary that exceeds either capacity as a whole event and mark the interval truncated; later boundaries cannot restore completeness. Taking or disabling a truncated interval SHALL return a typed truncation outcome carrying that complete prefix, never a successful result that silently omits events. Event and size-request capacities bound capture storage independently of how many charges or duplicate requests the caller makes. Capture SHALL be available in default-feature and no_std builds, including calls whose internal Exact charge schedule is opaque to the caller.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -120,6 +126,9 @@ The `quire-exact` meter SHALL deny an injected, named charge exactly once at its
 | FR-358-AC-19 | On one shared meter with prior consumption, partition a fixed successful charge schedule across repeated takes, including an empty interval, repeated enable and a final disable. Summing the returned work/results and taking per-kind maxima of the eight sizes equals the independently expected actual schedule usage and an uninterrupted capture of that schedule; prior consumption remains excluded. Perform the same schedule with capture disabled and verify identical admission/refusal outcomes, global consumed counters and admission counts. | Test |
 | FR-358-AC-20 | In default-feature and test-support builds, an enabled interval aggregates 4097 one-work/one-result admissions, with an independently specified largest semantic-size request on admission 4097: work/results equal 4097 and the size includes that last request. Under test-support, the existing ordered diagnostic prefix remains exactly 4096 records and its existing truncation flag changes only at 4097. | Test |
 | FR-358-AC-21 | Inspect the production capture and `ChargeAccounting` types for private fixed-size heap-free state and absence of history, caller metadata, callbacks, trait objects or new Meter lifetime/generic parameters. Default construction and enabled capture/control operations allocate no heap storage. Verify the unchanged no_std build and Meter's Clone/Debug/Eq/PartialEq/Send/Sync contracts; cloning active capture copies unread amounts independently, so draining one clone does not drain the other. | Inspection |
+| FR-358-AC-22 | With bounded production capture active, admit a charge requesting all eight semantic-size kinds, a repeated kind, two work units and one result unit; then deny a different point on its result limit. The two ordered events retain every requested amount, repeated request, point and exact admitted or denied decision; the denial preserves already consumed work. | Test |
+| FR-358-AC-23 | With event capacity two and size-request capacity one, the third charge returns a typed truncated interval with the first two complete ordered events while meter admission count reaches three. Taking resets the scope; a later charge appears in a complete new interval. A zero size-request capacity reports truncation when a charge requests one size, including an explicit zero amount. | Test |
+| FR-358-AC-24 | With production capture active, a public Exact integer arithmetic call yields its actual ordered operand, arithmetic and result-retain charge events and their requested amounts. A successful `charge_plan` adds a fourth event with work one, results zero, its exact pair-count size request, and separate work `pairs + 2` and result one availability reservations. A native integer ordering call using the direct unit-only path likewise produces all three actual boundary events. | Test |
 
 ## Status
 

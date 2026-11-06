@@ -907,24 +907,107 @@ impl ChargeAccounting {
 
 const _: () = assert!(!core::mem::needs_drop::<ChargeAccounting>());
 
+/// The admission decision at an actual meter boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChargeAdmission {
+    /// The requested charge was committed.
+    Admitted,
+    /// The requested charge returned `Incomplete` without committing counters.
+    Denied,
+}
+
+/// One ordered request and decision at a meter boundary.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChargeEvent {
+    /// The named point supplied to the meter.
+    pub point: ChargePoint,
+    /// Requested work increment, including on denial.
+    pub work_units: Integer,
+    /// Requested result increment, including on denial.
+    pub result_units: Integer,
+    /// Work availability request when it differs from the committed increment.
+    pub work_reservation: Option<Integer>,
+    /// Result availability request when it differs from the committed increment.
+    pub result_reservation: Option<Integer>,
+    /// Every size request in insertion order, including duplicates and exact amounts.
+    pub sizes: Vec<(LimitKind, Integer)>,
+    /// The result of the boundary call.
+    pub admission: ChargeAdmission,
+}
+
+/// A bounded, ordered interval of meter charge events.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChargeCapture {
+    events: Vec<ChargeEvent>,
+    max_events: usize,
+    max_size_requests: usize,
+    stored_size_requests: usize,
+    truncated: bool,
+}
+
+impl ChargeCapture {
+    fn new(max_events: usize, max_size_requests: usize) -> Self {
+        Self {
+            events: Vec::new(),
+            max_events,
+            max_size_requests,
+            stored_size_requests: 0,
+            truncated: false,
+        }
+    }
+
+    /// The complete retained prefix in charge order.
+    pub fn events(&self) -> &[ChargeEvent] {
+        &self.events
+    }
+
+    fn record(&mut self, event: Option<ChargeEvent>) {
+        match event {
+            Some(event) if !self.truncated => {
+                self.stored_size_requests += event.sizes.len();
+                self.events.push(event);
+            }
+            _ => self.truncated = true,
+        }
+    }
+
+    fn can_record(&self, size_requests: usize) -> bool {
+        !self.truncated
+            && self.events.len() < self.max_events
+            && size_requests <= self.max_size_requests - self.stored_size_requests
+    }
+
+    fn finish(self) -> Result<Self, TruncatedChargeCapture> {
+        if self.truncated {
+            Err(TruncatedChargeCapture { prefix: self })
+        } else {
+            Ok(self)
+        }
+    }
+}
+
+/// The scope exceeded its event or size-request capacity; `prefix` is complete.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TruncatedChargeCapture {
+    /// The retained complete prefix before the first event that exceeded capacity.
+    pub prefix: ChargeCapture,
+}
+
 /// A per-request scalar meter.
 ///
-/// **A count, not a log.** A production meter holds only fixed-size
-/// counters: the ten consumed values, the limits, the number of admitted
-/// charges and, for an injected denial, the number of admissions at the
-/// denied point. The counters own no heap memory, so the meter that bounds an
-/// evaluation's work does not itself grow with that work; the const
-/// assertion below this type holds that in every production build. The meter
-/// optionally holds a fixed-size interval aggregate and shares the caller's
-/// [`Cancel`] handle, a reference count that is no per-charge state. The ordered charge log
-/// ([`Meter::admitted_charges`]) exists only under the `test-support`
-/// feature, which only a dev-dependency may enable.
+/// By default, a production meter keeps a count, not an event log. Its ten
+/// consumed counters, limits and admission counts are fixed-size. The meter
+/// optionally holds a fixed-size interval aggregate and a separately enabled,
+/// caller-bounded event capture. It also shares the caller's [`Cancel`] handle.
+/// The diagnostic admitted-charge log ([`Meter::admitted_charges`]) exists only
+/// under the `test-support` feature, which only a dev-dependency may enable.
 ///
 /// quire:canonical
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Meter {
     counters: Counters,
     charge_accounting: Option<ChargeAccounting>,
+    charge_capture: Option<ChargeCapture>,
     /// The handle every charge polls, when the caller gave one.
     cancel: Option<Cancel>,
     #[cfg(feature = "test-support")]
@@ -961,6 +1044,7 @@ impl Meter {
                 admissions: 0,
             },
             charge_accounting: None,
+            charge_capture: None,
             cancel: None,
             #[cfg(feature = "test-support")]
             admitted: Vec::new(),
@@ -987,6 +1071,72 @@ impl Meter {
     /// Return the final interval and disable capture, or `None` if disabled.
     pub fn disable_charge_accounting(&mut self) -> Option<ChargeAccounting> {
         self.charge_accounting.take()
+    }
+
+    /// Begin a bounded event interval. Calling while active preserves its unread prefix.
+    /// `max_events` and `max_size_requests` bound retained records and size entries.
+    /// A charge that exceeds either capacity is omitted whole and marks the interval
+    /// truncated; later charges cannot restore completeness.
+    pub fn enable_charge_capture(&mut self, max_events: usize, max_size_requests: usize) {
+        self.charge_capture
+            .get_or_insert_with(|| ChargeCapture::new(max_events, max_size_requests));
+    }
+
+    /// Return and clear an active interval while keeping capture enabled.
+    /// A truncated interval is returned as a typed error carrying its prefix.
+    pub fn take_charge_capture(&mut self) -> Option<Result<ChargeCapture, TruncatedChargeCapture>> {
+        self.charge_capture.as_mut().map(|capture| {
+            core::mem::replace(
+                capture,
+                ChargeCapture::new(capture.max_events, capture.max_size_requests),
+            )
+            .finish()
+        })
+    }
+
+    /// Return the final interval and disable event capture.
+    pub fn disable_charge_capture(
+        &mut self,
+    ) -> Option<Result<ChargeCapture, TruncatedChargeCapture>> {
+        self.charge_capture.take().map(ChargeCapture::finish)
+    }
+
+    fn capture_request(&self, charge: &Charge) -> Option<Option<ChargeEvent>> {
+        let capture = self.charge_capture.as_ref()?;
+        let size_requests = match &charge.storage {
+            ChargeStorage::Common(common) => {
+                common.sizes.first.iter().count() + common.sizes.second.iter().count()
+            }
+            ChargeStorage::General(general) => general.sizes.iter().count(),
+        };
+        if !capture.can_record(size_requests) {
+            return Some(None);
+        }
+        let general = charge.clone().into_general();
+        Some(Some(ChargeEvent {
+            point: charge.point,
+            work_units: general.work_units.integer(),
+            result_units: general.result_units.integer(),
+            work_reservation: None,
+            result_reservation: None,
+            sizes: general
+                .sizes
+                .iter()
+                .map(|(kind, amount)| (*kind, amount.integer()))
+                .collect(),
+            admission: ChargeAdmission::Denied,
+        }))
+    }
+
+    fn record_capture(&mut self, request: Option<Option<ChargeEvent>>, admitted: bool) {
+        if let (Some(capture), Some(request)) = (&mut self.charge_capture, request) {
+            capture.record(request.map(|mut event| {
+                if admitted {
+                    event.admission = ChargeAdmission::Admitted;
+                }
+                event
+            }));
+        }
     }
 
     /// This meter, polling `cancel` at every charge. A cancelled
@@ -1099,7 +1249,12 @@ impl Meter {
     pub fn charge(&mut self, charge: Charge) -> Result<(), Incomplete> {
         match UnitsCharge::from_charge(&charge) {
             Some(units) => self.charge_units(units),
-            None => self.charge_general(charge),
+            None => {
+                let request = self.capture_request(&charge);
+                let result = self.charge_general(charge);
+                self.record_capture(request, result.is_ok());
+                result
+            }
         }
     }
 
@@ -1271,6 +1426,23 @@ impl Meter {
     /// **`pub` (an export gap).** Was `pub(crate)`, same
     /// reason as [`Self::charge`].
     pub fn charge_plan(&mut self, pairs: &Integer) -> Result<(), Incomplete> {
+        let request = self.charge_capture.as_ref().map(|capture| {
+            capture.can_record(1).then(|| ChargeEvent {
+                point: ChargePoint::EqualityPlan,
+                work_units: Integer::one(),
+                result_units: Integer::from(0_u64),
+                work_reservation: Some(pairs.add(&Integer::from(2_u64))),
+                result_reservation: Some(Integer::one()),
+                sizes: alloc::vec![(LimitKind::ValueOccurrences, pairs.clone())],
+                admission: ChargeAdmission::Denied,
+            })
+        });
+        let result = self.charge_plan_inner(pairs);
+        self.record_capture(request, result.is_ok());
+        result
+    }
+
+    fn charge_plan_inner(&mut self, pairs: &Integer) -> Result<(), Incomplete> {
         let point = ChargePoint::EqualityPlan;
         let reservation = pairs.add(&Integer::from(2_u64));
         self.check_injected(point, &ChargeAmount::exact(reservation.clone()))?;
