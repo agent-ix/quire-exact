@@ -19,14 +19,77 @@ use crate::decimal::{DecimalType, RoundingMode};
 use crate::identity::UnitId;
 use crate::integer::IntegerInterval;
 use crate::numeric::{evaluate_rational_arithmetic, rational_ordering_bits, RationalArithmetic};
-use crate::outcome::{Outcome, Stop};
+use crate::outcome::{Outcome, Refusal, Stop};
 use crate::rational::{Rational, RationalDomain};
+use alloc::boxed::Box;
 
 /// A quantity value: a magnitude in exactly one unit.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Quantity {
     magnitude: Rational,
     unit: UnitId,
+}
+
+/// An exact inclusive result interval for one quantity unit.
+///
+/// This is the typed target retained by a bounded conversion refusal. The
+/// caller has already converted the result into `unit` and charged the unit
+/// conversion work before checking membership here.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QuantityResultInterval {
+    unit: UnitId,
+    min: Rational,
+    max: Rational,
+}
+
+impl QuantityResultInterval {
+    /// Construct an inclusive target in one unit. Reversed bounds form an empty target.
+    pub fn new(unit: UnitId, min: Rational, max: Rational) -> Self {
+        Self { unit, min, max }
+    }
+
+    /// The unit of the result and both endpoints.
+    pub fn unit(&self) -> &UnitId {
+        &self.unit
+    }
+
+    /// The inclusive exact minimum magnitude.
+    pub fn min(&self) -> &Rational {
+        &self.min
+    }
+
+    /// The inclusive exact maximum magnitude.
+    pub fn max(&self) -> &Rational {
+        &self.max
+    }
+}
+
+/// Check an already converted quantity against its bounded result target.
+///
+/// The caller owns the diagnostic locus. Both exact comparisons are charged
+/// before cross multiplication. A quantity in another unit is ill-typed. A
+/// refusal carries the target, never the converted magnitude.
+pub fn admit_quantity_result(
+    result: Quantity,
+    target: &QuantityResultInterval,
+    meter: &mut Meter,
+) -> Result<Outcome<Quantity>, IllTyped> {
+    if result.unit != target.unit {
+        return Err(IllTyped {
+            cause: IllTypedCause::DistinctUnits,
+        });
+    }
+    let admission = (|| {
+        let below = order_rationals(&result.magnitude, &target.min, meter)?.is_lt();
+        let above = order_rationals(&result.magnitude, &target.max, meter)?.is_gt();
+        if below || above {
+            return Err(Stop::Refused(Refusal::BoundedQuantityOutOfDomain {
+                target: Box::new(target.clone()),
+            }));
+        }
+        Ok(result)
+    })();
+    Ok(Outcome::from_stop(admission))
 }
 
 /// The bounded scalar representation carried by a quantity type.
@@ -231,22 +294,28 @@ fn compare(
     right: &Quantity,
     meter: &mut Meter,
 ) -> Result<bool, Stop> {
-    let bits = left
-        .magnitude
-        .max_part_bits()
-        .max(right.magnitude.max_part_bits());
+    let ordering = order_rationals(&left.magnitude, &right.magnitude, meter)?;
+    Ok(operator.holds(ordering))
+}
+
+fn order_rationals(
+    left: &Rational,
+    right: &Rational,
+    meter: &mut Meter,
+) -> Result<core::cmp::Ordering, Stop> {
+    let bits = left.max_part_bits().max(right.max_part_bits());
     meter.charge(
         Charge::new(ChargePoint::OrderingOperands)
             .size(LimitKind::IntegerBits, bits)
             .size(LimitKind::ValueOccurrences, 2),
     )?;
-    meter.charge(Charge::new(ChargePoint::OrderingArithmetic).exact_size(
-        LimitKind::IntegerBits,
-        rational_ordering_bits(&left.magnitude, &right.magnitude),
-    ))?;
-    let ordering = left.magnitude.cmp(&right.magnitude);
+    meter.charge(
+        Charge::new(ChargePoint::OrderingArithmetic)
+            .exact_size(LimitKind::IntegerBits, rational_ordering_bits(left, right)),
+    )?;
+    let ordering = left.cmp(right);
     meter.charge(Charge::new(ChargePoint::OrderingResultRetain).results(1))?;
-    Ok(operator.holds(ordering))
+    Ok(ordering)
 }
 
 #[cfg(test)]
@@ -274,6 +343,103 @@ mod tests {
 
     fn unit(byte: u8) -> UnitId {
         UnitId::declared(crate::node::NodeKey::fixture(byte))
+    }
+
+    /// The bounded target admits exact endpoints and retains its typed
+    /// unit and endpoints when an outside result is refused.
+    #[trace("TC-942", "FR-395-AC-1", "FR-395-AC-2", "QSpec-FR-322-AC-384")]
+    #[test]
+    fn bounded_result_checks_inclusive_endpoints_and_refusal_target() {
+        let metres = unit(1);
+        let min = Rational::from_integer(Integer::from(-1_i64));
+        let max = Rational::from_integer(Integer::one());
+        let target = QuantityResultInterval::new(metres.clone(), min.clone(), max.clone());
+
+        for boundary in [min.clone(), max.clone()] {
+            let result = admit_quantity_result(
+                Quantity::new(boundary.clone(), metres.clone()),
+                &target,
+                &mut generous_meter(),
+            )
+            .expect("same unit");
+            assert_eq!(
+                result,
+                Outcome::Completed(Quantity::new(boundary, metres.clone()))
+            );
+        }
+
+        let outside = Quantity::new(Rational::from_integer(Integer::from(2_u64)), metres.clone());
+        let refusal =
+            admit_quantity_result(outside, &target, &mut generous_meter()).expect("same unit");
+        let Outcome::Refused(reason) = &refusal else {
+            panic!("outside result must refuse without a value");
+        };
+        assert_eq!(reason.code(), Some("rational_out_of_domain"));
+        assert_eq!(reason.cause(), Some("outside-domain"));
+        let Outcome::Refused(Refusal::BoundedQuantityOutOfDomain { target: retained }) = refusal
+        else {
+            panic!("outside result must refuse without a value");
+        };
+        assert_eq!(retained.unit(), &metres);
+        assert_eq!(retained.min(), &min);
+        assert_eq!(retained.max(), &max);
+
+        let lower = Quantity::new(Rational::from_integer(Integer::from(-2_i64)), metres);
+        let refusal =
+            admit_quantity_result(lower, &target, &mut generous_meter()).expect("same unit");
+        let Outcome::Refused(Refusal::BoundedQuantityOutOfDomain { target: retained }) = refusal
+        else {
+            panic!("lower outside result must refuse");
+        };
+        assert_eq!(*retained, target);
+    }
+
+    /// Reversed bounds remain a distinct empty target and every value refuses.
+    #[trace("TC-942", "FR-395-AC-4")]
+    #[test]
+    fn reversed_result_target_refuses_with_original_endpoints() {
+        let metres = unit(1);
+        let min = Rational::from_integer(Integer::from(5_u64));
+        let max = Rational::from_integer(Integer::from(3_u64));
+        let target = QuantityResultInterval::new(metres.clone(), min.clone(), max.clone());
+        assert_eq!(target.min(), &min);
+        assert_eq!(target.max(), &max);
+        for value in [
+            Integer::from(2_u64),
+            Integer::from(4_u64),
+            Integer::from(6_u64),
+        ] {
+            let result = Quantity::new(Rational::from_integer(value), metres.clone());
+            let outcome =
+                admit_quantity_result(result, &target, &mut generous_meter()).expect("same unit");
+            let Outcome::Refused(Refusal::BoundedQuantityOutOfDomain { target: retained }) =
+                outcome
+            else {
+                panic!("empty target must refuse every value");
+            };
+            assert_eq!(*retained, target);
+        }
+    }
+
+    /// An unavailable comparison charge stops before exact multiplication.
+    #[trace("TC-942", "FR-395-AC-5")]
+    #[test]
+    fn bounded_result_comparisons_are_metered() {
+        let metres = unit(1);
+        let target = QuantityResultInterval::new(
+            metres.clone(),
+            Rational::from_integer(Integer::from(-1_i64)),
+            Rational::from_integer(Integer::one()),
+        );
+        let mut meter = Meter::new(ScalarLimits {
+            integer_bits: 0,
+            ..*generous_meter().limits()
+        });
+        let result = Quantity::new(Rational::from_integer(Integer::one()), metres);
+        assert!(matches!(
+            admit_quantity_result(result, &target, &mut meter),
+            Ok(Outcome::Incomplete(_))
+        ));
     }
 
     /// adding two quantities in the same unit completes with the

@@ -369,7 +369,7 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
     let source = format!(
         "use quire_exact::{{BoundViolation, CardinalityBound, CheckedInvariantCause, \
          CollectionKind, DecimalType, DivisionMember, IeeeFlags, IeeeWidth, IllTypedCause, \
-         InexactTarget, IntegerInterval, RationalDomain, TextType, UniverseId}};\n\
+         InexactTarget, IntegerInterval, QuantityResultInterval, RationalDomain, TextType, UniverseId}};\n\
          #[derive(Clone, Debug, Eq, PartialEq)]\n{refusal}\n{mappings}\n\
          fn main() {{\n\
              let refusal = Refusal::CheckedInvariant {{\n\
