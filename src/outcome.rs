@@ -35,6 +35,7 @@ use crate::division::DivisionMember;
 use crate::identity::UniverseId;
 use crate::ieee::{IeeeFlags, IeeeWidth};
 use crate::integer::IntegerInterval;
+use crate::quantity::QuantityResultInterval;
 use crate::rational::RationalDomain;
 use crate::text::TextType;
 use alloc::boxed::Box;
@@ -257,6 +258,11 @@ pub enum Refusal {
         /// The `Rational[..]` result domain.
         target: Box<RationalDomain>,
     },
+    /// An exact converted quantity is outside its inclusive result interval.
+    BoundedQuantityOutOfDomain {
+        /// The target unit and exact inclusive magnitudes.
+        target: Box<QuantityResultInterval>,
+    },
     /// Strict IEEE `exact` found an inexact, overflowing or tiny-and-inexact
     /// result; only its would-be flags are reported, never rounded bits.
     IeeeNotExact {
@@ -329,6 +335,7 @@ impl Refusal {
             Self::TextLengthOutOfDomain { .. } => Some("text_length_out_of_domain"),
             Self::IntegerOutOfDomain { .. } => Some("integer_out_of_domain"),
             Self::RationalOutOfDomain { .. } => Some("rational_out_of_domain"),
+            Self::BoundedQuantityOutOfDomain { .. } => Some("rational_out_of_domain"),
             Self::IeeeNotExact { .. } => Some("ieee_not_exact"),
             Self::IeeeNanPayloadNotRepresentable { .. } => {
                 Some("ieee_nan_payload_not_representable")
@@ -351,6 +358,7 @@ impl Refusal {
             | Self::TextLengthOutOfDomain { .. }
             | Self::IntegerOutOfDomain { .. }
             | Self::RationalOutOfDomain { .. }
+            | Self::BoundedQuantityOutOfDomain { .. }
             | Self::IeeeRationalOutOfDomain { .. } => Some("outside-domain"),
             Self::DivisionOutOfDomain { member, .. } => Some(match member {
                 DivisionMember::Quotient => "quotient-outside-domain",
@@ -609,5 +617,41 @@ mod tests {
             Outcome::<()>::from_stop(Err(Stop::Refused(refusal.clone()))),
             Outcome::Refused(refusal)
         );
+    }
+
+    /// Bounded quantity and plain rational refusals share the catalog code
+    /// while retaining distinct typed target domains.
+    #[trace("TC-942", "FR-395-AC-2", "FR-395-AC-3")]
+    #[test]
+    fn bounded_quantity_refusal_preserves_plain_rational_refusal() {
+        use crate::integer::Integer;
+        use crate::quantity::QuantityResultInterval;
+        use crate::rational::Rational;
+
+        let bound = Rational::from_integer(Integer::one());
+        let quantity = Refusal::BoundedQuantityOutOfDomain {
+            target: Box::new(
+                QuantityResultInterval::new(
+                    crate::identity::UnitId::declared(crate::node::NodeKey::fixture(1)),
+                    bound.neg(),
+                    bound,
+                )
+                .expect("ordered bounds"),
+            ),
+        };
+        assert_eq!(quantity.code(), Some("rational_out_of_domain"));
+        assert_eq!(quantity.cause(), Some("outside-domain"));
+
+        let domain = RationalDomain::new(
+            IntegerInterval::spanning(Integer::from(-1_i64), Integer::one()),
+            IntegerInterval::spanning(Integer::one(), Integer::one()),
+        )
+        .expect("positive denominators");
+        let plain = Refusal::RationalOutOfDomain {
+            target: Box::new(domain.clone()),
+        };
+        assert!(matches!(&plain, Refusal::RationalOutOfDomain { target } if **target == domain));
+        assert_eq!(plain.code(), Some("rational_out_of_domain"));
+        assert_eq!(plain.cause(), Some("outside-domain"));
     }
 }

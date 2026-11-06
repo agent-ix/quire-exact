@@ -19,14 +19,83 @@ use crate::decimal::{DecimalType, RoundingMode};
 use crate::identity::UnitId;
 use crate::integer::IntegerInterval;
 use crate::numeric::{evaluate_rational_arithmetic, rational_ordering_bits, RationalArithmetic};
-use crate::outcome::{Outcome, Stop};
+use crate::outcome::{Outcome, Refusal, Stop};
 use crate::rational::{Rational, RationalDomain};
+use alloc::boxed::Box;
 
 /// A quantity value: a magnitude in exactly one unit.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Quantity {
     magnitude: Rational,
     unit: UnitId,
+}
+
+/// An exact inclusive result interval for one quantity unit.
+///
+/// This is the typed target retained by a bounded conversion refusal. The
+/// caller has already converted the result into `unit` and charged the unit
+/// conversion work before checking membership here.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QuantityResultInterval {
+    unit: UnitId,
+    min: Rational,
+    max: Rational,
+}
+
+/// The lower endpoint of a quantity result interval exceeds its upper endpoint.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("quantity result interval is reversed")]
+pub struct ReversedQuantityResultInterval;
+
+impl QuantityResultInterval {
+    /// Construct a nonempty inclusive interval in one unit.
+    pub fn new(
+        unit: UnitId,
+        min: Rational,
+        max: Rational,
+    ) -> Result<Self, ReversedQuantityResultInterval> {
+        if min > max {
+            return Err(ReversedQuantityResultInterval);
+        }
+        Ok(Self { unit, min, max })
+    }
+
+    /// The unit of the result and both endpoints.
+    pub fn unit(&self) -> &UnitId {
+        &self.unit
+    }
+
+    /// The inclusive exact minimum magnitude.
+    pub fn min(&self) -> &Rational {
+        &self.min
+    }
+
+    /// The inclusive exact maximum magnitude.
+    pub fn max(&self) -> &Rational {
+        &self.max
+    }
+}
+
+/// Check an already converted quantity against its bounded result target.
+///
+/// The caller charges `unit.target-domain` before this check and owns the
+/// diagnostic locus. A quantity in another unit is ill-typed. A refusal
+/// carries the target, never the converted magnitude.
+pub fn admit_quantity_result(
+    result: Quantity,
+    target: &QuantityResultInterval,
+) -> Result<Outcome<Quantity>, IllTyped> {
+    if result.unit != target.unit {
+        return Err(IllTyped {
+            cause: IllTypedCause::DistinctUnits,
+        });
+    }
+    if result.magnitude < target.min || result.magnitude > target.max {
+        return Ok(Outcome::Refused(Refusal::BoundedQuantityOutOfDomain {
+            target: Box::new(target.clone()),
+        }));
+    }
+    Ok(Outcome::Completed(result))
 }
 
 /// The bounded scalar representation carried by a quantity type.
@@ -274,6 +343,42 @@ mod tests {
 
     fn unit(byte: u8) -> UnitId {
         UnitId::declared(crate::node::NodeKey::fixture(byte))
+    }
+
+    /// The bounded target admits exact endpoints and retains its typed
+    /// unit and endpoints when an outside result is refused.
+    #[trace("TC-942", "FR-395-AC-1", "FR-395-AC-2", "QSpec-FR-322-AC-384")]
+    #[test]
+    fn bounded_result_checks_inclusive_endpoints_and_refusal_target() {
+        let metres = unit(1);
+        let min = Rational::from_integer(Integer::from(-1_i64));
+        let max = Rational::from_integer(Integer::one());
+        let target = QuantityResultInterval::new(metres.clone(), min.clone(), max.clone())
+            .expect("ordered bounds");
+
+        for boundary in [min.clone(), max.clone()] {
+            let result =
+                admit_quantity_result(Quantity::new(boundary.clone(), metres.clone()), &target)
+                    .expect("same unit");
+            assert_eq!(
+                result,
+                Outcome::Completed(Quantity::new(boundary, metres.clone()))
+            );
+        }
+
+        let outside = Quantity::new(Rational::from_integer(Integer::from(2_u64)), metres.clone());
+        let refusal = admit_quantity_result(outside, &target).expect("same unit");
+        let Outcome::Refused(Refusal::BoundedQuantityOutOfDomain { target: retained }) = refusal
+        else {
+            panic!("outside result must refuse without a value");
+        };
+        assert_eq!(retained.unit(), &metres);
+        assert_eq!(retained.min(), &min);
+        assert_eq!(retained.max(), &max);
+        assert_eq!(
+            Refusal::BoundedQuantityOutOfDomain { target: retained }.code(),
+            Some("rational_out_of_domain")
+        );
     }
 
     /// adding two quantities in the same unit completes with the
