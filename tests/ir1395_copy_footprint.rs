@@ -18,13 +18,14 @@ fn measure<T>(call: impl FnOnce() -> T) -> (T, allocation_counter::AllocationInf
 fn controls() -> Vec<(Integer, usize)> {
     let two_127 = Integer::one().shifted_left(127);
     let one = Integer::one();
+    let below_min = two_127.add(&one).neg();
     vec![
         (Integer::from(0_i64), 0),
         (Integer::from(-7_i64), 0),
         (Integer::from(i128::MAX), 0),
         (Integer::from(i128::MIN), 0),
-        (two_127.clone(), 4),
-        (two_127.add(&one).neg(), 4),
+        (two_127, 4),
+        (below_min, 4),
         (Integer::one().shifted_left(4096), 129),
         (Integer::one().shifted_left(4096).neg(), 129),
     ]

@@ -79,7 +79,7 @@ pub enum IntegerDecimalError {
     OutputSizeOverflow,
 }
 
-/// The storage an [`Integer::try_clone`] of one value reserves, computed
+/// The storage an [`Integer::try_clone`] or [`Clone::clone`] reserves, computed
 /// without allocating.
 ///
 /// A copy of an inline value reserves nothing. A copy of any value outside
@@ -1223,7 +1223,9 @@ mod tests {
                 assert!(i128::try_from(actual.as_big()).is_err());
                 assert_eq!(actual.as_big(), &expected);
                 let cloned = actual.clone();
-                assert!(matches!(&cloned.0, IntegerRepr::Large(_)));
+                assert!(
+                    matches!(&cloned.0, IntegerRepr::LargeDigits { cache, .. } if cache.get().is_none())
+                );
                 assert_eq!(cloned.as_big(), &expected);
             }
         }
@@ -1397,7 +1399,9 @@ mod tests {
                 assert!(matches!(&integer.0, IntegerRepr::Large(_)));
                 assert_eq!(integer.as_big(), &value);
                 let cloned = integer.clone();
-                assert!(matches!(&cloned.0, IntegerRepr::Large(_)));
+                assert!(
+                    matches!(&cloned.0, IntegerRepr::LargeDigits { cache, .. } if cache.get().is_none())
+                );
                 assert_eq!(cloned.as_big(), &value);
             }
         }
