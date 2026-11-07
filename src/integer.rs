@@ -79,6 +79,20 @@ pub enum IntegerDecimalError {
     OutputSizeOverflow,
 }
 
+/// The storage an [`Integer::try_clone`] of one value reserves, computed
+/// without allocating.
+///
+/// A copy of an inline value reserves nothing. A copy of any value outside
+/// the `i128` range reserves one exact-capacity vector of base-2^32 limbs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IntegerCopyFootprint {
+    /// Number of 32-bit magnitude limbs the copy reserves; zero for an inline value.
+    pub limbs: usize,
+    /// Payload bytes of that reservation, equal to the `requested` amount a refused
+    /// copy reports; `usize::MAX` if the product does not fit `usize`.
+    pub bytes: usize,
+}
+
 fn reservation_bytes<T>(current: usize, additional: usize) -> usize {
     current
         .checked_add(additional)
@@ -193,6 +207,21 @@ impl Integer {
     /// Copy this integer into separately owned storage, refusing a failed reservation.
     pub fn try_clone(&self) -> Result<Self, IntegerCopyError> {
         self.try_clone_with(&mut |_| Ok(()))
+    }
+
+    /// The storage [`try_clone`](Self::try_clone) reserves, without allocating or
+    /// materializing a lazy `BigInt` image. Inline values, ordinary large
+    /// values and previously copied values all report what an actual copy requests.
+    pub fn copy_footprint(&self) -> IntegerCopyFootprint {
+        let limbs = match &self.0 {
+            IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. } => 0,
+            IntegerRepr::Large(value) => value.iter_u32_digits().len(),
+            IntegerRepr::LargeDigits { limbs, .. } => limbs.len(),
+        };
+        IntegerCopyFootprint {
+            limbs,
+            bytes: reservation_bytes::<u32>(0, limbs),
+        }
     }
 
     fn try_clone_with(
@@ -611,9 +640,24 @@ impl Integer {
     /// `bits(x)` from `quire.value.accounting/v1`: the magnitude bit length,
     /// where zero has length one.
     pub fn magnitude_bits(&self) -> u64 {
-        match self.native() {
-            Some(value) => u64::from((128 - value.unsigned_abs().leading_zeros()).max(1)),
-            None => self.as_big().bits().max(1),
+        match &self.0 {
+            IntegerRepr::Small64 { value, .. } => {
+                u64::from((64 - value.unsigned_abs().leading_zeros()).max(1))
+            }
+            IntegerRepr::Small128 { value, .. } => {
+                u64::from((128 - value.unsigned_abs().leading_zeros()).max(1))
+            }
+            IntegerRepr::Large(value) => value.bits().max(1),
+            IntegerRepr::LargeDigits { limbs, .. } => {
+                let used = limbs
+                    .iter()
+                    .rposition(|limb| *limb != 0)
+                    .map_or(0, |at| at + 1);
+                match limbs[..used].last() {
+                    Some(top) => (used as u64 - 1) * 32 + u64::from(32 - top.leading_zeros()),
+                    None => 1,
+                }
+            }
         }
     }
 
