@@ -182,6 +182,10 @@ enum IntegerRepr {
     },
 }
 
+mod reserved;
+
+pub use reserved::{IntegerParseError, IntegerReserveError};
+
 impl Integer {
     fn small64(value: i64) -> Self {
         Self(IntegerRepr::Small64 {
@@ -446,7 +450,22 @@ impl Ord for Integer {
                 }
             }
             (IntegerRepr::LargeDigits { .. }, _) | (_, IntegerRepr::LargeDigits { .. }) => {
-                self.as_big().cmp(other.as_big())
+                let (left, right) = (self.is_negative(), other.is_negative());
+                match (left, right) {
+                    (true, false) => core::cmp::Ordering::Less,
+                    (false, true) => core::cmp::Ordering::Greater,
+                    _ => {
+                        let magnitude = reserved::compare_magnitudes(
+                            &self.magnitude_limbs(),
+                            &other.magnitude_limbs(),
+                        );
+                        if left {
+                            magnitude.reverse()
+                        } else {
+                            magnitude
+                        }
+                    }
+                }
             }
         }
     }
@@ -457,11 +476,47 @@ impl Hash for Integer {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct MagnitudeLimbs<'a>(MagnitudeLimbsSource<'a>);
 
+impl Clone for MagnitudeLimbsSource<'_> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Small {
+                magnitude,
+                remaining,
+            } => Self::Small {
+                magnitude: *magnitude,
+                remaining: *remaining,
+            },
+            Self::Large { value, taken, .. } => {
+                let mut digits = value.iter_u32_digits();
+                if *taken > 0 {
+                    digits.nth(*taken - 1);
+                }
+                Self::Large {
+                    value,
+                    digits,
+                    taken: *taken,
+                }
+            }
+            Self::Copied(digits) => Self::Copied(digits.clone()),
+        }
+    }
+}
+
 enum MagnitudeLimbsSource<'a> {
-    Small { magnitude: u128, remaining: u8 },
-    Large(num_bigint::U32Digits<'a>),
+    Small {
+        magnitude: u128,
+        remaining: u8,
+    },
+    // `U32Digits` is not `Clone`: keep the source and the count taken so a
+    // clone restarts the iterator and skips what was already yielded.
+    Large {
+        value: &'a BigInt,
+        digits: num_bigint::U32Digits<'a>,
+        taken: usize,
+    },
     Copied(core::slice::Iter<'a, u32>),
 }
 
@@ -479,7 +534,10 @@ impl Iterator for MagnitudeLimbs<'_> {
                 Some(limb)
             }
             MagnitudeLimbsSource::Small { .. } => None,
-            MagnitudeLimbsSource::Large(digits) => digits.next(),
+            MagnitudeLimbsSource::Large { digits, taken, .. } => {
+                *taken += 1;
+                digits.next()
+            }
             MagnitudeLimbsSource::Copied(digits) => digits.next().copied(),
         }
     }
@@ -685,7 +743,11 @@ impl Integer {
             IntegerRepr::Small64 { value, .. } => i128::from(*value).unsigned_abs(),
             IntegerRepr::Small128 { value, .. } => value.unsigned_abs(),
             IntegerRepr::Large(value) => {
-                return MagnitudeLimbs(MagnitudeLimbsSource::Large(value.iter_u32_digits()));
+                return MagnitudeLimbs(MagnitudeLimbsSource::Large {
+                    value,
+                    digits: value.iter_u32_digits(),
+                    taken: 0,
+                });
             }
             IntegerRepr::LargeDigits { limbs, .. } => {
                 return MagnitudeLimbs(MagnitudeLimbsSource::Copied(limbs.iter()));
@@ -744,24 +806,7 @@ impl Integer {
 
     /// `self + other`. Exact; unbounded `Integer` addition never overflows.
     pub fn add(&self, other: &Self) -> Self {
-        if let (
-            IntegerRepr::Small64 { value: left, .. },
-            IntegerRepr::Small64 { value: right, .. },
-        ) = (&self.0, &other.0)
-        {
-            return Self::small128(i128::from(*left) + i128::from(*right));
-        }
-        match (self.native(), other.native()) {
-            (Some(left), Some(right)) => {
-                if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
-                    return Self::small128(i128::from(left) + i128::from(right));
-                }
-                left.checked_add(right)
-                    .map(Self::small128)
-                    .unwrap_or_else(|| Self::from_big_normalized(self.as_big() + other.as_big()))
-            }
-            _ => Self::from_big_normalized(self.as_big() + other.as_big()),
-        }
+        self.add_unlimited(other)
     }
 
     /// `self - other`. Exact; unbounded `Integer` subtraction never
@@ -790,24 +835,7 @@ impl Integer {
     /// `self × other`. Exact; unbounded `Integer` multiplication never
     /// overflows.
     pub fn mul(&self, other: &Self) -> Self {
-        if let (
-            IntegerRepr::Small64 { value: left, .. },
-            IntegerRepr::Small64 { value: right, .. },
-        ) = (&self.0, &other.0)
-        {
-            return Self::small128(i128::from(*left) * i128::from(*right));
-        }
-        match (self.native(), other.native()) {
-            (Some(left), Some(right)) => {
-                if let (Ok(left), Ok(right)) = (i64::try_from(left), i64::try_from(right)) {
-                    return Self::small128(i128::from(left) * i128::from(right));
-                }
-                left.checked_mul(right)
-                    .map(Self::small128)
-                    .unwrap_or_else(|| Self::from_big_normalized(self.as_big() * other.as_big()))
-            }
-            _ => Self::from_big_normalized(self.as_big() * other.as_big()),
-        }
+        self.mul_unlimited(other)
     }
 
     /// `-self`.
@@ -831,13 +859,13 @@ impl Integer {
 
     /// The greatest common divisor of `self` and `other`, non-negative.
     pub fn gcd(&self, other: &Self) -> Self {
-        Self::from_big_normalized(self.as_big().gcd(other.as_big()))
+        self.gcd_unlimited(other)
     }
 
     /// Quotient rounded toward zero with an admitted nonzero divisor.
     /// Intended for division known to be exact; divisibility is not checked.
     pub fn exact_div(&self, divisor: NonZeroInteger<'_>) -> Self {
-        Self::from_big_normalized(self.as_big() / divisor.get().as_big())
+        self.exact_div_unlimited(divisor)
     }
 
     /// Truncating quotient/remainder; `divisor` is nonzero.
@@ -1011,23 +1039,7 @@ impl FromStr for Integer {
 
     /// Parse the canonical wire spelling used by complete-V1 schemas.
     fn from_str(spelling: &str) -> Result<Self, Self::Err> {
-        let digits = spelling.strip_prefix('-').unwrap_or(spelling);
-        let canonical = match digits.as_bytes() {
-            [] => false,
-            [b'0'] => digits.len() == spelling.len(),
-            [first, rest @ ..] => {
-                (b'1'..=b'9').contains(first) && rest.iter().all(u8::is_ascii_digit)
-            }
-        };
-        if !canonical {
-            return Err(NonCanonicalInteger);
-        }
-        if let Ok(value) = spelling.parse::<i128>() {
-            return Ok(Self::small128(value));
-        }
-        BigInt::from_str(spelling)
-            .map(Self::from_big_normalized)
-            .map_err(|_| NonCanonicalInteger)
+        Self::parse_unlimited(spelling)
     }
 }
 
@@ -1163,10 +1175,11 @@ impl Integer {
 
     /// The arbitrary-precision integer (IEEE exact conversions).
     ///
-    /// For an inline value or a large value produced by [`try_clone`](Self::try_clone),
-    /// the first access initializes and retains an immutable `BigInt` image.
-    /// That may allocate. An ordinarily constructed large value already retains
-    /// its `BigInt`. Later borrows return the same object for the lifetime of
+    /// For an inline value or a large value held as limbs (a copy, or the result
+    /// of a parse, sum, product, quotient or divisor), the first access
+    /// initializes and retains an immutable `BigInt` image. That may allocate.
+    /// A large value built by [`from_big`](Self::from_big) already retains its
+    /// `BigInt`. Later borrows return the same object for the lifetime of
     /// `self`.
     pub fn as_big(&self) -> &BigInt {
         match &self.0 {
@@ -1197,6 +1210,14 @@ mod tests {
         assert!(matches!(&value.0, IntegerRepr::Small128 { .. }));
     }
 
+    /// A heap-backed value, whichever of the two outside-`i128` forms holds it.
+    fn assert_large(value: &Integer) {
+        assert!(matches!(
+            &value.0,
+            IntegerRepr::Large(_) | IntegerRepr::LargeDigits { .. }
+        ));
+    }
+
     fn assert_empty_inline_cache(value: &Integer) {
         match &value.0 {
             IntegerRepr::Small64 { cache, .. } | IntegerRepr::Small128 { cache, .. } => {
@@ -1219,7 +1240,7 @@ mod tests {
                 Integer::from_big(expected.clone()),
                 Integer::from_str(&expected.to_string()).unwrap(),
             ] {
-                assert!(matches!(&actual.0, IntegerRepr::Large(_)));
+                assert_large(&actual);
                 assert!(i128::try_from(actual.as_big()).is_err());
                 assert_eq!(actual.as_big(), &expected);
                 let cloned = actual.clone();
@@ -1246,7 +1267,7 @@ mod tests {
                 "170141183460469231731687303715884105728",
             ),
         ] {
-            assert!(matches!(&actual.0, IntegerRepr::Large(_)));
+            assert_large(&actual);
             assert!(i128::try_from(actual.as_big()).is_err());
             assert_eq!(actual.to_string(), expected);
         }
@@ -1376,7 +1397,7 @@ mod tests {
                 assert_small128(&integer);
                 assert_empty_inline_cache(&integer);
             } else {
-                assert!(matches!(&integer.0, IntegerRepr::Large(_)));
+                assert_large(&integer);
             }
             assert_eq!(integer.as_big(), &BigInt::from(value));
         }
@@ -1396,7 +1417,7 @@ mod tests {
                 Integer::from_big(value.clone()),
                 Integer::from_str(&value.to_string()).unwrap(),
             ] {
-                assert!(matches!(&integer.0, IntegerRepr::Large(_)));
+                assert_large(&integer);
                 assert_eq!(integer.as_big(), &value);
                 let cloned = integer.clone();
                 assert!(
@@ -1464,7 +1485,7 @@ mod tests {
                 "170141183460469231731687303715884105728",
             ),
         ] {
-            assert!(matches!(&actual.0, IntegerRepr::Large(_)));
+            assert_large(&actual);
             assert_eq!(actual.to_string(), expected);
         }
         let large = Integer::from_big(BigInt::from(1_u8) << 200_u32);
