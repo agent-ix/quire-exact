@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-396-AC-1 through FR-396-AC-7 through the public `Integer` API with a recording reservation and an allocation counter. Prepare operands, the independent `num-bigint` oracle and both large storage forms outside each measurement window.
+Verify FR-396-AC-1 through FR-396-AC-8 through the public `Integer` API with a recording reservation and an allocation counter. Prepare operands, the independent `num-bigint` oracle and both large storage forms outside each measurement window.
 
 ## Test Procedure
 
@@ -19,8 +19,9 @@ Verify FR-396-AC-1 through FR-396-AC-7 through the public `Integer` API with a r
 2. Re-run each under a provision equal to the recorded bytes and assert the same value is admitted with nothing left over.
 3. Re-run each under every provision from zero to one byte below the recorded bytes. Assert `Denied` and that the bytes the allocator observed equal the bytes that provision admitted.
 4. Parse the non-canonical spellings under a provision of zero and assert `NonCanonical` and no request; parse an `i128` spelling under zero and assert success.
-5. Observe comparison, equality, `is_zero` and `is_negative` over every pair with the allocation counter and assert zero allocations; compare adjacent orders with the oracle.
-6. Compare the unmetered `add`, `mul`, `exact_div` and `gcd` with the oracle and the unlimited-provision reserved results.
+5. Observe comparison, equality, `is_zero`, `is_negative` and `is_even` over every pair with the allocation counter and assert zero allocations; compare adjacent orders with the oracle.
+6. For seeded random operands of 1 to 3,000 digits, runs of equal limbs and powers of two, compare each reserved operation with the oracle; assert charged bytes equal allocated bytes, an exact provision admits, and a provision one byte short of each cumulative request refuses with exactly the earlier requests allocated.
+7. Compare the unmetered `add`, `mul`, `exact_div` and `gcd` with the oracle and the unlimited-provision reserved results.
 
 ## Expected Results
 

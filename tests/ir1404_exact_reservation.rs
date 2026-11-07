@@ -261,7 +261,7 @@ fn comparison_and_sign_tests_allocate_nothing() {
                 let _ = left.cmp(right);
                 let _ = left == right;
             }
-            let _ = (left.is_zero(), left.is_negative());
+            let _ = (left.is_zero(), left.is_negative(), left.is_even());
         }
     });
     assert_eq!(info.bytes_total, 0);
@@ -296,4 +296,229 @@ fn unmetered_entries_agree_with_the_reserved_ones() {
             );
         }
     }
+}
+
+/// Deterministic digits: a nonzero leading digit, then a seeded sequence.
+fn digits(seed: &mut u64, count: usize) -> String {
+    let mut text = String::with_capacity(count);
+    for at in 0..count {
+        *seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let digit = ((*seed >> 33) % 10) as u8;
+        text.push(char::from(
+            b'0' + if at == 0 { digit.max(1) } else { digit },
+        ));
+    }
+    text
+}
+
+/// Digit counts that cross the limb-pair, schoolbook/Karatsuba and unbalanced
+/// boundaries.
+const SIZES: &[usize] = &[
+    1, 19, 20, 38, 39, 40, 77, 100, 300, 307, 308, 309, 330, 600, 619, 1000, 1337, 2000, 3000,
+];
+
+/// Check a large call: the charge equals the allocation, an exact provision
+/// admits it, and a provision one byte short of each cumulative request refuses
+/// having allocated exactly the requests before it.
+fn check_boundaries<T: PartialEq + core::fmt::Debug>(
+    label: &str,
+    expected: &T,
+    call: impl Fn(&mut Recorder) -> Result<T, IntegerReserveError>,
+) {
+    let mut recorder = Recorder::unlimited();
+    let (value, info) = measure(|| call(&mut recorder));
+    assert_eq!(
+        &value.unwrap_or_else(|error| panic!("{label}: {error}")),
+        expected,
+        "{label}"
+    );
+    let total: usize = recorder.requests.iter().sum();
+    assert_eq!(
+        info.bytes_total, total as u64,
+        "{label}: charged == requested"
+    );
+    assert_eq!(info.count_total, recorder.requests.len() as u64, "{label}");
+    let mut exact = Recorder::limited(total);
+    assert_eq!(
+        &call(&mut exact).expect("exact provision"),
+        expected,
+        "{label}"
+    );
+    let mut before = 0;
+    for request in &recorder.requests {
+        let mut short = Recorder::limited(before + request - 1);
+        let (outcome, info) = measure(|| call(&mut short));
+        assert_eq!(outcome.err(), Some(IntegerReserveError::Denied), "{label}");
+        assert_eq!(
+            info.bytes_total, before as u64,
+            "{label}: refused request allocates nothing"
+        );
+        before += request;
+    }
+}
+
+struct Recorder {
+    remaining: usize,
+    requests: Vec<usize>,
+}
+
+impl Recorder {
+    fn unlimited() -> Self {
+        Self::limited(usize::MAX)
+    }
+
+    fn limited(bytes: usize) -> Self {
+        Self {
+            remaining: bytes,
+            requests: Vec::with_capacity(64),
+        }
+    }
+}
+
+impl Reservation for Recorder {
+    fn reserve(&mut self, bytes: usize) -> Result<(), ReservationDenied> {
+        if bytes > self.remaining {
+            return Err(ReservationDenied);
+        }
+        self.remaining -= bytes;
+        self.requests.push(bytes);
+        Ok(())
+    }
+}
+
+#[test]
+#[trace("TC-943", "FR-396-AC-2", "FR-396-AC-3", "FR-396-AC-8")]
+fn large_sums_and_products_match_the_oracle_and_charge_every_block() {
+    let mut seed = 0x1404_u64;
+    for &left_digits in SIZES {
+        for &right_digits in SIZES {
+            let (left_text, right_text) = (
+                digits(&mut seed, left_digits),
+                digits(&mut seed, right_digits),
+            );
+            let (left, right) = (int(&left_text), int(&right_text));
+            for (left, right, sign) in [
+                (left.clone(), right.clone(), "+"),
+                (left.neg(), right.clone(), "-"),
+            ] {
+                let (left_big, right_big) = (big_of(&left), big_of(&right));
+                let label = format!("{left_digits}x{right_digits} {sign}");
+                check_boundaries(
+                    &format!("sum {label}"),
+                    &Integer::from_big(&left_big + &right_big),
+                    |reservation| left.add_reserved(&right, reservation),
+                );
+                check_boundaries(
+                    &format!("product {label}"),
+                    &Integer::from_big(&left_big * &right_big),
+                    |reservation| left.mul_reserved(&right, reservation),
+                );
+            }
+        }
+    }
+    // Long runs of equal limbs stress the carry and borrow chains.
+    for exponent in [255_u32, 256, 1023, 1024, 4095, 4096] {
+        let power = Integer::one().shifted_left(u64::from(exponent));
+        let all_ones = power.add(&Integer::from(-1_i64));
+        for (left, right) in [
+            (&power, &power),
+            (&all_ones, &all_ones),
+            (&all_ones, &power),
+        ] {
+            check_boundaries(
+                &format!("2^{exponent} product"),
+                &Integer::from_big(big_of(left) * big_of(right)),
+                |reservation| left.mul_reserved(right, reservation),
+            );
+        }
+    }
+}
+
+#[test]
+#[trace("TC-943", "FR-396-AC-1", "FR-396-AC-8")]
+fn large_parses_match_the_oracle_and_charge_every_block() {
+    let mut seed = 0x1405_u64;
+    for &count in SIZES.iter().chain(&[6000, 12_000]) {
+        for text in [
+            digits(&mut seed, count),
+            "9".repeat(count),
+            format!("1{}", "0".repeat(count)),
+        ] {
+            for spelling in [text.clone(), format!("-{text}")] {
+                let expected = Integer::from_big(big(&spelling));
+                check_boundaries(&format!("parse {count}"), &expected, |reservation| {
+                    Integer::parse_reserved(&spelling, reservation).map_err(|error| match error {
+                        IntegerParseError::Reserve(error) => error,
+                        IntegerParseError::NonCanonical(_) => unreachable!("canonical"),
+                    })
+                });
+            }
+        }
+    }
+}
+
+#[test]
+#[trace("TC-943", "FR-396-AC-4", "FR-396-AC-8")]
+fn large_exact_quotients_match_the_oracle_and_charge_every_block() {
+    let mut seed = 0x1406_u64;
+    for &divisor_digits in SIZES {
+        for &quotient_digits in SIZES {
+            let (divisor_text, quotient_text) = (
+                digits(&mut seed, divisor_digits),
+                digits(&mut seed, quotient_digits),
+            );
+            let (divisor, quotient) = (int(&divisor_text), int(&quotient_text).neg());
+            let dividend = quotient.mul(&divisor);
+            let token = NonZeroInteger::try_from(&divisor).expect("nonzero");
+            check_boundaries(
+                &format!("quotient {quotient_digits}x{divisor_digits}"),
+                &quotient,
+                |reservation| dividend.exact_div_reserved(token, reservation),
+            );
+        }
+    }
+    // Divisors whose top digit is already normalized or tiny, and powers of two.
+    for exponent in [64_u64, 127, 128, 129, 191, 192, 200, 1024, 4000] {
+        let divisor = Integer::one().shifted_left(exponent).add(&Integer::one());
+        let quotient = Integer::one()
+            .shifted_left(exponent * 2 + 3)
+            .add(&Integer::from(-12345_i64));
+        let dividend = quotient.mul(&divisor);
+        let token = NonZeroInteger::try_from(&divisor).expect("nonzero");
+        check_boundaries(&format!("2^{exponent}+1"), &quotient, |reservation| {
+            dividend.exact_div_reserved(token, reservation)
+        });
+    }
+}
+
+#[test]
+#[trace("TC-943", "FR-396-AC-5", "FR-396-AC-8")]
+fn large_gcds_match_the_oracle_and_charge_every_block() {
+    use num_integer::Integer as _;
+    let mut seed = 0x1407_u64;
+    for &common_digits in &[1_usize, 20, 40, 300, 700] {
+        for &part_digits in &[1_usize, 25, 41, 300, 1000] {
+            let common = int(&digits(&mut seed, common_digits));
+            let (left_part, right_part) = (
+                int(&digits(&mut seed, part_digits)),
+                int(&digits(&mut seed, part_digits + 3)),
+            );
+            let (left, right) = (common.mul(&left_part), common.mul(&right_part).neg());
+            let expected = Integer::from_big(big_of(&left).gcd(&big_of(&right)));
+            check_boundaries(
+                &format!("gcd {common_digits}/{part_digits}"),
+                &expected,
+                |reservation| left.gcd_reserved(&right, reservation),
+            );
+            assert_eq!(left.gcd(&right), expected);
+        }
+    }
+    let power = Integer::one().shifted_left(5000);
+    let other = power.mul(&int("3"));
+    let expected = Integer::from_big(big_of(&power).gcd(&big_of(&other)));
+    check_boundaries("gcd powers of two", &expected, |reservation| {
+        power.gcd_reserved(&other, reservation)
+    });
 }

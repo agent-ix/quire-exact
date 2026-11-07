@@ -170,11 +170,8 @@ enum IntegerRepr {
         value: i128,
         cache: once_cell::race::OnceBox<BigInt>,
     },
-    // Normalization admits this variant only outside the i128 range; cloning
-    // preserves that invariant. Mixed inline/Large comparisons rely on it.
-    Large(BigInt),
-    // A copy retains its reserved base-2^32 limbs. Materialization
-    // occurs only through the pre-existing, infallible `as_big` API.
+    // Every integer outside the i128 range: base-2^32 limbs, high limb nonzero.
+    // Materialization occurs only through the infallible `as_big` API.
     LargeDigits {
         sign: Sign,
         limbs: Vec<u32>,
@@ -204,7 +201,13 @@ impl Integer {
     fn from_big_normalized(value: BigInt) -> Self {
         match i128::try_from(&value) {
             Ok(value) => Self::small128(value),
-            Err(_) => Self(IntegerRepr::Large(value)),
+            Err(_) => {
+                // The caller already paid for the image; keep it.
+                let (sign, limbs) = value.to_u32_digits();
+                let cache = once_cell::race::OnceBox::new();
+                let _ = cache.set(alloc::boxed::Box::new(value));
+                Self(IntegerRepr::LargeDigits { sign, limbs, cache })
+            }
         }
     }
 
@@ -220,7 +223,6 @@ impl Integer {
     pub fn copy_footprint(&self) -> IntegerCopyFootprint {
         let limbs = match &self.0 {
             IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. } => 0,
-            IntegerRepr::Large(value) => value.iter_u32_digits().len(),
             IntegerRepr::LargeDigits { limbs, .. } => limbs.len(),
         };
         IntegerCopyFootprint {
@@ -236,23 +238,6 @@ impl Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Ok(Self::small64(*value)),
             IntegerRepr::Small128 { value, .. } => Ok(Self::small128(*value)),
-            IntegerRepr::Large(value) => {
-                let limbs = value.iter_u32_digits();
-                let requested = reservation_bytes::<u32>(0, limbs.len());
-                if requested == usize::MAX {
-                    return Err(IntegerCopyError::Allocation { requested });
-                }
-                let mut copy = Vec::new();
-                before_reserve(requested)?;
-                copy.try_reserve_exact(limbs.len())
-                    .map_err(|_| IntegerCopyError::Allocation { requested })?;
-                copy.extend(limbs);
-                Ok(Self(IntegerRepr::LargeDigits {
-                    sign: value.sign(),
-                    limbs: copy,
-                    cache: once_cell::race::OnceBox::new(),
-                }))
-            }
             IntegerRepr::LargeDigits { sign, limbs, .. } => {
                 let requested = reservation_bytes::<u32>(0, limbs.len());
                 if requested == usize::MAX {
@@ -327,11 +312,6 @@ impl Integer {
                     append_binary_limb(&mut chunks, *limb, before_reserve)?;
                 }
             }
-            IntegerRepr::Large(value) => {
-                for limb in value.iter_u32_digits().rev() {
-                    append_binary_limb(&mut chunks, limb, before_reserve)?;
-                }
-            }
             IntegerRepr::LargeDigits { limbs, .. } => {
                 for limb in limbs.iter().rev() {
                     append_binary_limb(&mut chunks, *limb, before_reserve)?;
@@ -368,7 +348,7 @@ impl Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Some(i128::from(*value)),
             IntegerRepr::Small128 { value, .. } => Some(*value),
-            IntegerRepr::Large(_) | IntegerRepr::LargeDigits { .. } => None,
+            IntegerRepr::LargeDigits { .. } => None,
         }
     }
 }
@@ -384,11 +364,6 @@ impl Clone for Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Self::small64(*value),
             IntegerRepr::Small128 { value, .. } => Self::small128(*value),
-            IntegerRepr::Large(value) => Self(IntegerRepr::LargeDigits {
-                sign: value.sign(),
-                limbs: value.iter_u32_digits().collect(),
-                cache: once_cell::race::OnceBox::new(),
-            }),
             IntegerRepr::LargeDigits { sign, limbs, .. } => Self(IntegerRepr::LargeDigits {
                 sign: *sign,
                 limbs: limbs.clone(),
@@ -428,27 +403,6 @@ impl Ord for Integer {
                 IntegerRepr::Small128 { value: left, .. },
                 IntegerRepr::Small128 { value: right, .. },
             ) => left.cmp(right),
-            (IntegerRepr::Large(left), IntegerRepr::Large(right)) => left.cmp(right),
-            (
-                IntegerRepr::Large(left),
-                IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. },
-            ) => {
-                if left.is_negative() {
-                    core::cmp::Ordering::Less
-                } else {
-                    core::cmp::Ordering::Greater
-                }
-            }
-            (
-                IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. },
-                IntegerRepr::Large(right),
-            ) => {
-                if right.is_negative() {
-                    core::cmp::Ordering::Greater
-                } else {
-                    core::cmp::Ordering::Less
-                }
-            }
             (IntegerRepr::LargeDigits { .. }, _) | (_, IntegerRepr::LargeDigits { .. }) => {
                 let (left, right) = (self.is_negative(), other.is_negative());
                 match (left, right) {
@@ -456,8 +410,8 @@ impl Ord for Integer {
                     (false, true) => core::cmp::Ordering::Greater,
                     _ => {
                         let magnitude = reserved::compare_magnitudes(
-                            &self.magnitude_limbs(),
-                            &other.magnitude_limbs(),
+                            self.magnitude().as_slice(),
+                            other.magnitude().as_slice(),
                         );
                         if left {
                             magnitude.reverse()
@@ -476,47 +430,25 @@ impl Hash for Integer {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct MagnitudeLimbs<'a>(MagnitudeLimbsSource<'a>);
+/// A borrowed or inline view of an integer's magnitude limbs.
+pub(crate) enum Magnitude<'a> {
+    Inline { limbs: [u32; 4], len: usize },
+    Slice(&'a [u32]),
+}
 
-impl Clone for MagnitudeLimbsSource<'_> {
-    fn clone(&self) -> Self {
+impl Magnitude<'_> {
+    pub(crate) fn as_slice(&self) -> &[u32] {
         match self {
-            Self::Small {
-                magnitude,
-                remaining,
-            } => Self::Small {
-                magnitude: *magnitude,
-                remaining: *remaining,
-            },
-            Self::Large { value, taken, .. } => {
-                let mut digits = value.iter_u32_digits();
-                if *taken > 0 {
-                    digits.nth(*taken - 1);
-                }
-                Self::Large {
-                    value,
-                    digits,
-                    taken: *taken,
-                }
-            }
-            Self::Copied(digits) => Self::Copied(digits.clone()),
+            Self::Inline { limbs, len } => &limbs[..*len],
+            Self::Slice(limbs) => limbs,
         }
     }
 }
 
+pub(crate) struct MagnitudeLimbs<'a>(MagnitudeLimbsSource<'a>);
+
 enum MagnitudeLimbsSource<'a> {
-    Small {
-        magnitude: u128,
-        remaining: u8,
-    },
-    // `U32Digits` is not `Clone`: keep the source and the count taken so a
-    // clone restarts the iterator and skips what was already yielded.
-    Large {
-        value: &'a BigInt,
-        digits: num_bigint::U32Digits<'a>,
-        taken: usize,
-    },
+    Small { magnitude: u128, remaining: u8 },
     Copied(core::slice::Iter<'a, u32>),
 }
 
@@ -534,10 +466,6 @@ impl Iterator for MagnitudeLimbs<'_> {
                 Some(limb)
             }
             MagnitudeLimbsSource::Small { .. } => None,
-            MagnitudeLimbsSource::Large { digits, taken, .. } => {
-                *taken += 1;
-                digits.next()
-            }
             MagnitudeLimbsSource::Copied(digits) => digits.next().copied(),
         }
     }
@@ -685,7 +613,6 @@ impl Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => *value == 0,
             IntegerRepr::Small128 { value, .. } => *value == 0,
-            IntegerRepr::Large(value) => value.is_zero(),
             IntegerRepr::LargeDigits { sign, .. } => *sign == Sign::NoSign,
         }
     }
@@ -695,7 +622,6 @@ impl Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => *value < 0,
             IntegerRepr::Small128 { value, .. } => *value < 0,
-            IntegerRepr::Large(value) => value.is_negative(),
             IntegerRepr::LargeDigits { sign, .. } => *sign == Sign::Minus,
         }
     }
@@ -710,7 +636,6 @@ impl Integer {
             IntegerRepr::Small128 { value, .. } => {
                 u64::from((128 - value.unsigned_abs().leading_zeros()).max(1))
             }
-            IntegerRepr::Large(value) => value.bits().max(1),
             IntegerRepr::LargeDigits { limbs, .. } => {
                 let used = limbs
                     .iter()
@@ -738,17 +663,29 @@ impl Integer {
         }
     }
 
+    /// The magnitude as a limb slice, least significant first, without high zero
+    /// limbs and without allocating.
+    pub(crate) fn magnitude(&self) -> Magnitude<'_> {
+        let magnitude = match &self.0 {
+            IntegerRepr::Small64 { value, .. } => i128::from(*value).unsigned_abs(),
+            IntegerRepr::Small128 { value, .. } => value.unsigned_abs(),
+            IntegerRepr::LargeDigits { limbs, .. } => return Magnitude::Slice(limbs),
+        };
+        let mut limbs = [0_u32; 4];
+        let mut len = 0;
+        let mut rest = magnitude;
+        while rest != 0 {
+            limbs[len] = rest as u32;
+            rest >>= 32;
+            len += 1;
+        }
+        Magnitude::Inline { limbs, len }
+    }
+
     pub(crate) fn magnitude_limbs(&self) -> MagnitudeLimbs<'_> {
         let magnitude = match &self.0 {
             IntegerRepr::Small64 { value, .. } => i128::from(*value).unsigned_abs(),
             IntegerRepr::Small128 { value, .. } => value.unsigned_abs(),
-            IntegerRepr::Large(value) => {
-                return MagnitudeLimbs(MagnitudeLimbsSource::Large {
-                    value,
-                    digits: value.iter_u32_digits(),
-                    taken: 0,
-                });
-            }
             IntegerRepr::LargeDigits { limbs, .. } => {
                 return MagnitudeLimbs(MagnitudeLimbsSource::Copied(limbs.iter()));
             }
@@ -799,9 +736,10 @@ impl Integer {
 
     /// Whether this integer is even.
     pub fn is_even(&self) -> bool {
-        self.native()
-            .map(|value| value & 1 == 0)
-            .unwrap_or_else(|| self.as_big().is_even())
+        self.magnitude()
+            .as_slice()
+            .first()
+            .is_none_or(|limb| limb & 1 == 0)
     }
 
     /// `self + other`. Exact; unbounded `Integer` addition never overflows.
@@ -1189,7 +1127,6 @@ impl Integer {
             IntegerRepr::Small128 { value, cache } => {
                 cache.get_or_init(|| alloc::boxed::Box::new(BigInt::from(*value)))
             }
-            IntegerRepr::Large(value) => value,
             IntegerRepr::LargeDigits { sign, limbs, cache } => {
                 cache.get_or_init(|| alloc::boxed::Box::new(BigInt::new(*sign, limbs.clone())))
             }
@@ -1212,10 +1149,7 @@ mod tests {
 
     /// A heap-backed value, whichever of the two outside-`i128` forms holds it.
     fn assert_large(value: &Integer) {
-        assert!(matches!(
-            &value.0,
-            IntegerRepr::Large(_) | IntegerRepr::LargeDigits { .. }
-        ));
+        assert!(matches!(&value.0, IntegerRepr::LargeDigits { .. }));
     }
 
     fn assert_empty_inline_cache(value: &Integer) {
@@ -1223,7 +1157,7 @@ mod tests {
             IntegerRepr::Small64 { cache, .. } | IntegerRepr::Small128 { cache, .. } => {
                 assert!(cache.get().is_none());
             }
-            IntegerRepr::Large(_) | IntegerRepr::LargeDigits { .. } => {
+            IntegerRepr::LargeDigits { .. } => {
                 panic!("expected an inline value")
             }
         }
