@@ -79,6 +79,7 @@ mod outcome;
 mod quantity;
 mod rational;
 mod reference;
+mod reservation;
 mod text;
 mod value;
 
@@ -134,8 +135,8 @@ pub use ieee::{
 };
 pub use integer::{
     BoundedInteger, EmptyInterval, Integer, IntegerCopyError, IntegerCopyFootprint,
-    IntegerDecimalError, IntegerDomain, IntegerInterval, NonCanonicalInteger, NonZeroInteger,
-    OutOfDomain, ZeroDivisor,
+    IntegerDecimalError, IntegerDomain, IntegerInterval, IntegerParseError, IntegerReserveError,
+    NonCanonicalInteger, NonZeroInteger, OutOfDomain, ZeroDivisor,
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
@@ -166,6 +167,7 @@ pub use quantity::{
 };
 pub use rational::{NonPositiveDenominatorBound, Rational, RationalDomain, ZeroDenominator};
 pub use reference::ObjectReference;
+pub use reservation::{Reservation, ReservationDenied};
 pub use text::{
     admit_text, compare_text, EmptyTextBounds, InvalidUtf8, NormalizationForm, Text, TextPayload,
     TextProfile, TextProvenance, TextType, UNICODE_TEXT_DEFINITION, UNICODE_VERSION,
