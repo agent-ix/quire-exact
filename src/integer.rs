@@ -79,6 +79,20 @@ pub enum IntegerDecimalError {
     OutputSizeOverflow,
 }
 
+/// The storage an [`Integer::try_clone`] or [`Clone::clone`] reserves, computed
+/// without allocating.
+///
+/// A copy of an inline value reserves nothing. A copy of any value outside
+/// the `i128` range reserves one exact-capacity vector of base-2^32 limbs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IntegerCopyFootprint {
+    /// Number of 32-bit magnitude limbs the copy reserves; zero for an inline value.
+    pub limbs: usize,
+    /// Payload bytes of that reservation, equal to the `requested` amount a refused
+    /// copy reports; `usize::MAX` if the product does not fit `usize`.
+    pub bytes: usize,
+}
+
 fn reservation_bytes<T>(current: usize, additional: usize) -> usize {
     current
         .checked_add(additional)
@@ -159,7 +173,7 @@ enum IntegerRepr {
     // Normalization admits this variant only outside the i128 range; cloning
     // preserves that invariant. Mixed inline/Large comparisons rely on it.
     Large(BigInt),
-    // A fallible copy retains its reserved base-2^32 limbs. Materialization
+    // A copy retains its reserved base-2^32 limbs. Materialization
     // occurs only through the pre-existing, infallible `as_big` API.
     LargeDigits {
         sign: Sign,
@@ -193,6 +207,22 @@ impl Integer {
     /// Copy this integer into separately owned storage, refusing a failed reservation.
     pub fn try_clone(&self) -> Result<Self, IntegerCopyError> {
         self.try_clone_with(&mut |_| Ok(()))
+    }
+
+    /// The storage [`try_clone`](Self::try_clone) or [`Clone::clone`] reserves,
+    /// without allocating or materializing a lazy `BigInt` image. Both copy paths
+    /// retain the same exact-capacity base-2^32 payload, including for cold values.
+    #[must_use]
+    pub fn copy_footprint(&self) -> IntegerCopyFootprint {
+        let limbs = match &self.0 {
+            IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. } => 0,
+            IntegerRepr::Large(value) => value.iter_u32_digits().len(),
+            IntegerRepr::LargeDigits { limbs, .. } => limbs.len(),
+        };
+        IntegerCopyFootprint {
+            limbs,
+            bytes: reservation_bytes::<u32>(0, limbs),
+        }
     }
 
     fn try_clone_with(
@@ -350,7 +380,11 @@ impl Clone for Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Self::small64(*value),
             IntegerRepr::Small128 { value, .. } => Self::small128(*value),
-            IntegerRepr::Large(value) => Self(IntegerRepr::Large(value.clone())),
+            IntegerRepr::Large(value) => Self(IntegerRepr::LargeDigits {
+                sign: value.sign(),
+                limbs: value.iter_u32_digits().collect(),
+                cache: once_cell::race::OnceBox::new(),
+            }),
             IntegerRepr::LargeDigits { sign, limbs, .. } => Self(IntegerRepr::LargeDigits {
                 sign: *sign,
                 limbs: limbs.clone(),
@@ -611,9 +645,24 @@ impl Integer {
     /// `bits(x)` from `quire.value.accounting/v1`: the magnitude bit length,
     /// where zero has length one.
     pub fn magnitude_bits(&self) -> u64 {
-        match self.native() {
-            Some(value) => u64::from((128 - value.unsigned_abs().leading_zeros()).max(1)),
-            None => self.as_big().bits().max(1),
+        match &self.0 {
+            IntegerRepr::Small64 { value, .. } => {
+                u64::from((64 - value.unsigned_abs().leading_zeros()).max(1))
+            }
+            IntegerRepr::Small128 { value, .. } => {
+                u64::from((128 - value.unsigned_abs().leading_zeros()).max(1))
+            }
+            IntegerRepr::Large(value) => value.bits().max(1),
+            IntegerRepr::LargeDigits { limbs, .. } => {
+                let used = limbs
+                    .iter()
+                    .rposition(|limb| *limb != 0)
+                    .map_or(0, |at| at + 1);
+                match limbs[..used].last() {
+                    Some(top) => (used as u64 - 1) * 32 + u64::from(32 - top.leading_zeros()),
+                    None => 1,
+                }
+            }
         }
     }
 
@@ -1174,7 +1223,9 @@ mod tests {
                 assert!(i128::try_from(actual.as_big()).is_err());
                 assert_eq!(actual.as_big(), &expected);
                 let cloned = actual.clone();
-                assert!(matches!(&cloned.0, IntegerRepr::Large(_)));
+                assert!(
+                    matches!(&cloned.0, IntegerRepr::LargeDigits { cache, .. } if cache.get().is_none())
+                );
                 assert_eq!(cloned.as_big(), &expected);
             }
         }
@@ -1348,7 +1399,9 @@ mod tests {
                 assert!(matches!(&integer.0, IntegerRepr::Large(_)));
                 assert_eq!(integer.as_big(), &value);
                 let cloned = integer.clone();
-                assert!(matches!(&cloned.0, IntegerRepr::Large(_)));
+                assert!(
+                    matches!(&cloned.0, IntegerRepr::LargeDigits { cache, .. } if cache.get().is_none())
+                );
                 assert_eq!(cloned.as_big(), &value);
             }
         }

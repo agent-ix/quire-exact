@@ -20,6 +20,8 @@ Verify [FR-390](../functional/FR-390-fallible-integer-copy-and-decimal-output.md
 3. Use the crate's test-only callback around each production reservation site in `try_clone` and `try_to_decimal_string`. For each site, inject one refusal after input preparation, assert `Allocation { requested }`, no copy or decimal output, and an unchanged source. Compare `requested` with the actual additional element count times element size, or with the output byte reservation. Exercise zero or inline paths with a callback that fails if called where no reservation is required.
 4. Exercise the same private checked-count calculations used by production with synthetic near-`usize::MAX` counts and element sizes; assert the exact reservation product at the representable boundary and `requested = usize::MAX` above it. Supply a synthetic overflowing output length to its production count helper under both a finite bound and `max_bytes = usize::MAX`; assert `OutputSizeOverflow` in both cases, never `ByteLimit { required: usize::MAX, limit: usize::MAX }`. Verify by source inspection that every allocating operation on the public fallible routes uses checked arithmetic and a fallible reservation, with no infallible radix conversion, clone or collection.
 5. Compile a client that borrows one `Integer`, obtains an owned copy and decimal text, and distinguishes allocation, byte-limit failure and output-size overflow using typed variants. Verify the existing `Clone`, `Display`, parsing and arithmetic signatures and successful values remain available.
+6. Call `copy_footprint` on zero, `-7`, `i128::MAX`, `i128::MIN`, `2^127`, `-(2^127 + 1)`, `2^4096` and `-2^4096`, on each original and on a fresh `try_clone` of it. Assert the exact limb and byte counts of FR-390-AC-6. Observe actual `try_clone` and `Clone::clone` calls with an allocation counter and assert their total bytes equal the reported `bytes`, with one allocation for a heap value and none for inline values. Prepare a fresh cold source before each observation and run numeric value oracles only after copying.
+7. Observe `copy_footprint` and `magnitude_bits` on the fresh copies with an allocation counter; assert zero allocations and the exact bit lengths of FR-390-AC-7.
 
 ## Expected Results
 
@@ -27,6 +29,7 @@ Verify [FR-390](../functional/FR-390-fallible-integer-copy-and-decimal-output.md
 - Decimal output matches the independent canonical literal bytes for both signs and the small controls. The exact byte bound succeeds; one fewer byte yields the exact byte-limit refusal without output.
 - Every injected decimal reservation refusal returns allocation with the minimum additional payload bytes of that reservation and no partial output. Production and synthetic controls share one checked arithmetic path; overflow reports `usize::MAX` without an attempted allocation.
 - Public callers distinguish allocation, byte limit and output-size overflow without inspecting error text; existing public successful behavior remains available. No byte-limit refusal states `required <= limit`.
+- The reported copy footprint equals what an actual copy allocates, for inline, lazy and heap-backed values, and neither it nor the bit length allocates.
 
 ## Status
 
