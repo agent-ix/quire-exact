@@ -173,7 +173,7 @@ enum IntegerRepr {
     // Normalization admits this variant only outside the i128 range; cloning
     // preserves that invariant. Mixed inline/Large comparisons rely on it.
     Large(BigInt),
-    // A fallible copy retains its reserved base-2^32 limbs. Materialization
+    // A copy retains its reserved base-2^32 limbs. Materialization
     // occurs only through the pre-existing, infallible `as_big` API.
     LargeDigits {
         sign: Sign,
@@ -209,9 +209,10 @@ impl Integer {
         self.try_clone_with(&mut |_| Ok(()))
     }
 
-    /// The storage [`try_clone`](Self::try_clone) reserves, without allocating or
-    /// materializing a lazy `BigInt` image. Inline values, ordinary large
-    /// values and previously copied values all report what an actual copy requests.
+    /// The storage [`try_clone`](Self::try_clone) or [`Clone::clone`] reserves,
+    /// without allocating or materializing a lazy `BigInt` image. Both copy paths
+    /// retain the same exact-capacity base-2^32 payload, including for cold values.
+    #[must_use]
     pub fn copy_footprint(&self) -> IntegerCopyFootprint {
         let limbs = match &self.0 {
             IntegerRepr::Small64 { .. } | IntegerRepr::Small128 { .. } => 0,
@@ -379,7 +380,11 @@ impl Clone for Integer {
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => Self::small64(*value),
             IntegerRepr::Small128 { value, .. } => Self::small128(*value),
-            IntegerRepr::Large(value) => Self(IntegerRepr::Large(value.clone())),
+            IntegerRepr::Large(value) => Self(IntegerRepr::LargeDigits {
+                sign: value.sign(),
+                limbs: value.iter_u32_digits().collect(),
+                cache: once_cell::race::OnceBox::new(),
+            }),
             IntegerRepr::LargeDigits { sign, limbs, .. } => Self(IntegerRepr::LargeDigits {
                 sign: *sign,
                 limbs: limbs.clone(),

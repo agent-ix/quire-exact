@@ -36,7 +36,7 @@ fn cold(source: &Integer) -> Integer {
 }
 
 #[test]
-#[trace("FR-390-AC-6")]
+#[trace("TC-939", "FR-390-AC-6")]
 fn footprint_reports_limbs_and_bytes_for_inline_cold_and_heap_backed_values() {
     for (value, limbs) in controls() {
         let expected = IntegerCopyFootprint {
@@ -49,7 +49,7 @@ fn footprint_reports_limbs_and_bytes_for_inline_cold_and_heap_backed_values() {
 }
 
 #[test]
-#[trace("FR-390-AC-6")]
+#[trace("TC-939", "FR-390-AC-6")]
 fn footprint_bytes_equal_what_an_actual_copy_allocates() {
     for (value, _) in controls() {
         let cold_value = cold(&value);
@@ -59,12 +59,25 @@ fn footprint_bytes_equal_what_an_actual_copy_allocates() {
             assert_eq!(copy.expect("copy"), value);
             assert_eq!(observed.bytes_total, footprint.bytes as u64, "{value}");
             assert_eq!(observed.count_total, u64::from(footprint.limbs != 0));
+
+            // Use a new cold source: the preceding value oracle can materialize
+            // its BigInt view, and must not warm the measured infallible copy.
+            let clone_source = source.try_clone().expect("fresh clone source");
+            let (copy, observed) = measure(|| clone_source.clone());
+            assert_eq!(copy, value);
+            assert_eq!(observed.bytes_total, footprint.bytes as u64, "{value}");
+            assert_eq!(observed.count_total, u64::from(footprint.limbs != 0));
+
+            let (copy, observed) = measure(|| value.clone());
+            assert_eq!(copy, value);
+            assert_eq!(observed.bytes_total, footprint.bytes as u64, "{value}");
+            assert_eq!(observed.count_total, u64::from(footprint.limbs != 0));
         }
     }
 }
 
 #[test]
-#[trace("FR-390-AC-7")]
+#[trace("TC-939", "FR-390-AC-7")]
 fn footprint_and_bit_length_allocate_nothing_for_cold_values() {
     for (value, _) in controls() {
         let cold_value = cold(&value);
@@ -79,7 +92,7 @@ fn footprint_and_bit_length_allocate_nothing_for_cold_values() {
 }
 
 #[test]
-#[trace("FR-390-AC-7")]
+#[trace("TC-939", "FR-390-AC-7")]
 fn bit_length_is_exact_at_the_inline_boundary_and_beyond() {
     let cases = [
         (Integer::from(0_i64), 1),
