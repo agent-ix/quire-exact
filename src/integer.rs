@@ -202,11 +202,13 @@ impl Integer {
         match i128::try_from(&value) {
             Ok(value) => Self::small128(value),
             Err(_) => {
-                // The caller already paid for the image; keep it.
+                // One copy: `as_big` rebuilds the image on demand.
                 let (sign, limbs) = value.to_u32_digits();
-                let cache = once_cell::race::OnceBox::new();
-                let _ = cache.set(alloc::boxed::Box::new(value));
-                Self(IntegerRepr::LargeDigits { sign, limbs, cache })
+                Self(IntegerRepr::LargeDigits {
+                    sign,
+                    limbs,
+                    cache: once_cell::race::OnceBox::new(),
+                })
             }
         }
     }

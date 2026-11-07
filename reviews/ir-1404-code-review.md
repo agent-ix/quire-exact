@@ -91,3 +91,25 @@ What is sound:
 | --- | --- | --- | --- |
 | FND-001 | medium | The unmetered `add`, `mul`, `exact_div`, `gcd` and `FromStr` now run the reserved code, which uses schoolbook multiplication over the `MagnitudeLimbs` enum iterator and an index-checked Knuth D. num-bigint uses Karatsuba and Toom-3 above 32 limbs. Measured in release mode: mul 4.7x slower at 300 digits (below the Karatsuba threshold, so this is per-limb overhead) and 25x at 30,000 digits; exact_div 6.6x and parse 2.8x to 8x slower at 3,000 to 30,000 digits. Every `Rational` operation in this crate goes through these entries, so existing QSL exact_probabilistic, RT and CG rational paths get slower with no change on their side. Fix: run the inner loops over slices (copy a `Large` operand's limbs once, or read `LargeDigits` directly), and if large operands matter, add Karatsuba with a reserved scratch block. Do not restore a second num-bigint path. | src/integer/reserved.rs:199-227, src/integer/reserved.rs:237-282, src/integer/reserved.rs:506-545, src/integer.rs:808-810, src/integer.rs:837-839 |
 | FND-002 | low | Results of `FromStr`, `add`, `mul`, `gcd` and `exact_div` outside i128 used to be `Large(BigInt)`. They are now `LargeDigits`, so every `as_big`-based entry builds a full `BigInt` image on first use and retains it for the value's lifetime, outside any reservation. Those entries are `is_even`, `sub`, `neg`, `abs`, `div_rem_*`, `pow`, `Display`, `Debug`, `Hash`, `to_u64` and `decimal_digits`. `Rational::sub` calls `Integer::neg` and so takes this path. Resident memory doubles for long-lived large values. On the IR read path, `is_even` on a parsed multi-limb dimension exponent would be an unmetered allocation, against FR-038-AC-516. The rustdoc on `as_big` documents this, but `is_even` could read the low limb directly instead of building the image. | src/integer.rs:801-806, src/integer.rs:814-835, src/integer.rs:842-856, src/integer.rs:1184-1197, src/integer/reserved.rs:121-142 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | `from_big_normalized` now keeps both the `BigInt` it was given (as the cached image) and a fresh `to_u32_digits` limb copy. On main a value outside i128 from `from_big`, `sub`, `neg`, `abs`, `pow`, `div_rem_*`, `div_mod_floor`, `shifted_left`, `split_factor_two` or `power_of_ten` held one `BigInt`. It now holds two full copies, and each construction does an extra O(n) unmetered allocation. Resident memory doubles for long-lived values built this way, for example a pow result or a QSL value from `from_big`. Fix: drop the image after taking the limbs and let `as_big` rebuild it on demand, or document the trade on `from_big` | src/integer.rs:201-212, src/integer.rs:1110-1112 |
+
+## Dispositions
+
+Round 1, fix commit 998fe5bcaa3fcdb817006d35faab466b5d7c332b. Checked as follows:
+
+- The 11 PR tests pass.
+- Clippy is clean.
+- A throwaway reviewer differential test was run on this head and then removed. It covered 20,000 random small pairs and both storage forms, all limb-length pairs over {1..5, 31-33, 63-66, 127-130, 200, 255-257, 511, 513, 700}, Karatsuba balanced and unbalanced splits, runs of 2^k and 2^k-1 up to k=20,000, and add, mul, gcd, cmp, is_even, exact_div and a product divided back by a factor. Every case matched num-bigint.
+- On a separate allocation_counter check, charged equals allocated for Karatsuba products including the scratch block (64x64 up to 700x700, and 700x130 and 300x64 unbalanced). A provision one byte short is denied with exactly the admitted bytes allocated.
+
+`IntegerRepr` is private (`pub struct Integer(IntegerRepr)`), so removing the `Large` variant changes no public API.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Rewritten as one implementation with slice loops on 64-bit digits, Karatsuba from 64 limbs with one charged scratch block, and Knuth D in base 2^64. The PR's own perf test on this head reads quire/num-bigint: mul 0.89 / 0.97 / 1.29 at 300 / 3,000 / 30,000 digits, exact_div 1.36 / 1.01 / 2.48, parse 1.11 / 0.81 / 0.77, gcd 0.87 / 1.5 at 300 / 3,000 over three runs on a loaded host. That is within FR-396 behaviour 5's 1.5x claim, and no second num-bigint path was added |
+| FND-002 | fixed | `is_even` reads the low limb of the magnitude slice and no longer builds the image (src/integer.rs:738-743). FR-396-AC-6 now covers it with a zero-allocation test. The other `as_big`-based entries remain documented on `as_big`, as the finding allowed |
