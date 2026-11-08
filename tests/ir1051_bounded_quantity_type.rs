@@ -213,11 +213,17 @@ fn a_bounded_quantity_type_compares_by_its_whole_nested_chain() {
                 inner.clone(),
                 None,
             )),
-            ValueType::map(MapType::new(inner.clone(), None)),
-            ValueType::option(ValueType::map(MapType::new(
-                ValueType::collection(CollectionType::new(CollectionKind::Set, inner, None)),
-                None,
-            ))),
+            ValueType::map(
+                MapType::new(ValueType::String, inner.clone(), None).expect("a leaf key"),
+            ),
+            ValueType::option(ValueType::map(
+                MapType::new(
+                    ValueType::String,
+                    ValueType::collection(CollectionType::new(CollectionKind::Set, inner, None)),
+                    None,
+                )
+                .expect("a leaf key"),
+            )),
         ]
     };
     for (left, right) in nested(bounded(u.clone(), Some(0), Some(100)))

@@ -50,6 +50,11 @@ impl ValueType {
         }
     }
 
+    /// Whether this type nests no other type.
+    pub(crate) fn is_leaf(&self) -> bool {
+        self.child().is_none()
+    }
+
     /// The one type nested directly in this type, taken out if this handle
     /// is the only owner of the link that holds it, leaving the leaf
     /// `Boolean` behind without allocating. A link another handle still
@@ -105,7 +110,9 @@ impl ValueType {
             (Self::Collection(left), Self::Collection(right)) => {
                 left.kind() == right.kind() && left.bound() == right.bound()
             }
-            (Self::Map(left), Self::Map(right)) => left.bound() == right.bound(),
+            (Self::Map(left), Self::Map(right)) => {
+                left.key() == right.key() && left.bound() == right.bound()
+            }
             (Self::Reference(left), Self::Reference(right)) => left == right,
             (Self::Population(left), Self::Population(right)) => left == right,
             (
@@ -159,7 +166,10 @@ impl ValueType {
                 collection.kind().hash(state);
                 collection.bound().hash(state);
             }
-            Self::Map(map) => map.bound().hash(state),
+            Self::Map(map) => {
+                map.key().hash(state);
+                map.bound().hash(state);
+            }
             Self::Reference(object_type) => object_type.hash(state),
             Self::Population(maximum) => maximum.hash(state),
         }
@@ -322,15 +332,18 @@ pub(super) fn schedule_collection_type<'a>(
     );
 }
 
-/// Push `MapType { values: .., bound: .. }`, the derived layout, with the
-/// value type as a `Step::Type`.
+/// Push `MapType { key: .., values: .., bound: .. }`, the derived layout,
+/// with the key and value types as `Step::Type`.
 pub(super) fn schedule_map_type<'a>(stack: &mut Vec<Step<'a>>, map_type: &'a MapType) {
-    let (values, bound) = map_type.debug_fields();
+    let (key, values, bound) = map_type.debug_fields();
     schedule(
         stack,
         [
             Step::Text("MapType"),
             Step::Open(Bracket::Brace),
+            Step::Text("key: "),
+            Step::Type(key),
+            Step::Next,
             Step::Text("values: "),
             Step::Type(values),
             Step::Next,

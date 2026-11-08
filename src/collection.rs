@@ -189,25 +189,46 @@ impl CollectionType {
     }
 }
 
-/// A map type `Map<Text, V>[min, max]`, or the unbounded `Map<Text, V>`.
+/// A map type `Map<K, V>[min, max]`, or the unbounded `Map<K, V>`.
 ///
-/// The key type is always `Text`, so the type carries only its value type
-/// and an optional bound. A map is not a [`CollectionKind`]: a kind's
-/// element is the member, while a map's keys are `Text` and its declared
+/// The type carries its key type, its value type and an optional bound. The
+/// key type is a type that nests no other type (a leaf such as `Text`, an
+/// `Int` or a `Composite`), so the type chain `ValueType` walks without
+/// recursion stays a chain. Whether a key type is eligible as a map key is
+/// the caller's rule; the kernel keeps the key as declared. A map is not a
+/// [`CollectionKind`]: a kind's element is the member, while a map's declared
 /// element is the value. Two map types are the same type exactly when the
-/// value type and the bound are equal, and bound presence is part of that
-/// identity, as for [`CollectionType`].
+/// key type, the value type and the bound are equal, and bound presence is
+/// part of that identity, as for [`CollectionType`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MapType {
+    key: ValueType,
     values: ValueType,
     bound: Option<CardinalityBound>,
 }
 
+/// A map key type that nests another type (`Option`, a collection or a map).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, thiserror::Error)]
+#[error("a map key type must not nest another type")]
+pub struct NestedMapKey;
+
 impl MapType {
-    /// `Map<Text, values>[bound]`, or the unbounded `Map<Text, values>`
-    /// for `None`.
-    pub fn new(values: ValueType, bound: Option<CardinalityBound>) -> Self {
-        Self { values, bound }
+    /// `Map<key, values>[bound]`, or the unbounded `Map<key, values>` for
+    /// `None`. Refuses a `key` that nests another type.
+    pub fn new(
+        key: ValueType,
+        values: ValueType,
+        bound: Option<CardinalityBound>,
+    ) -> Result<Self, NestedMapKey> {
+        if !key.is_leaf() {
+            return Err(NestedMapKey);
+        }
+        Ok(Self { key, values, bound })
+    }
+
+    /// The key type.
+    pub fn key(&self) -> &ValueType {
+        &self.key
     }
 
     /// The value type.
@@ -224,9 +245,9 @@ impl MapType {
     /// Every field, for `ValueType`'s `Debug` to print in the derived
     /// layout. Destructured whole, so a new field is a compile error until
     /// `Debug` prints it.
-    pub(crate) fn debug_fields(&self) -> (&ValueType, &Option<CardinalityBound>) {
-        let Self { values, bound } = self;
-        (values, bound)
+    pub(crate) fn debug_fields(&self) -> (&ValueType, &ValueType, &Option<CardinalityBound>) {
+        let Self { key, values, bound } = self;
+        (key, values, bound)
     }
 
     /// The declared bound; `None` for an unbounded map type.
