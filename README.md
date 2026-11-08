@@ -1,5 +1,7 @@
 # quire-exact
 
+[![Quire](https://img.shields.io/badge/Quire-Specification%20Language-1F6FEB)](https://github.com/agent-ix/quire-spec-language)
+
 quire-exact is a Rust library of exact values: integers and fractions of any
 size, decimals, text, IEEE floating-point numbers, quantities and collections,
 plus the checked identities and result types that go with them.
@@ -103,7 +105,7 @@ re-exported from the crate root; the modules are private.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
-  <img alt="The Quire repositories. The main chain runs from the standard, quire-specification, to the compiler, quire-spec-language, then quire-contract-ir, quire-contract-codegen and quire-contract-runtime. quire-spec-language also feeds quire-protocol, and quire-contract-ir feeds quire-analyze. quire-observation feeds quire-protocol and quire-mltl. Above the chain, quire-driver runs it, quire-integration tests it and quire-verification plans verification. Below it, shared libraries used throughout: quire-exact, quire-semantic-value, quire-walk, quire-canonical and quire-verification-contracts." src="docs/images/ecosystem-light.svg">
+  <img alt="The Quire repositories. The main chain runs from the standard, quire-specification, to the compiler, quire-spec-language, then quire-contract-ir, quire-contract-codegen and quire-contract-runtime. quire-spec-language also feeds quire-protocol, and quire-contract-ir feeds quire-analyze. quire-observation feeds quire-protocol and quire-mltl. quire-eval is the evaluation core. Above the chain, quire-driver runs it, quire-integration tests it and quire-verification plans verification. Below it, shared libraries used throughout: quire-exact, quire-semantic-value, quire-walk, quire-canonical and quire-verification-contracts." src="docs/images/ecosystem-light.svg">
 </picture>
 
 `quire-exact` is the bottom leaf of the stack. It depends on no other Quire
@@ -112,7 +114,7 @@ crate, only on small `no_std` libraries (`num-bigint`,
 [Quire Specification Language](https://github.com/agent-ix/quire-spec-language)
 uses it as the shared exact-value layer under its checker and evaluator. The
 rules for the values themselves (decimals, text, quantities, integer division,
-IEEE profiles) are owned by `quire-specification` (private); the requirements
+IEEE profiles) are owned by [`quire-specification`](https://github.com/agent-ix/quire-specification); the requirements
 this repository owns are in [`spec/`](spec/).
 
 ## Building and testing
