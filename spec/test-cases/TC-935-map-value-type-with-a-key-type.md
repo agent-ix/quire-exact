@@ -17,12 +17,12 @@ Verify [FR-386](../functional/FR-386-map-value-type-with-a-key-type.md) through 
 
 1. Build `Map<String, Boolean>` unbounded and at `[1, 3]`; read `key()`, `values()` and `bound()`.
 2. Compare and hash the map types of FR-386-AC-2 against each other, against `Sequence`, `Set`, `Bag` and `OrderedSet` over `Boolean` with the same bounds, and against `Option<Boolean>`.
-3. Build `Map<Text, Map<Text, Boolean>>`, `Map<Text, Option<Boolean>>` and `Map<Text, Sequence<Boolean>>`, and each with an innermost `Integer`; compare and hash.
+3. Build `Map<String, Map<String, Boolean>>`, `Map<String, Option<Boolean>>` and `Map<String, Sequence<Boolean>>`, and each with an innermost `Integer`; compare and hash.
 4. On a 512 KiB stack thread build the two 100,000-link chains of FR-386-AC-4, clone, compare, hash, format and drop them.
 5. Format the two types of FR-386-AC-5 in compact mode.
 6. Call `admits` on a `Map` type with a collection, a text and an option value.
 7. Format the two types of FR-386-AC-5 in alternate mode (`{:#?}`).
-8. Build maps over `String` and `Integer` keys; compare and hash them. Call `MapType::new` with an `Option`, a `Sequence` and a `Map` key.
+8. Build maps over `String` and `Integer` keys; compare and hash them. Build a map over each of `String`, `Integer`, `Composite`, `Enum`, `Text` and `Reference` keys and read `key()`. Call `MapType::new` with an `Option`, a `Sequence` and a `Map` key.
 
 ## Expected Results
 
@@ -33,4 +33,4 @@ Verify [FR-386](../functional/FR-386-map-value-type-with-a-key-type.md) through 
 5. The exact strings of FR-386-AC-5.
 6. `false` each time.
 7. The exact pretty-printed strings of FR-386-AC-7.
-8. Maps with unequal keys are unequal and equal ones hash equal; each nesting key returns `NestedMapKey`.
+8. Maps with unequal keys are unequal and equal ones hash equal; each leaf key is kept as declared; each nesting key returns `NestedMapKey`.

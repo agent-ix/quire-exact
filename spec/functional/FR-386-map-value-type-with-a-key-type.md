@@ -19,7 +19,7 @@ The `quire-exact` kernel SHALL provide a value type `Map<K, V>[min, max]`, and t
 
 ## Use case
 
-A package map type `Map<Text, Timer>[0, 2]` is a field of an object type. The checker reads the field's type as `ValueType::map(MapType::new(String, Composite(Timer), Some(bound))?)`, asks for its value type to find the clock places and for its key type to refuse an ineligible key, and compares it with the same declaration read elsewhere.
+A package map type `Map<String, Timer>[0, 2]` is a field of an object type. The checker reads the field's type as `ValueType::map(MapType::new(String, Composite(Timer), Some(bound))?)`, asks for its value type to find the clock places and for its key type to refuse an ineligible key, and compares it with the same declaration read elsewhere.
 
 ## Inputs
 
@@ -44,19 +44,19 @@ A package map type `Map<Text, Timer>[0, 2]` is a field of an object type. The ch
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-386-AC-1 | `ValueType::map(MapType::new(V, bound))` returns a `ValueType::Map` whose `MapType::key()` equals `K`, whose `MapType::values()` equals `V` and whose `MapType::bound()` equals `bound`, for `bound` both `None` and `Some`. | Test (TC-935) |
+| FR-386-AC-1 | `ValueType::map(MapType::new(K, V, bound)?)` returns a `ValueType::Map` whose `MapType::key()` equals `K`, whose `MapType::values()` equals `V` and whose `MapType::bound()` equals `bound`, for `bound` both `None` and `Some`. | Test (TC-935) |
 | FR-386-AC-2 | Two map types are equal exactly when key type, value type and bound are equal. Maps differing only in value type, only in bound, and only in bound presence (`None` against `Some([0, u64::MAX])`) are unequal, and equal maps hash equal. A map is unequal to every `Collection` type of every `CollectionKind` over the same value type and bound, and to `Option` of the same value type. | Test (TC-935) |
 | FR-386-AC-3 | A map whose value type is a map, an `Option` or a `Collection` compares by its whole nested chain: two such types differing only at the innermost link are unequal, and equal chains hash equal. | Test (TC-935) |
 | FR-386-AC-4 | On a thread with a 512 KiB stack, a `ValueType` of 100,000 nested `Map` links around `Boolean`, and one of 100,000 links cycling `Map`, `Option` and `Sequence`, clone, compare equal to their clones, hash equal to their clones, format for debug with balanced brackets, and drop. Two chains differing only at the innermost link are unequal. | Test (TC-935) |
 | FR-386-AC-5 | `Debug` of `Map<String, Boolean>` and of a bounded `Map<String, Option<Boolean>>[1, 3]` prints exactly `Map(MapType { key: String, values: Boolean, bound: None })` and `Map(MapType { key: String, values: Option(Boolean), bound: Some(CardinalityBound { minimum: 1, maximum: 3 }) })`. | Test (TC-935) |
 | FR-386-AC-6 | `ValueType::admits` on a `Map` type returns `false` for a collection value, a text value and an option value. | Test (TC-935) |
-| FR-386-AC-7 | `Debug` in alternate mode (`{:#?}`) of `Map<Text, Boolean>` and of the bounded `Map<Text, Option<Boolean>>[1, 3]` prints exactly what `#[derive(Debug)]` pretty-printing prints: `Map(\n    MapType {\n        key: String,\n        values: Boolean,\n        bound: None,\n    },\n)` and the same nesting, four spaces per level with a trailing comma on every field, for the bounded type. | Test (TC-935) |
+| FR-386-AC-7 | `Debug` in alternate mode (`{:#?}`) of `Map<String, Boolean>` and of the bounded `Map<String, Option<Boolean>>[1, 3]` prints exactly what `#[derive(Debug)]` pretty-printing prints: `Map(\n    MapType {\n        key: String,\n        values: Boolean,\n        bound: None,\n    },\n)` and the same nesting, four spaces per level with a trailing comma on every field, for the bounded type. | Test (TC-935) |
 | FR-386-AC-8 | `MapType::key()` returns the declared key type. Two maps differing only in key type (`String` against `Integer`) are unequal and equal maps hash equal. | Test (TC-935) |
-| FR-386-AC-9 | `MapType::new` returns `NestedMapKey` for a key type that is an `Option`, a `Collection` or a `Map`, and builds a map for a leaf key. | Test (TC-935) |
+| FR-386-AC-9 | `MapType::new` returns `NestedMapKey` for a key type that is an `Option`, a `Collection` or a `Map`, and builds a map, keeping the key as declared, for each leaf key type: `String`, `Integer`, `Composite`, `Enum`, `Text` and `Reference`. | Test (TC-935) |
 
 ## Status
 
-Implemented. Map values (construction, key uniqueness, canonical order, metered charges) are not part of this requirement; a later requirement adds them if a caller needs a kernel map value.
+Implemented. The kernel gives a type-level key only: it does not enumerate a key domain, and domain enumeration (FR-120) lives in the consumer. Map values (construction, key uniqueness, canonical order, metered charges) are not part of this requirement; a later requirement adds them if a caller needs a kernel map value.
 
 ## Dependencies
 

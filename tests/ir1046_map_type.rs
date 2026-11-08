@@ -6,8 +6,9 @@ use std::hash::{Hash, Hasher};
 
 use ix_trace_rs::trace;
 use quire_exact::{
-    admit_text, from_admitted, CardinalityBound, CollectionKind, CollectionType, MapType, Meter,
-    NestedMapKey, OptionValue, ScalarLimits, TextPayload, TextProfile, TextType, Value, ValueType,
+    admit_text, from_admitted, CardinalityBound, CollectionKind, CollectionType, EffectiveId,
+    EnumShape, MapType, Meter, NestedMapKey, NodeKey, OptionValue, OriginalDeclarationKey,
+    PathSegment, ScalarLimits, TextPayload, TextProfile, TextType, Value, ValueType,
 };
 
 /// Levels of nesting in the deep types.
@@ -48,6 +49,7 @@ fn a_map_type_reports_its_value_type_and_bound() {
         let ValueType::Map(ref map) = built else {
             panic!("ValueType::map builds a Map");
         };
+        assert!(*map.key() == ValueType::String);
         assert!(*map.values() == ValueType::Integer);
         assert_eq!(map.bound(), declared);
     }
@@ -256,8 +258,43 @@ fn a_map_type_reports_its_key_type_and_differs_by_key() {
         panic!("ValueType::map builds a Map");
     };
     assert!(*map.key() == int_key);
-    assert!(by_string == keyed_map_of(ValueType::String, ValueType::Boolean, bound(1, 3)));
+    let same_string = keyed_map_of(ValueType::String, ValueType::Boolean, bound(1, 3));
+    assert!(by_string == same_string);
+    assert_eq!(hash_of(&by_string), hash_of(&same_string));
+    let same_int = keyed_map_of(int_key, ValueType::Boolean, bound(1, 3));
+    assert!(by_int == same_int);
+    assert_eq!(hash_of(&by_int), hash_of(&same_int));
     assert!(by_string != by_int);
+    assert_ne!(hash_of(&by_string), hash_of(&by_int));
+}
+
+fn node(name: &str) -> NodeKey {
+    NodeKey::new("test", vec![PathSegment::Text(name.to_string())], 0).expect("a node key")
+}
+
+#[test]
+#[trace("TC-935", "FR-386-AC-9")]
+fn every_leaf_key_type_is_kept_as_declared() {
+    let timer = ValueType::Composite(node("Timer"));
+    let reference = ValueType::Reference(EffectiveId::new(
+        None,
+        OriginalDeclarationKey::new("test", "7"),
+    ));
+    let enumeration = ValueType::Enum(EnumShape::new(false, []));
+    let text = ValueType::Text(TextType::new(0, 4, TextProfile::Nfc).expect("ordered"));
+    for key in [
+        ValueType::String,
+        ValueType::Integer,
+        timer,
+        enumeration,
+        text,
+        reference,
+    ] {
+        let map = MapType::new(key.clone(), ValueType::Boolean, bound(0, 2)).expect("a leaf key");
+        assert!(*map.key() == key);
+        assert!(*map.values() == ValueType::Boolean);
+        assert_eq!(map.bound(), bound(0, 2));
+    }
 }
 
 #[test]
