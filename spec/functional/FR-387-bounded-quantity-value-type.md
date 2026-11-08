@@ -66,6 +66,6 @@ Proposed.
 
 ## Dependencies
 
-- Unit identity: [FR-088](./FR-088-enum-and-unit-identity-in-the-kernel.md). Deep types: [FR-262](./FR-262-deep-values-and-types-in-the-kernel.md). Sibling type-identity requirement: [FR-386](./FR-386-map-value-type-with-text-keys.md).
+- Unit identity: [FR-088](./FR-088-enum-and-unit-identity-in-the-kernel.md). Deep types: [FR-262](./FR-262-deep-values-and-types-in-the-kernel.md). Sibling type-identity requirement: [FR-386](./FR-386-map-value-type-with-a-key-type.md).
 - The source is QSpec [FR-154](ix://agent-ix/quire-specification/FR-154) and FR-154-AC-31 (`Quantity<u>[min, max]`, refinement of `Quantity<u>`, run-time invariant FR-154-AC-28); the consumer is QSL FR-230-AC-26 (min/max on a unit alias). The kernel holds no alias, name or unit semantics beyond the type's own identity.
 - The falsifying controls are [TC-936](../test-cases/TC-936-bounded-quantity-value-type.md).

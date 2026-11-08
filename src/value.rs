@@ -379,8 +379,7 @@ pub enum ValueType {
     Composite(NodeKey),
     /// A collection type `K<T>[min, max]`, or the unbounded `K<T>`.
     Collection(Arc<CollectionType>),
-    /// A map type `Map<Text, V>[min, max]`, or the unbounded
-    /// `Map<Text, V>`: the key type is always `Text`.
+    /// A map type `Map<K, V>[min, max]`, or the unbounded `Map<K, V>`.
     Map(Arc<MapType>),
     /// A bounded quantity type `Quantity<U>[min, max]`.
     BoundedQuantity(Arc<BoundedQuantityType>),
@@ -409,7 +408,7 @@ impl ValueType {
         Self::CarriedQuantity(Arc::new(carried))
     }
 
-    /// `Map<Text, values>[bound]`.
+    /// `Map<key, values>[bound]`.
     pub fn map(map_type: MapType) -> Self {
         Self::Map(Arc::new(map_type))
     }

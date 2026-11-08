@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The `Map<Text, V>` value type through the public API (FR-386, TC-935).
+//! The `Map<K, V>` value type through the public API (FR-386, TC-935).
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Write};
 use std::hash::{Hash, Hasher};
@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use ix_trace_rs::trace;
 use quire_exact::{
     admit_text, from_admitted, CardinalityBound, CollectionKind, CollectionType, MapType, Meter,
-    OptionValue, ScalarLimits, TextPayload, TextProfile, TextType, Value, ValueType,
+    NestedMapKey, OptionValue, ScalarLimits, TextPayload, TextProfile, TextType, Value, ValueType,
 };
 
 /// Levels of nesting in the deep types.
@@ -17,8 +17,12 @@ fn bound(minimum: u64, maximum: u64) -> Option<CardinalityBound> {
     Some(CardinalityBound::new(minimum, maximum).expect("ordered"))
 }
 
+fn keyed_map_of(key: ValueType, values: ValueType, bound: Option<CardinalityBound>) -> ValueType {
+    ValueType::map(MapType::new(key, values, bound).expect("a leaf key"))
+}
+
 fn map_of(values: ValueType, bound: Option<CardinalityBound>) -> ValueType {
-    ValueType::map(MapType::new(values, bound))
+    keyed_map_of(ValueType::String, values, bound)
 }
 
 fn hash_of(value_type: &ValueType) -> u64 {
@@ -180,14 +184,14 @@ fn deep_map_types_clone_compare_hash_format_and_drop() {
 fn a_map_type_debug_names_the_value_type_and_bound() {
     assert_eq!(
         format!("{:?}", map_of(ValueType::Boolean, None)),
-        "Map(MapType { values: Boolean, bound: None })"
+        "Map(MapType { key: String, values: Boolean, bound: None })"
     );
     assert_eq!(
         format!(
             "{:?}",
             map_of(ValueType::option(ValueType::Boolean), bound(1, 3))
         ),
-        "Map(MapType { values: Option(Boolean), bound: Some(CardinalityBound { minimum: 1, \
+        "Map(MapType { key: String, values: Option(Boolean), bound: Some(CardinalityBound { minimum: 1, \
          maximum: 3 }) })"
     );
 }
@@ -197,14 +201,14 @@ fn a_map_type_debug_names_the_value_type_and_bound() {
 fn a_map_type_alternate_debug_names_the_value_type_and_bound() {
     assert_eq!(
         format!("{:#?}", map_of(ValueType::Boolean, None)),
-        "Map(\n    MapType {\n        values: Boolean,\n        bound: None,\n    },\n)"
+        "Map(\n    MapType {\n        key: String,\n        values: Boolean,\n        bound: None,\n    },\n)"
     );
     assert_eq!(
         format!(
             "{:#?}",
             map_of(ValueType::option(ValueType::Boolean), bound(1, 3))
         ),
-        "Map(\n    MapType {\n        values: Option(\n            Boolean,\n        ),\n        \
+        "Map(\n    MapType {\n        key: String,\n        values: Option(\n            Boolean,\n        ),\n        \
          bound: Some(\n            CardinalityBound {\n                minimum: 1,\n                \
          maximum: 3,\n            },\n        ),\n    },\n)"
     );
@@ -239,5 +243,39 @@ fn a_map_type_admits_no_value() {
     );
     for value in [text, collection, option] {
         assert!(!map.admits(&value));
+    }
+}
+
+#[test]
+#[trace("TC-935", "FR-386-AC-8")]
+fn a_map_type_reports_its_key_type_and_differs_by_key() {
+    let int_key = ValueType::Integer;
+    let by_string = keyed_map_of(ValueType::String, ValueType::Boolean, bound(1, 3));
+    let by_int = keyed_map_of(int_key.clone(), ValueType::Boolean, bound(1, 3));
+    let ValueType::Map(ref map) = by_int else {
+        panic!("ValueType::map builds a Map");
+    };
+    assert!(*map.key() == int_key);
+    assert!(by_string == keyed_map_of(ValueType::String, ValueType::Boolean, bound(1, 3)));
+    assert!(by_string != by_int);
+}
+
+#[test]
+#[trace("TC-935", "FR-386-AC-9")]
+fn a_map_key_that_nests_another_type_is_refused() {
+    let sequence = ValueType::collection(CollectionType::new(
+        CollectionKind::Sequence,
+        ValueType::Boolean,
+        None,
+    ));
+    for key in [
+        ValueType::option(ValueType::Boolean),
+        sequence,
+        map_of(ValueType::Boolean, None),
+    ] {
+        assert_eq!(
+            MapType::new(key, ValueType::Boolean, None).err(),
+            Some(NestedMapKey)
+        );
     }
 }
