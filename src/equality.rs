@@ -28,7 +28,7 @@
 //! composite against a non-composite, and two composites of one declaration
 //! with different slot counts, still refuse with the checked invariant.
 
-use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
+use crate::accounting::{Charge, ChargePoint, Incomplete, LimitKind, Meter};
 use crate::integer::Integer;
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop};
 use crate::value::{FieldValue, Value};
@@ -132,29 +132,45 @@ fn planned_equality_stop(
     right: &Value,
     meter: &mut Meter,
 ) -> Result<EqualityEvaluation, Stop> {
-    let (left_occ, right_occ) = (left.occ(), right.occ());
-    meter.charge(
-        Charge::new(ChargePoint::EqualityPlanForm)
-            .exact_size(
-                LimitKind::ValueOccurrences,
-                left_occ.clone().max(right_occ.clone()),
-            )
-            .work(left_occ.add(&right_occ)),
-    )?;
+    charge_plan_form(&left.occ(), &right.occ(), meter)?;
     let plan = plan_pairs(left, right).map_err(Stop::Refused)?;
-    meter.charge_plan(&plan.pairs)?;
-    let mut remaining = plan.pairs.clone();
-    while !remaining.is_zero() {
-        meter.charge(Charge::new(ChargePoint::EqualityPair))?;
-        remaining = remaining.sub(&Integer::one());
-    }
-    meter.charge(Charge::new(ChargePoint::EqualityResultRetain).results(1))?;
+    charge_pairs(&plan.pairs, meter)?;
     Ok(EqualityEvaluation {
         equal: plan.equal,
         plan: EqualityPlan {
             pair_events: plan.pairs,
         },
     })
+}
+
+/// `equality.plan-form`: the larger occurrence count as size and the sum of
+/// both counts as work. Shared with the native integer equality entry so the
+/// two cannot charge differently.
+pub(crate) fn charge_plan_form(
+    left_occ: &Integer,
+    right_occ: &Integer,
+    meter: &mut Meter,
+) -> Result<(), Incomplete> {
+    meter.charge(
+        Charge::new(ChargePoint::EqualityPlanForm)
+            .exact_size(
+                LimitKind::ValueOccurrences,
+                left_occ.clone().max(right_occ.clone()),
+            )
+            .work(left_occ.add(right_occ)),
+    )
+}
+
+/// `equality.plan`, one `equality.pair` per planned pair and
+/// `equality.result-retain`.
+pub(crate) fn charge_pairs(pairs: &Integer, meter: &mut Meter) -> Result<(), Incomplete> {
+    meter.charge_plan(pairs)?;
+    let mut remaining = pairs.clone();
+    while !remaining.is_zero() {
+        meter.charge(Charge::new(ChargePoint::EqualityPair))?;
+        remaining = remaining.sub(&Integer::one());
+    }
+    meter.charge(Charge::new(ChargePoint::EqualityResultRetain).results(1))
 }
 
 /// A formed plan: its pair count and the relation's Boolean.

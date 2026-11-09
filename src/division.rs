@@ -9,7 +9,7 @@
 //! operation and is not here. [`divide`] takes the selected [`DivisionProfile`]
 //! directly.
 
-use crate::accounting::{Charge, ChargePoint, LimitKind, Meter};
+use crate::accounting::{Charge, ChargePoint, Incomplete, LimitKind, Meter};
 use crate::integer::{Integer, IntegerDomain, IntegerInterval, NonZeroInteger};
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop, Undefined};
 use alloc::boxed::Box;
@@ -99,6 +99,71 @@ pub fn modulo(
     Outcome::from_stop(euclidean_remainder(dividend, divisor, domain, meter))
 }
 
+/// Which of the two named division charge families a step belongs to. The
+/// `Integer` and native entry points charge through the same four functions
+/// below, so the amounts and order cannot drift apart.
+#[derive(Clone, Copy)]
+pub(crate) enum DivisionSchedule {
+    /// The `integer-division.*` points.
+    Division,
+    /// The `integer-modulus.*` points.
+    Modulus,
+}
+
+/// `*.operands`: `max(bits(a), bits(b))` integer bits and two occurrences.
+pub(crate) fn charge_operands(
+    schedule: DivisionSchedule,
+    bits: u64,
+    meter: &mut Meter,
+) -> Result<(), Incomplete> {
+    let point = match schedule {
+        DivisionSchedule::Division => ChargePoint::IntegerDivisionOperands,
+        DivisionSchedule::Modulus => ChargePoint::IntegerModulusOperands,
+    };
+    meter.charge(
+        Charge::new(point)
+            .size(LimitKind::IntegerBits, bits)
+            .size(LimitKind::ValueOccurrences, 2),
+    )
+}
+
+/// `*.arithmetic`: the integer bits that bound both quotient and remainder.
+pub(crate) fn charge_arithmetic(
+    schedule: DivisionSchedule,
+    bits: u64,
+    meter: &mut Meter,
+) -> Result<(), Incomplete> {
+    let point = match schedule {
+        DivisionSchedule::Division => ChargePoint::IntegerDivisionArithmetic,
+        DivisionSchedule::Modulus => ChargePoint::IntegerModulusArithmetic,
+    };
+    meter.charge(Charge::new(point).size(LimitKind::IntegerBits, bits))
+}
+
+/// `*.domain`: one occurrence, charged before the membership decision.
+pub(crate) fn charge_domain(
+    schedule: DivisionSchedule,
+    meter: &mut Meter,
+) -> Result<(), Incomplete> {
+    let point = match schedule {
+        DivisionSchedule::Division => ChargePoint::IntegerDivisionDomain,
+        DivisionSchedule::Modulus => ChargePoint::IntegerModulusDomain,
+    };
+    meter.charge(Charge::new(point).size(LimitKind::ValueOccurrences, 1))
+}
+
+/// `*.result-retain`: one result unit.
+pub(crate) fn charge_result_retain(
+    schedule: DivisionSchedule,
+    meter: &mut Meter,
+) -> Result<(), Incomplete> {
+    let point = match schedule {
+        DivisionSchedule::Division => ChargePoint::IntegerDivisionResultRetain,
+        DivisionSchedule::Modulus => ChargePoint::IntegerModulusResultRetain,
+    };
+    meter.charge(Charge::new(point).results(1))
+}
+
 fn operand_bits(dividend: &Integer, divisor: &Integer) -> u64 {
     dividend.magnitude_bits().max(divisor.magnitude_bits())
 }
@@ -136,28 +201,27 @@ fn member_of(
     domain: &IntegerDomain,
     meter: &mut Meter,
 ) -> Result<Integer, Stop> {
-    meter.charge(
-        Charge::new(ChargePoint::IntegerDivisionOperands)
-            .size(LimitKind::IntegerBits, operand_bits(dividend, divisor))
-            .size(LimitKind::ValueOccurrences, 2),
+    charge_operands(
+        DivisionSchedule::Division,
+        operand_bits(dividend, divisor),
+        meter,
     )?;
     let admitted_divisor = admit_divisor(divisor)?;
-    meter.charge(
-        Charge::new(ChargePoint::IntegerDivisionArithmetic)
-            .size(LimitKind::IntegerBits, arithmetic_bits(dividend, divisor)),
+    charge_arithmetic(
+        DivisionSchedule::Division,
+        arithmetic_bits(dividend, divisor),
+        meter,
     )?;
     let (quotient, remainder) = profile.apply(dividend, admitted_divisor);
     let exposed = member.select(quotient, remainder);
-    meter.charge(
-        Charge::new(ChargePoint::IntegerDivisionDomain).size(LimitKind::ValueOccurrences, 1),
-    )?;
+    charge_domain(DivisionSchedule::Division, meter)?;
     if !domain.contains(&exposed) {
         return Err(Stop::Refused(Refusal::DivisionOutOfDomain {
             domain: refused_interval(domain)?,
             member,
         }));
     }
-    meter.charge(Charge::new(ChargePoint::IntegerDivisionResultRetain).results(1))?;
+    charge_result_retain(DivisionSchedule::Division, meter)?;
     Ok(exposed)
 }
 
@@ -167,26 +231,25 @@ fn euclidean_remainder(
     domain: &IntegerDomain,
     meter: &mut Meter,
 ) -> Result<Integer, Stop> {
-    meter.charge(
-        Charge::new(ChargePoint::IntegerModulusOperands)
-            .size(LimitKind::IntegerBits, operand_bits(dividend, divisor))
-            .size(LimitKind::ValueOccurrences, 2),
+    charge_operands(
+        DivisionSchedule::Modulus,
+        operand_bits(dividend, divisor),
+        meter,
     )?;
     let admitted_divisor = admit_divisor(divisor)?;
-    meter.charge(
-        Charge::new(ChargePoint::IntegerModulusArithmetic)
-            .size(LimitKind::IntegerBits, arithmetic_bits(dividend, divisor)),
+    charge_arithmetic(
+        DivisionSchedule::Modulus,
+        arithmetic_bits(dividend, divisor),
+        meter,
     )?;
     let (_, remainder) = DivisionProfile::Euclidean.apply(dividend, admitted_divisor);
-    meter.charge(
-        Charge::new(ChargePoint::IntegerModulusDomain).size(LimitKind::ValueOccurrences, 1),
-    )?;
+    charge_domain(DivisionSchedule::Modulus, meter)?;
     if !domain.contains(&remainder) {
         return Err(Stop::Refused(Refusal::ModuloOutOfDomain {
             domain: refused_interval(domain)?,
         }));
     }
-    meter.charge(Charge::new(ChargePoint::IntegerModulusResultRetain).results(1))?;
+    charge_result_retain(DivisionSchedule::Modulus, meter)?;
     Ok(remainder)
 }
 

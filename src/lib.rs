@@ -141,10 +141,13 @@ pub use integer::{
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
 pub use native_integer::{
-    evaluate_native_integer_arithmetic, evaluate_native_integer_ordering,
-    AdmittedNativeIntegerOperation, NativeInteger, NativeIntegerAdmissionError,
-    NativeIntegerEndpoint, NativeIntegerInterval, NativeIntegerOperandPosition,
-    NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
+    charge_native_integer_schedule, evaluate_native_integer_arithmetic,
+    evaluate_native_integer_division, evaluate_native_integer_equality,
+    evaluate_native_integer_modulo, evaluate_native_integer_multiply_i64,
+    evaluate_native_integer_ordering, AdmittedNativeIntegerOperation, NativeInteger,
+    NativeIntegerAdmissionError, NativeIntegerEndpoint, NativeIntegerInterval,
+    NativeIntegerOperandPosition, NativeIntegerOperands, NativeIntegerOperation,
+    NativeIntegerOperationKind, NativeIntegerPlan, NativeIntegerSchedule,
 };
 pub use node::{
     is_identifier, Identifier, InvalidIdentifier, InvalidNodeKey, NodeKey,
