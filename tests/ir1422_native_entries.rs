@@ -121,7 +121,7 @@ fn interval(a: i128, b: i128) -> (Range, IntegerInterval) {
     )
 }
 
-const EDGES: [i128; 16] = [
+const EDGES: [i128; 18] = [
     0,
     1,
     -1,
@@ -138,6 +138,8 @@ const EDGES: [i128; 16] = [
     i128::MIN,
     i128::MIN + 1,
     1 << 100,
+    1 << 63,
+    1 << 64,
 ];
 
 #[trace("TC-944", "FR-397-AC-1")]
@@ -189,6 +191,19 @@ fn division_and_modulus_match_the_integer_path() {
                             );
                             assert_eq!(events[..], general_events[..events.len()], "{label}");
                             assert_eq!(events.len() + 1, general_events.len(), "{label}");
+                            // The prefix is charged identically under every tightened limit.
+                            for kind in TIGHTENED {
+                                for bound in [0, 1, 2, 130] {
+                                    let l = limited(kind, bound);
+                                    let (n, ne, nc) = run(l, &native);
+                                    let (g, ge, gc) = run(l, &existing);
+                                    if matches!(n, Outcome::Incomplete(_)) {
+                                        assert_eq!((n, ne, nc), (g, ge, gc), "{label} {kind:?}");
+                                    } else {
+                                        assert_eq!(ne[..], ge[..ne.len()], "{label} {kind:?}");
+                                    }
+                                }
+                            }
                         } else {
                             same(&label, &native, &existing);
                         }
@@ -407,7 +422,17 @@ fn charge_only_schedule_equals_each_evaluator() {
                 Kind::Subtract => Op::Subtract { left: r, right: r },
                 _ => Op::Negate { operand: r },
             };
-            let Ok(plan) = Plan::new(op, None) else {
+            // Only the Add of [0, i128::MAX] with itself overflows the capacity.
+            let planned = Plan::new(op, None);
+            let overflows = kind == Kind::Add && a == i128::MAX;
+            assert_eq!(planned.is_err(), overflows, "plan {kind:?} {a} {b}");
+            let Ok(plan) = planned else {
+                assert_eq!(
+                    planned,
+                    Err(Error::CapacityExceeded {
+                        operation: Kind::Add
+                    })
+                );
                 continue;
             };
             let args = if kind == Kind::Negate {

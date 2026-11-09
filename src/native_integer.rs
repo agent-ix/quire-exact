@@ -585,27 +585,25 @@ fn native_division(
         DivisionMember::Remainder => Some(remainder),
     };
     division::charge_domain(schedule, meter)?;
-    let admitted = match (exposed, domain) {
-        (Some(value), Some(domain)) if !domain.contains(NativeInteger(value)) => None,
-        (None, Some(_)) => None,
-        (Some(value), _) => Some(NativeInteger(value)),
+    let result = match (exposed, domain) {
+        (Some(value), None) => NativeInteger(value),
+        (Some(value), Some(domain)) if domain.contains(NativeInteger(value)) => {
+            NativeInteger(value)
+        }
         (None, None) => {
             return Err(Stop::Refused(Refusal::CheckedInvariant {
                 cause: CheckedInvariantCause::NativeIntegerCapacityBreach,
             }))
         }
-    };
-    let Some(result) = admitted else {
-        let target = domain.map(|domain| Box::new(domain.to_integer_interval()));
-        return Err(Stop::Refused(match (schedule, target) {
-            (DivisionSchedule::Division, Some(domain)) => {
-                Refusal::DivisionOutOfDomain { domain, member }
-            }
-            (DivisionSchedule::Modulus, Some(domain)) => Refusal::ModuloOutOfDomain { domain },
-            (_, None) => Refusal::CheckedInvariant {
-                cause: CheckedInvariantCause::BoundedDivisionExpected,
-            },
-        }));
+        // A bounded domain excludes the member, including the quotient
+        // outside i128, which no native interval contains.
+        (_, Some(domain)) => {
+            let domain = Box::new(domain.to_integer_interval());
+            return Err(Stop::Refused(match schedule {
+                DivisionSchedule::Division => Refusal::DivisionOutOfDomain { domain, member },
+                DivisionSchedule::Modulus => Refusal::ModuloOutOfDomain { domain },
+            }));
+        }
     };
     division::charge_result_retain(schedule, meter)?;
     Ok(result)
@@ -635,7 +633,10 @@ fn charge_equality_schedule(meter: &mut Meter) -> Result<(), crate::accounting::
 
 /// One native operation whose complete success-path charge schedule is
 /// requested without computing a result.
+///
+/// Non-exhaustive: consumers must handle future variants.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum NativeIntegerSchedule {
     /// Add, subtract, multiply or negate an admitted operation.
     Arithmetic(AdmittedNativeIntegerOperation),

@@ -24,6 +24,8 @@ Verify FR-397-AC-1 through FR-397-AC-4 through the public API by running each na
 
 - Every outcome, event and counter is identical between each native entry and the existing path.
 - Rejected multiply operands charge nothing.
+- Exception: the quotient `i128::MIN / -1` with no result interval is refused by the native entry as `CheckedInvariant(NativeIntegerCapacityBreach)` after the same charges as `divide` up to `*.domain`, where `divide` completes; consumers fall back.
+- The charge-only schedule is success-path only, for use after bounds prove the result and domain fit.
 
 ## Status
 
