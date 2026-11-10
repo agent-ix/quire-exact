@@ -2109,6 +2109,41 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-945", "FR-390-AC-8", "FR-390-AC-9")]
+    fn decimal_reservations_charge_full_scratch_capacity_not_growth_increment() {
+        // 2^32 has two base-10^9 chunks. Their requested u32 capacities
+        // are one and two elements, followed by the ten-byte spelling.
+        let value = Integer::from(4_294_967_296_i64);
+        let mut exact = DecimalAdmission::new(4 + 8 + 10, u64::MAX);
+        assert_eq!(
+            value
+                .try_to_decimal_string_with_budget(10, &mut exact)
+                .unwrap(),
+            "4294967296"
+        );
+        assert_eq!(exact.requests, [4, 8, 10]);
+        assert_eq!(exact.storage, 22);
+
+        let mut scratch_short = DecimalAdmission::new(4 + 8 - 1, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(10, &mut scratch_short),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(scratch_short.requests, [4, 8]);
+        assert_eq!(scratch_short.storage, 4);
+        assert_eq!(scratch_short.denial, Some(DecimalDenial::Storage));
+
+        let mut output_short = DecimalAdmission::new(4 + 8 + 10 - 1, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(10, &mut output_short),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(output_short.requests, [4, 8, 10]);
+        assert_eq!(output_short.storage, 12);
+        assert_eq!(output_short.denial, Some(DecimalDenial::Storage));
+    }
+
+    #[test]
     #[trace("TC-945", "FR-390-AC-9")]
     fn decimal_scratch_denial_precedes_growth_and_cancellation_interrupts_conversion() {
         let mut chunks = Vec::new();
