@@ -1,5 +1,5 @@
 ---
-id: TC-944
+id: TC-945
 title: "Admit decimal conversion work and storage before growth"
 type: TC
 org: agent-ix
@@ -7,7 +7,7 @@ relationships:
   - target: ix://agent-ix/quire-exact/FR-390
     type: verifies
 ---
-# TC-944: Admit decimal conversion work and storage before growth
+# TC-945: Admit decimal conversion work and storage before growth
 
 ## Description
 

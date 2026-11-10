@@ -19,6 +19,19 @@ When a consumer copies an admitted `Integer`, learns what that copy will reserve
 - For decimal output, a caller-supplied maximum UTF-8 output byte count. The bound applies to the decimal text including a minus sign, before any enclosing JSON escaping or punctuation.
 - For budgeted decimal output, an `IntegerDecimalBudget` that admits cumulative full-capacity storage reservations and conversion work. The consumer remains responsible for admitting the source scalar's bit size and retaining the cause of its work, storage or cancellation denial.
 
+`IntegerDecimalBudget` SHALL be a public trait extending the existing public
+`Reservation` trait and declaring
+`fn work(&mut self, units: u64) -> Result<(), ReservationDenied>`.
+Its inherited storage callback is
+`Reservation::reserve(&mut self, bytes: usize) -> Result<(), ReservationDenied>`.
+Both callbacks SHALL use the existing public `ReservationDenied` token:
+`Ok(())` admits the requested work or storage, and `Err(ReservationDenied)`
+refuses it before execution or allocation. The caller SHALL retain the precise
+work-budget, storage-budget or cancellation cause behind that token. The
+conversion SHALL propagate a token from either callback as
+`IntegerDecimalBudgetError::Denied` without allocating an error envelope or
+relabeling the cause as a decimal byte limit or allocator failure.
+
 ## Outputs
 
 - An owned, numerically equal `Integer` from a fallible copy, or a typed `Allocation { requested: usize }` refusal.
