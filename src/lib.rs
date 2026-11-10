@@ -135,8 +135,9 @@ pub use ieee::{
 };
 pub use integer::{
     BoundedInteger, EmptyInterval, Integer, IntegerCopyError, IntegerCopyFootprint,
-    IntegerDecimalError, IntegerDomain, IntegerInterval, IntegerParseError, IntegerReserveError,
-    NonCanonicalInteger, NonZeroInteger, OutOfDomain, ZeroDivisor,
+    IntegerDecimalBudget, IntegerDecimalBudgetError, IntegerDecimalError, IntegerDomain,
+    IntegerInterval, IntegerParseError, IntegerReserveError, NonCanonicalInteger, NonZeroInteger,
+    OutOfDomain, ZeroDivisor,
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
