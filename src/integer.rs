@@ -79,6 +79,74 @@ pub enum IntegerDecimalError {
     OutputSizeOverflow,
 }
 
+/// Admission of decimal conversion work and storage before either is performed.
+///
+/// Reservations count the full capacity of every requested block, including
+/// conversion scratch and the returned string. Nothing is credited when a block
+/// is released. Work counts one unit per binary limb visited, radix chunk
+/// multiply-add or append, and output digit, plus one setup unit. Implementations can poll their
+/// cancellation handle at these admission points and retain the precise cause
+/// of a denial. The enclosing consumer admits the source's scalar bit size.
+pub trait IntegerDecimalBudget: crate::Reservation {
+    /// Admit `units` of conversion work before performing it.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::ReservationDenied`] when work or cancellation denies admission.
+    fn work(&mut self, units: u64) -> Result<(), crate::ReservationDenied>;
+}
+
+/// A budgeted decimal conversion was denied by its caller or by the decimal
+/// output's byte bound or allocator.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum IntegerDecimalBudgetError {
+    /// Caller admission denied work or storage; the budget retains its cause.
+    #[error("integer decimal budget denied")]
+    Denied,
+    /// A byte, output-size or actual allocator refusal.
+    #[error(transparent)]
+    Decimal(#[from] IntegerDecimalError),
+}
+
+trait DecimalControl {
+    type Error: From<IntegerDecimalError>;
+
+    fn work(&mut self, units: u64) -> Result<(), Self::Error>;
+    fn reserve(&mut self, additional: usize, capacity: usize) -> Result<(), Self::Error>;
+}
+
+struct LegacyDecimal<'a, F>(&'a mut F);
+
+impl<F: FnMut(usize) -> Result<(), IntegerDecimalError>> DecimalControl for LegacyDecimal<'_, F> {
+    type Error = IntegerDecimalError;
+
+    fn work(&mut self, _units: u64) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn reserve(&mut self, additional: usize, _capacity: usize) -> Result<(), Self::Error> {
+        self.0(additional)
+    }
+}
+
+struct BudgetedDecimal<'a, B: ?Sized>(&'a mut B);
+
+impl<B: IntegerDecimalBudget + ?Sized> DecimalControl for BudgetedDecimal<'_, B> {
+    type Error = IntegerDecimalBudgetError;
+
+    fn work(&mut self, units: u64) -> Result<(), Self::Error> {
+        self.0
+            .work(units)
+            .map_err(|_| IntegerDecimalBudgetError::Denied)
+    }
+
+    fn reserve(&mut self, _additional: usize, capacity: usize) -> Result<(), Self::Error> {
+        self.0
+            .reserve(capacity)
+            .map_err(|_| IntegerDecimalBudgetError::Denied)
+    }
+}
+
 /// The storage an [`Integer::try_clone`] or [`Clone::clone`] reserves, computed
 /// without allocating.
 ///
@@ -122,26 +190,36 @@ fn decimal_length(
 const DECIMAL_CHUNK_BASE: u64 = 1_000_000_000;
 const BINARY_LIMB_BASE: u64 = 1_u64 << 32;
 
-fn append_binary_limb(
+fn append_binary_limb<C: DecimalControl>(
     chunks: &mut Vec<u32>,
     limb: u32,
-    before_reserve: &mut impl FnMut(usize) -> Result<(), IntegerDecimalError>,
-) -> Result<(), IntegerDecimalError> {
+    control: &mut C,
+) -> Result<(), C::Error> {
+    control.work(1)?;
     let mut carry = u64::from(limb);
     for chunk in chunks.iter_mut() {
+        control.work(1)?;
         let value = u64::from(*chunk) * BINARY_LIMB_BASE + carry;
         *chunk = (value % DECIMAL_CHUNK_BASE) as u32;
         carry = value / DECIMAL_CHUNK_BASE;
     }
     while carry != 0 {
+        control.work(1)?;
         if chunks.len() == chunks.capacity() {
             let requested = reservation_bytes::<u32>(chunks.len(), 1);
             if requested == usize::MAX {
-                return Err(IntegerDecimalError::Allocation { requested });
+                return Err(IntegerDecimalError::Allocation { requested }.into());
             }
-            before_reserve(requested)?;
+            let capacity = chunks
+                .len()
+                .checked_add(1)
+                .and_then(|count| count.checked_mul(core::mem::size_of::<u32>()))
+                .ok_or(IntegerDecimalError::Allocation {
+                    requested: usize::MAX,
+                })?;
+            control.reserve(requested, capacity)?;
             chunks
-                .try_reserve(1)
+                .try_reserve_exact(1)
                 .map_err(|_| IntegerDecimalError::Allocation { requested })?;
         }
         chunks.push((carry % DECIMAL_CHUNK_BASE) as u32);
@@ -159,6 +237,20 @@ fn write_decimal_chunk(output: &mut String, mut chunk: u32, width: usize) {
     for digit in &digits[9 - width..] {
         output.push(char::from(*digit));
     }
+}
+
+fn reserve_decimal_output<C: DecimalControl>(
+    output: &mut String,
+    required: usize,
+    control: &mut C,
+) -> Result<(), C::Error> {
+    control.reserve(required, required)?;
+    output
+        .try_reserve_exact(required)
+        .map_err(|_| IntegerDecimalError::Allocation {
+            requested: required,
+        })?;
+    Ok(())
 }
 
 enum IntegerRepr {
@@ -281,11 +373,40 @@ impl Integer {
         self.try_to_decimal_string_with(max_bytes, &mut |_| Ok(()))
     }
 
+    /// Render the same canonical decimal text as [`Self::try_to_decimal_string`],
+    /// admitting every scratch/output reservation and conversion step first.
+    ///
+    /// The budget's reservations are cumulative full-capacity bytes; work
+    /// admission can poll cancellation. No lazy `BigInt` image is materialized.
+    /// `max_bytes` bounds the final spelling, including its sign. Conversion
+    /// scratch is needed to determine that length and is independently admitted.
+    ///
+    /// # Errors
+    ///
+    /// [`IntegerDecimalBudgetError::Denied`] preserves a caller denial separately
+    /// from decimal byte bounds, size overflow and failed actual allocations.
+    pub fn try_to_decimal_string_with_budget(
+        &self,
+        max_bytes: usize,
+        budget: &mut (impl IntegerDecimalBudget + ?Sized),
+    ) -> Result<String, IntegerDecimalBudgetError> {
+        self.decimal_string(max_bytes, &mut BudgetedDecimal(budget))
+    }
+
     fn try_to_decimal_string_with(
         &self,
         max_bytes: usize,
         before_reserve: &mut impl FnMut(usize) -> Result<(), IntegerDecimalError>,
     ) -> Result<String, IntegerDecimalError> {
+        self.decimal_string(max_bytes, &mut LegacyDecimal(before_reserve))
+    }
+
+    fn decimal_string<C: DecimalControl>(
+        &self,
+        max_bytes: usize,
+        control: &mut C,
+    ) -> Result<String, C::Error> {
+        control.work(1)?;
         let mut chunks = Vec::new();
         match &self.0 {
             IntegerRepr::Small64 { value, .. } => {
@@ -298,7 +419,7 @@ impl Integer {
                     count += 1;
                 }
                 for limb in limbs[..count].iter().rev() {
-                    append_binary_limb(&mut chunks, *limb, before_reserve)?;
+                    append_binary_limb(&mut chunks, *limb, control)?;
                 }
             }
             IntegerRepr::Small128 { value, .. } => {
@@ -311,12 +432,12 @@ impl Integer {
                     count += 1;
                 }
                 for limb in limbs[..count].iter().rev() {
-                    append_binary_limb(&mut chunks, *limb, before_reserve)?;
+                    append_binary_limb(&mut chunks, *limb, control)?;
                 }
             }
             IntegerRepr::LargeDigits { limbs, .. } => {
                 for limb in limbs.iter().rev() {
-                    append_binary_limb(&mut chunks, *limb, before_reserve)?;
+                    append_binary_limb(&mut chunks, *limb, control)?;
                 }
             }
         }
@@ -330,17 +451,15 @@ impl Integer {
         let count = chunks.len().max(1);
         let required = decimal_length(count, highest_digits, negative, max_bytes)?;
         let mut output = String::new();
-        before_reserve(required)?;
-        output
-            .try_reserve_exact(required)
-            .map_err(|_| IntegerDecimalError::Allocation {
-                requested: required,
-            })?;
+        reserve_decimal_output(&mut output, required, control)?;
         if negative {
+            control.work(1)?;
             output.push('-');
         }
+        control.work(highest_digits as u64)?;
         write_decimal_chunk(&mut output, highest, highest_digits);
         for chunk in chunks.iter().rev().skip(1) {
+            control.work(9)?;
             write_decimal_chunk(&mut output, *chunk, 9);
         }
         Ok(output)
@@ -1844,6 +1963,291 @@ mod tests {
                 required: 13,
                 limit: 12
             })
+        );
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum DecimalDenial {
+        Storage,
+        Work,
+        Cancelled(crate::CancelCause),
+    }
+
+    struct DecimalAdmission {
+        storage: usize,
+        work: u64,
+        storage_limit: usize,
+        work_limit: u64,
+        requests: Vec<usize>,
+        denial: Option<DecimalDenial>,
+        cancel: crate::Cancel,
+        cancel_after_scratch: bool,
+    }
+
+    impl DecimalAdmission {
+        fn new(storage_limit: usize, work_limit: u64) -> Self {
+            Self {
+                storage: 0,
+                work: 0,
+                storage_limit,
+                work_limit,
+                requests: Vec::new(),
+                denial: None,
+                cancel: crate::Cancel::new(),
+                cancel_after_scratch: false,
+            }
+        }
+    }
+
+    impl crate::Reservation for DecimalAdmission {
+        fn reserve(&mut self, bytes: usize) -> Result<(), crate::ReservationDenied> {
+            self.requests.push(bytes);
+            let next = self.storage.checked_add(bytes);
+            match next.filter(|total| *total <= self.storage_limit) {
+                Some(total) => {
+                    self.storage = total;
+                    Ok(())
+                }
+                None => {
+                    self.denial = Some(DecimalDenial::Storage);
+                    Err(crate::ReservationDenied)
+                }
+            }
+        }
+    }
+
+    impl IntegerDecimalBudget for DecimalAdmission {
+        fn work(&mut self, units: u64) -> Result<(), crate::ReservationDenied> {
+            if self.cancel_after_scratch && self.storage != 0 {
+                self.cancel.cancel(crate::CancelCause::Deadline);
+            }
+            if self.cancel.poll() {
+                self.denial = self.cancel.tripped().map(DecimalDenial::Cancelled);
+                return Err(crate::ReservationDenied);
+            }
+            let next = self.work.checked_add(units);
+            match next.filter(|total| *total <= self.work_limit) {
+                Some(total) => {
+                    self.work = total;
+                    Ok(())
+                }
+                None => {
+                    self.denial = Some(DecimalDenial::Work);
+                    Err(crate::ReservationDenied)
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[trace("TC-945", "FR-390-AC-2", "FR-390-AC-3", "FR-390-AC-8")]
+    fn budgeted_decimal_preserves_literal_bytes_and_exact_bounds() {
+        for spelling in [
+            "0", "1", "-1", "170141183460469231731687303715884105727",
+            "-98765432109876543210987654321098765432109876543210987654321098765432109876543210987654321098765432109876543210",
+        ] {
+            let value = Integer::from_str(spelling).unwrap();
+            let mut control = DecimalAdmission::new(usize::MAX, u64::MAX);
+            assert_eq!(value.try_to_decimal_string_with_budget(spelling.len(), &mut control).unwrap(), spelling);
+            assert_eq!(value.try_to_decimal_string(spelling.len()).unwrap(), spelling);
+            let mut exact = DecimalAdmission::new(control.storage, control.work);
+            assert_eq!(value.try_to_decimal_string_with_budget(spelling.len(), &mut exact).unwrap(), spelling);
+            let mut bytes = DecimalAdmission::new(usize::MAX, u64::MAX);
+            assert_eq!(value.try_to_decimal_string_with_budget(spelling.len() - 1, &mut bytes), Err(IntegerDecimalBudgetError::Decimal(IntegerDecimalError::ByteLimit { required: spelling.len(), limit: spelling.len() - 1 })));
+            assert_eq!(bytes.denial, None);
+            assert_eq!(value.to_string(), spelling);
+        }
+    }
+
+    #[test]
+    #[trace("TC-945", "FR-390-AC-8", "FR-390-AC-9")]
+    fn budgeted_decimal_denies_each_actual_growth_and_work_without_losing_its_cause() {
+        let spelling = "98765432109876543210987654321098765432109876543210987654321098765432109876543210987654321098765432109876543210";
+        let value = Integer::from_str(spelling).unwrap();
+        let mut control = DecimalAdmission::new(usize::MAX, u64::MAX);
+        assert_eq!(
+            value
+                .try_to_decimal_string_with_budget(spelling.len(), &mut control)
+                .unwrap(),
+            spelling
+        );
+        assert!(control.requests.len() > 2);
+        assert_eq!(control.requests.last(), Some(&spelling.len()));
+        let mut prefix = 0;
+        for request in &control.requests {
+            let mut denied = DecimalAdmission::new(prefix, u64::MAX);
+            assert_eq!(
+                value.try_to_decimal_string_with_budget(spelling.len(), &mut denied),
+                Err(IntegerDecimalBudgetError::Denied)
+            );
+            assert_eq!(denied.denial, Some(DecimalDenial::Storage));
+            assert_eq!(denied.storage, prefix);
+            assert_eq!(denied.requests.last(), Some(request));
+            assert_eq!(value.to_string(), spelling);
+            prefix += request;
+        }
+        let mut one_short = DecimalAdmission::new(control.storage - 1, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(spelling.len(), &mut one_short),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(one_short.denial, Some(DecimalDenial::Storage));
+        assert_eq!(one_short.requests.last(), Some(&spelling.len()));
+        for work_limit in [0, control.work - 1] {
+            let mut denied = DecimalAdmission::new(usize::MAX, work_limit);
+            assert_eq!(
+                value.try_to_decimal_string_with_budget(spelling.len(), &mut denied),
+                Err(IntegerDecimalBudgetError::Denied)
+            );
+            assert_eq!(denied.denial, Some(DecimalDenial::Work));
+            assert!(denied.work <= work_limit);
+            if work_limit == 0 {
+                assert_eq!(denied.storage, 0);
+                assert!(denied.requests.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    #[trace("TC-945", "FR-390-AC-8", "FR-390-AC-9")]
+    fn decimal_reservations_charge_full_scratch_capacity_not_growth_increment() {
+        // 2^32 has two base-10^9 chunks. Their requested u32 capacities
+        // are one and two elements, followed by the ten-byte spelling.
+        let value = Integer::from(4_294_967_296_i64);
+        let mut exact = DecimalAdmission::new(4 + 8 + 10, u64::MAX);
+        assert_eq!(
+            value
+                .try_to_decimal_string_with_budget(10, &mut exact)
+                .unwrap(),
+            "4294967296"
+        );
+        assert_eq!(exact.requests, [4, 8, 10]);
+        assert_eq!(exact.storage, 22);
+
+        let mut scratch_short = DecimalAdmission::new(4 + 8 - 1, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(10, &mut scratch_short),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(scratch_short.requests, [4, 8]);
+        assert_eq!(scratch_short.storage, 4);
+        assert_eq!(scratch_short.denial, Some(DecimalDenial::Storage));
+
+        let mut output_short = DecimalAdmission::new(4 + 8 + 10 - 1, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(10, &mut output_short),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(output_short.requests, [4, 8, 10]);
+        assert_eq!(output_short.storage, 12);
+        assert_eq!(output_short.denial, Some(DecimalDenial::Storage));
+    }
+
+    #[test]
+    #[trace("TC-945", "FR-390-AC-9")]
+    fn decimal_scratch_denial_precedes_growth_and_cancellation_interrupts_conversion() {
+        let mut chunks = Vec::new();
+        let mut denied = DecimalAdmission::new(0, u64::MAX);
+        assert_eq!(
+            append_binary_limb(&mut chunks, u32::MAX, &mut BudgetedDecimal(&mut denied)),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert!(chunks.is_empty());
+        assert_eq!(chunks.capacity(), 0, "denied storage must not grow scratch");
+
+        let mut output = String::new();
+        let mut denied = DecimalAdmission::new(0, u64::MAX);
+        assert_eq!(
+            reserve_decimal_output(&mut output, 1, &mut BudgetedDecimal(&mut denied)),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert!(output.is_empty());
+        assert_eq!(output.capacity(), 0, "denied storage must not grow output");
+
+        let spelling = "98765432109876543210987654321098765432109876543210987654321098765432109876543210987654321098765432109876543210";
+        let value = Integer::from_str(spelling).unwrap();
+        let mut cancelled = DecimalAdmission::new(usize::MAX, u64::MAX);
+        cancelled.cancel_after_scratch = true;
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(spelling.len(), &mut cancelled),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert!(
+            cancelled.storage > 0,
+            "conversion must have admitted real scratch before cancellation"
+        );
+        assert_eq!(
+            cancelled.denial,
+            Some(DecimalDenial::Cancelled(crate::CancelCause::Deadline))
+        );
+        let mut control = DecimalAdmission::new(usize::MAX, u64::MAX);
+        assert_eq!(
+            value
+                .try_to_decimal_string_with_budget(spelling.len(), &mut control)
+                .unwrap(),
+            spelling
+        );
+        assert!(control.work > cancelled.work);
+        assert_eq!(value.to_string(), spelling);
+    }
+
+    #[test]
+    #[trace("TC-945", "FR-390-AC-8", "FR-390-AC-9")]
+    fn large_decimal_tiny_caps_stop_at_admission_without_materializing_source_cache() {
+        let spelling = "9".repeat(4096);
+        let value = Integer::from_str(&spelling).unwrap();
+        let mut storage = DecimalAdmission::new(0, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut storage),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(storage.denial, Some(DecimalDenial::Storage));
+        assert_eq!(storage.storage, 0);
+        assert_eq!(storage.requests.len(), 1);
+        let mut work = DecimalAdmission::new(usize::MAX, 0);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut work),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(work.denial, Some(DecimalDenial::Work));
+        assert!(work.requests.is_empty());
+        let mut cancelled = DecimalAdmission::new(usize::MAX, u64::MAX);
+        cancelled.cancel.cancel(crate::CancelCause::Requested);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut cancelled),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(
+            cancelled.denial,
+            Some(DecimalDenial::Cancelled(crate::CancelCause::Requested))
+        );
+        assert!(cancelled.requests.is_empty());
+        let mut bytes = DecimalAdmission::new(usize::MAX, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut bytes),
+            Err(IntegerDecimalBudgetError::Decimal(
+                IntegerDecimalError::ByteLimit {
+                    required: spelling.len(),
+                    limit: 1
+                }
+            ))
+        );
+        assert_eq!(bytes.denial, None);
+        assert_ne!(bytes.requests.last(), Some(&spelling.len()));
+        if let IntegerRepr::LargeDigits { cache, .. } = &value.0 {
+            assert!(
+                cache.get().is_none(),
+                "bounded refusal must leave the lazy image untouched"
+            );
+        } else {
+            panic!("large fixture must use owned limbs");
+        }
+        let mut control = DecimalAdmission::new(usize::MAX, u64::MAX);
+        assert_eq!(
+            value
+                .try_to_decimal_string_with_budget(spelling.len(), &mut control)
+                .unwrap(),
+            spelling
         );
     }
 }
