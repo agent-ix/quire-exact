@@ -2155,4 +2155,64 @@ mod tests {
         assert!(control.work > cancelled.work);
         assert_eq!(value.to_string(), spelling);
     }
+
+    #[test]
+    #[trace("TC-945", "FR-390-AC-8", "FR-390-AC-9")]
+    fn large_decimal_tiny_caps_stop_at_admission_without_materializing_source_cache() {
+        let spelling = "9".repeat(4096);
+        let value = Integer::from_str(&spelling).unwrap();
+        let mut storage = DecimalAdmission::new(0, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut storage),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(storage.denial, Some(DecimalDenial::Storage));
+        assert_eq!(storage.storage, 0);
+        assert_eq!(storage.requests.len(), 1);
+        let mut work = DecimalAdmission::new(usize::MAX, 0);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut work),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(work.denial, Some(DecimalDenial::Work));
+        assert!(work.requests.is_empty());
+        let mut cancelled = DecimalAdmission::new(usize::MAX, u64::MAX);
+        cancelled.cancel.cancel(crate::CancelCause::Requested);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut cancelled),
+            Err(IntegerDecimalBudgetError::Denied)
+        );
+        assert_eq!(
+            cancelled.denial,
+            Some(DecimalDenial::Cancelled(crate::CancelCause::Requested))
+        );
+        assert!(cancelled.requests.is_empty());
+        let mut bytes = DecimalAdmission::new(usize::MAX, u64::MAX);
+        assert_eq!(
+            value.try_to_decimal_string_with_budget(1, &mut bytes),
+            Err(IntegerDecimalBudgetError::Decimal(
+                IntegerDecimalError::ByteLimit {
+                    required: spelling.len(),
+                    limit: 1
+                }
+            ))
+        );
+        assert_eq!(bytes.denial, None);
+        assert_ne!(bytes.requests.last(), Some(&spelling.len()));
+        if let IntegerRepr::LargeDigits { cache, .. } = &value.0 {
+            assert!(
+                cache.get().is_none(),
+                "bounded refusal must leave the lazy image untouched"
+            );
+        } else {
+            panic!("large fixture must use owned limbs");
+        }
+        let mut control = DecimalAdmission::new(usize::MAX, u64::MAX);
+        assert_eq!(
+            value
+                .try_to_decimal_string_with_budget(spelling.len(), &mut control)
+                .unwrap(),
+            spelling
+        );
+    }
 }
