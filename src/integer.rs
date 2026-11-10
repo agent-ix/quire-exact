@@ -2040,7 +2040,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-944", "FR-390-AC-2", "FR-390-AC-3", "FR-390-AC-8")]
+    #[trace("TC-945", "FR-390-AC-2", "FR-390-AC-3", "FR-390-AC-8")]
     fn budgeted_decimal_preserves_literal_bytes_and_exact_bounds() {
         for spelling in [
             "0", "1", "-1", "170141183460469231731687303715884105727",
@@ -2060,7 +2060,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-944", "FR-390-AC-8", "FR-390-AC-9")]
+    #[trace("TC-945", "FR-390-AC-8", "FR-390-AC-9")]
     fn budgeted_decimal_denies_each_actual_growth_and_work_without_losing_its_cause() {
         let spelling = "98765432109876543210987654321098765432109876543210987654321098765432109876543210987654321098765432109876543210";
         let value = Integer::from_str(spelling).unwrap();
@@ -2109,7 +2109,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-944", "FR-390-AC-9")]
+    #[trace("TC-945", "FR-390-AC-9")]
     fn decimal_scratch_denial_precedes_growth_and_cancellation_interrupts_conversion() {
         let mut chunks = Vec::new();
         let mut denied = DecimalAdmission::new(0, u64::MAX);
