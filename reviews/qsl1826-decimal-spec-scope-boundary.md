@@ -205,3 +205,23 @@ CONDITIONAL within specification review scope. Resolve the recorded finding befo
 ## Qualification
 
 No applicable active AssuranceProfile was found in the exact-head spec tree. Normative FR/TC schema validation is unavailable for the repository module configuration; quire parse is structural parsing only. SpecReview validation uses the installed process module explicitly and is recorded separately. Advice/matrix catalog results are unavailable; manual assessment does not replace them. No code implementation or runtime behavior was qualified. Merge authority remains the IR owner; this reviewer never merges.
+
+## Disposition round 1
+
+Reviewed frozen head 23204a6b4169043f2b998a80a589c3babe1a9d05. **PASS within specification review scope.** No new findings. TC-945 is unique across the exact-head spec catalog; existing native TC-944 is unchanged from the reviewed base. The public budget trait explicitly extends Reservation and defines work(u64), existing ReservationDenied, cause retention and allocation-free Denied propagation. Earlier findings, excerpts and verdict are historical and remain unchanged. Normative FR/TC schema and deterministic advice/matrix remain unavailable; no runtime qualification is claimed.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Defined IntegerDecimalBudget: Reservation, work(u64), shared ReservationDenied and caller cause retention. |
+
+After excerpt:
+
+```text
+`IntegerDecimalBudget` SHALL be a public trait extending the existing public
+`Reservation` trait and declaring
+`fn work(&mut self, units: u64) -> Result<(), ReservationDenied>`.
+Its inherited storage callback is
+`Reservation::reserve(&mut self, bytes: usize) -> Result<(), ReservationDenied>`.
+```
