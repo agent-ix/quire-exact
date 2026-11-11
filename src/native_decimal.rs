@@ -298,8 +298,19 @@ const POWERS_OF_TEN: [i128; 39] = {
     table
 };
 
+mod operations;
+mod readout;
+
+pub use operations::{
+    AdmittedNativeDecimalOperation, NativeDecimalCapacityQuantity, NativeDecimalCapacityRefusal,
+    NativeDecimalLoss, NativeDecimalOperation, NativeDecimalResult,
+};
+pub use readout::{evaluate_native_decimal, order_native_decimals};
+
 #[cfg(kani)]
 mod kani_proofs;
+#[cfg(test)]
+mod operations_tests;
 #[cfg(any(test, kani))]
 mod reference;
 #[cfg(test)]
