@@ -126,13 +126,22 @@ impl NativeDecimalType {
         self.rounding
     }
 
+    /// Whether the carried Decimal is a member of this type by the owner's
+    /// rule. Membership is judged on the normalized pair, never on the
+    /// retained one, and this is the only way for the rest of the crate to
+    /// ask: the rule cannot be given a pair that has not been normalized.
+    pub(crate) fn admits(&self, value: &NativeDecimal) -> bool {
+        self.admits_normalized(value.normalized_pair())
+    }
+
     /// The owner's membership rule on a normalized pair: with `s*` the larger
     /// of the scale and `min_scale`, the pair is a member exactly when `s*`
     /// is at most `max_scale` and `lower <= coefficient x 10^(s* - scale) <=
     /// upper`. A lift that leaves the native width is decided by sign alone
     /// (both bounds fit the width) and is never wrapped, saturated or
     /// materialized.
-    pub(crate) fn admits_normalized(&self, coefficient: i128, scale: u32) -> bool {
+    fn admits_normalized(&self, pair: NormalizedPair) -> bool {
+        let NormalizedPair { coefficient, scale } = pair;
         let lifted_scale = if scale > self.min_scale {
             scale
         } else {
@@ -153,6 +162,14 @@ impl NativeDecimalType {
             None => false,
         }
     }
+}
+
+/// A pair that [`NativeDecimal::normalized_pair`] produced: the only input of
+/// the membership rule.
+#[derive(Clone, Copy)]
+pub(crate) struct NormalizedPair {
+    coefficient: i128,
+    scale: u32,
 }
 
 impl TryFrom<&DecimalType> for NativeDecimalType {
@@ -207,8 +224,7 @@ impl NativeDecimal {
             return Err(NativeDecimalRefusal::OutsideCarrierDomain);
         };
         let drawn = Self::from_retained(i128::from(coefficient), scale);
-        let (normal_coefficient, normal_scale) = drawn.normalized();
-        if ty.admits_normalized(normal_coefficient, normal_scale) {
+        if ty.admits(&drawn) {
             Ok(drawn)
         } else {
             Err(NativeDecimalRefusal::OutsideCarrierDomain)
@@ -228,8 +244,17 @@ impl NativeDecimal {
     /// The least-scale pair equal in value: trailing decimal zeros removed
     /// while the scale is above zero, zero as `(0, 0)`.
     pub fn normalized(&self) -> (i128, u32) {
+        let pair = self.normalized_pair();
+        (pair.coefficient, pair.scale)
+    }
+
+    /// The normalized pair, branded as such for the membership rule.
+    pub(crate) fn normalized_pair(&self) -> NormalizedPair {
         if self.coefficient == 0 {
-            return (0, 0);
+            return NormalizedPair {
+                coefficient: 0,
+                scale: 0,
+            };
         }
         let (coefficient, scale) = (self.coefficient, self.scale);
         let (coefficient, scale) = strip_zeros(coefficient, scale, 32, POWERS_OF_TEN[32]);
@@ -237,7 +262,8 @@ impl NativeDecimal {
         let (coefficient, scale) = strip_zeros(coefficient, scale, 8, POWERS_OF_TEN[8]);
         let (coefficient, scale) = strip_zeros(coefficient, scale, 4, POWERS_OF_TEN[4]);
         let (coefficient, scale) = strip_zeros(coefficient, scale, 2, POWERS_OF_TEN[2]);
-        strip_zeros(coefficient, scale, 1, POWERS_OF_TEN[1])
+        let (coefficient, scale) = strip_zeros(coefficient, scale, 1, POWERS_OF_TEN[1]);
+        NormalizedPair { coefficient, scale }
     }
 
     /// Explicit read-out into the owner's `Decimal`, retaining the pair

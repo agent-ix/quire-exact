@@ -2,7 +2,7 @@
 //! Universal obligations for the native Decimal carrier (FR-402-AC-10). The
 //! proofs carry no unwind attribute: the constructor and the normalized view
 //! contain no loop. Not executed under the repository's standing instruction.
-use super::reference::{is_least_scale_pair, is_member};
+use super::reference::{is_least_scale_pair, is_member, TEN_POWERS};
 use super::*;
 
 #[kani::proof]
@@ -52,7 +52,14 @@ fn native_decimal_from_bindings_refines_owner_membership() {
                 kani::cover!(lifted <= max_scale, "non-member in range");
                 kani::cover!(
                     c2 != 0 && lifted <= max_scale && shift > 38,
-                    "oversize lift decided by sign"
+                    "oversize power decided by sign"
+                );
+                kani::cover!(
+                    c2 != 0
+                        && lifted <= max_scale
+                        && shift <= 38
+                        && c2.unsigned_abs() > (u128::MAX >> 1) / TEN_POWERS[shift as usize],
+                    "overflowing lift decided by sign"
                 );
                 assert_eq!(outcome, Err(NativeDecimalRefusal::OutsideCarrierDomain));
             }

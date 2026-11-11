@@ -96,3 +96,25 @@ fn least_scale_reference_rejects_wrong_pairs() {
     assert!(!is_least_scale_pair(-1000, 3, 1, 0));
     assert!(!is_least_scale_pair(1, 0, 1, 1));
 }
+
+#[test]
+#[trace("TC-950", "FR-402-AC-2")]
+fn membership_is_judged_on_the_normalized_pair_even_for_a_retained_pair() {
+    // (100, 2) is the value 1: the owner admits it in Decimal[0,100; 0,1]
+    // although its retained scale 2 exceeds smax. A rule applied to the
+    // retained pair would refuse it.
+    let ty = NativeDecimalType::new(0, 100, 0, 1, RoundingMode::Exact).unwrap();
+    let retained = NativeDecimal::from_retained(100, 2);
+    let owner = DecimalType::new(
+        Integer::zero(),
+        Integer::from(100_i64),
+        0,
+        1,
+        RoundingMode::Exact,
+    )
+    .unwrap();
+    assert!(owner.contains(&retained.to_decimal()));
+    assert!(ty.admits(&retained));
+    assert!(NativeDecimal::from_bindings(&ty, 100, 2).is_ok());
+    assert!(!ty.admits(&NativeDecimal::from_retained(1, 2)));
+}

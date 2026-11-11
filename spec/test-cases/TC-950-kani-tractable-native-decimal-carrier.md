@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-402-AC-1 through FR-402-AC-12 through the public kernel API, the host differential, the Kani proofs and the recorded measurement. Every mutant below is a real buildable variant of the shared body in a scratch copy. Each names the input, or the inspection, that fails it; a mutant that no input and no inspection distinguishes from the unmutated body is not admitted. This case is planned; no part of it has run.
+Verify FR-402-AC-1 through FR-402-AC-12 through the public kernel API, the host differential, the Kani proofs and the recorded measurement. Every mutant below is a real buildable variant of the shared body in a scratch copy. Each names the input, or the inspection, that fails it; a mutant that no input and no inspection distinguishes from the unmutated body is not admitted. Steps 1 to 4 run on the host; see Status for what has and has not run.
 
 ## Test Procedure
 
@@ -78,4 +78,4 @@ Every boundary binding yields the independently written retained pair, normalize
 
 ## Status
 
-Steps 1 to 4 and 6 (AC-1 to AC-9, AC-12) run on the host through `tests/ir1444_native_decimal.rs`, the unit binding of the references in `src/native_decimal/tests.rs` and the module doctests. The host half of step 5 (reference bound to the owner route) runs; the two Kani proofs are written and unexecuted. Step 7 (AC-11) has not run. No proof result or measurement exists.
+Run on the host: steps 1 to 4 (AC-1 to AC-9, AC-12), through `tests/ir1444_native_decimal.rs`, the module doctests and, for the host half of step 5, the reference binding in `src/native_decimal/tests.rs`. The boundary tables are shared by the tests and hold the failing input of each mutant, but step 6 (running the mutants) has not been run as a set; one mutant (the 32-place strip removed from the normalized view) was run once by a reviewer and was caught. The two Kani proofs of step 5 are written and unexecuted. Step 7 (AC-11) has not run. No proof result or measurement exists.

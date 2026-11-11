@@ -7,6 +7,86 @@ use quire_exact::{
     NativeDecimalRefusal as Refusal, NativeDecimalType as T, RoundingMode,
 };
 
+type Row = (i128, i128, u64, u64, &'static [(i64, i64)]);
+const MAX: i128 = i128::MAX;
+const MIN: i128 = i128::MIN;
+const I64_LO: i128 = i64::MIN as i128;
+const I64_HI: i128 = i64::MAX as i128;
+
+/// The boundary set of TC-950, one row per type, written as independent
+/// literals. Every test that walks the boundary set reads this table.
+const BOUNDARY: [Row; 14] = [
+    (
+        0,
+        100,
+        0,
+        2,
+        &[
+            (5000, 2),
+            (10, 3),
+            (1, 3),
+            (10001, 2),
+            (9999, 2),
+            (100, 2),
+            (1, 0),
+            (1, 4294967295),
+            (10, 4294967295),
+        ],
+    ),
+    (
+        -1000,
+        1000,
+        0,
+        2,
+        &[
+            (0, 7),
+            (1000, 0),
+            (-1000, 0),
+            (1001, 0),
+            (-1001, 0),
+            (1, 4294967296),
+            (i64::MIN, 0),
+            (i64::MAX, 0),
+        ],
+    ),
+    (I64_LO, I64_HI, 0, 0, &[(i64::MIN, 0), (i64::MAX, 0)]),
+    (0, 100, 2, 3, &[(1, 0), (2, 0)]),
+    (0, MAX, 38, 38, &[(1, 0), (2, 0)]),
+    (0, MAX, 39, 39, &[(1, 0), (0, 0)]),
+    (MIN, 0, 38, 38, &[(-1, 0), (-2, 0)]),
+    (0, 100, 60, 70, &[(1, 0), (-1, 0), (0, 0)]),
+    (-100, 0, 60, 70, &[(-1, 0)]),
+    (0, 100, 128, 130, &[(1, 0)]),
+    (
+        0,
+        1,
+        0,
+        4294967295,
+        &[(1, 4294967295), (0, 4294967295), (2, 4294967295), (1, -1)],
+    ),
+    (0, 1, 0, 0, &[(0, 0), (1, 0)]),
+    (0, 100, 0, 1, &[(100, 2), (10, 1)]),
+    (MIN, MAX, 0, 4294967295, &[(i64::MIN, 4294967295), (1, 0)]),
+];
+
+/// Every normalized-view input of TC-950 with its expected literal.
+const NORMALIZED: [((i128, u32), (i128, u32)); 14] = [
+    ((0, 7), (0, 0)),
+    ((-1000, 3), (-1, 0)),
+    ((120, 5), (12, 4)),
+    ((7, 3), (7, 3)),
+    ((1_000_000_000_000_000_000, 18), (1, 0)),
+    ((1_000_000_000_000_000_000, 19), (1, 1)),
+    ((1_000_000_000_000_000_000, 5), (10_000_000_000_000, 0)),
+    ((9_000_000_000_000_000_000, 20), (9, 2)),
+    ((100, 2), (1, 0)),
+    ((10_i128.pow(37), 40), (1, 3)),
+    ((-(10_i128.pow(38)), 38), (-1, 0)),
+    ((MIN, 0), (MIN, 0)),
+    ((MIN, u32::MAX), (MIN, u32::MAX)),
+    ((10_i128.pow(38), u32::MAX), (1, 4294967257)),
+];
+
 const OUT: Result<D, Refusal> = Err(Refusal::OutsideCarrierDomain);
 
 fn ty(lo: i128, hi: i128, smin: u64, smax: u64) -> T {
@@ -149,64 +229,19 @@ fn canonical_and_trailing_zero_forms_are_distinct() {
     assert_ne!(a, b);
     assert_eq!(a.normalized(), (1, 0));
     assert_eq!(b.normalized(), (1, 0));
-    let one = |c: i128, s: u32| D::from_retained(c, s).normalized();
-    assert_eq!(one(0, 7), (0, 0));
-    assert_eq!(one(-1000, 3), (-1, 0));
-    assert_eq!(one(120, 5), (12, 4));
-    assert_eq!(one(7, 3), (7, 3));
-    assert_eq!(one(1_000_000_000_000_000_000, 18), (1, 0));
-    assert_eq!(one(1_000_000_000_000_000_000, 19), (1, 1));
-    assert_eq!(one(1_000_000_000_000_000_000, 5), (10_000_000_000_000, 0));
-    assert_eq!(one(9_000_000_000_000_000_000, 20), (9, 2));
-    assert_eq!(one(100, 2), (1, 0));
-    assert_eq!(one(10_i128.pow(37), 40), (1, 3));
-    assert_eq!(one(-(10_i128.pow(38)), 38), (-1, 0));
-    assert_eq!(one(i128::MIN, 0), (i128::MIN, 0));
-    assert_eq!(one(i128::MIN, u32::MAX), (i128::MIN, u32::MAX));
-    assert_eq!(one(10_i128.pow(38), u32::MAX), (1, 4294967257));
+    for ((c, sc), expected) in NORMALIZED {
+        assert_eq!(
+            D::from_retained(c, sc).normalized(),
+            expected,
+            "({c}, {sc})"
+        );
+    }
 }
 
 #[test]
 #[trace("TC-950", "FR-402-AC-6", "FR-402-AC-8")]
 fn read_out_and_owner_differential() {
-    let types = [
-        (0_i128, 100_i128, 0_u64, 2_u64),
-        (-1000, 1000, 0, 2),
-        (i64::MIN.into(), i64::MAX.into(), 0, 0),
-        (0, 100, 2, 3),
-        (0, i128::MAX, 38, 38),
-        (0, i128::MAX, 39, 39),
-        (i128::MIN, 0, 38, 38),
-        (0, 100, 60, 70),
-        (-100, 0, 60, 70),
-        (0, 100, 128, 130),
-        (0, 1, 0, 4294967295),
-    ];
-    let bindings = [
-        (5000_i64, 2_i64),
-        (10, 3),
-        (1, 3),
-        (10001, 2),
-        (9999, 2),
-        (100, 2),
-        (1, 0),
-        (2, 0),
-        (0, 0),
-        (-1, 0),
-        (-2, 0),
-        (0, 7),
-        (1000, 0),
-        (-1000, 0),
-        (1001, 0),
-        (-1001, 0),
-        (i64::MIN, 0),
-        (i64::MAX, 0),
-        (1, 4294967295),
-        (0, 4294967295),
-        (2, 4294967295),
-        (10, 4294967295),
-    ];
-    for (lo, hi, smin, smax) in types {
+    for (lo, hi, smin, smax, bindings) in BOUNDARY {
         let native = ty(lo, hi, smin, smax);
         let owner = DecimalType::new(
             Integer::from(lo),
@@ -217,22 +252,26 @@ fn read_out_and_owner_differential() {
         )
         .unwrap();
         assert_eq!(T::try_from(&owner), Ok(native));
-        for (c, s) in bindings {
-            let decimal = Decimal::new(Integer::from(i128::from(c)), u32::try_from(s).unwrap());
+        for &(c, s) in bindings {
+            let Ok(scale) = u32::try_from(s) else {
+                assert_eq!(build(&native, c, s), OUT);
+                continue;
+            };
+            let decimal = Decimal::new(Integer::from(i128::from(c)), scale);
             let built = build(&native, c, s);
             assert_eq!(
                 built.is_ok(),
                 owner.contains(&decimal),
                 "({lo},{hi};{smin},{smax}) ({c},{s})"
             );
+            if let Err(refusal) = built {
+                assert_eq!(refusal, Refusal::OutsideCarrierDomain);
+            }
             if let Ok(carried) = built {
                 let read = carried.to_decimal();
                 assert_eq!(
                     read.representation(),
-                    &DecimalRepresentation::new(
-                        Integer::from(i128::from(c)),
-                        u32::try_from(s).unwrap()
-                    )
+                    &DecimalRepresentation::new(Integer::from(i128::from(c)), scale)
                 );
                 let normalized = read.normalized();
                 assert_eq!(
@@ -268,26 +307,18 @@ fn copy_function_pointers_and_zero_allocation() {
     is_copy::<T>();
     let _: fn(&T, i64, i64) -> Result<D, Refusal> = D::from_bindings;
     let _: fn(&D) -> (i128, u32) = D::normalized;
-    let t = ty(0, 100, 0, 2);
-    let t2 = ty(i128::MIN, 0, 38, 38);
+    let types: Vec<(T, &[(i64, i64)])> = BOUNDARY
+        .iter()
+        .map(|&(lo, hi, smin, smax, bindings)| (ty(lo, hi, smin, smax), bindings))
+        .collect();
     let info = allocation_counter::measure(|| {
-        for (c, s) in [
-            (5000_i64, 2_i64),
-            (10, 3),
-            (1, 3),
-            (9999, 2),
-            (1, 4294967295),
-            (1, -1),
-        ] {
-            let _ = build(&t, c, s);
+        for (t, bindings) in &types {
+            for &(c, sc) in *bindings {
+                let _ = build(t, c, sc);
+            }
         }
-        let _ = build(&t2, -2, 0);
-        for (c, s) in [
-            (10_i128.pow(18), 18_u32),
-            (10_i128.pow(38), u32::MAX),
-            (0, 7),
-        ] {
-            let _ = D::from_retained(c, s).normalized();
+        for ((c, sc), _) in NORMALIZED {
+            let _ = D::from_retained(c, sc).normalized();
         }
     });
     assert_eq!(info.count_total, 0);
@@ -314,49 +345,78 @@ fn body(source: &str, signature: &str) -> String {
     panic!("unbalanced {signature}");
 }
 
+/// What in a proof-path body breaks FR-402-AC-7.
+fn violations(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for token in ["cfg(kani)", "Meter", "Vec", "Box", "String", "alloc", ".."] {
+        if text.contains(token) {
+            found.push(token.to_string());
+        }
+    }
+    let words = ["for", "while", "loop", "Integer", "Decimal", "Rational"];
+    for word in text.split(|c: char| !(c.is_alphanumeric() || c == '_')) {
+        if words.contains(&word) {
+            found.push(word.to_string());
+        }
+    }
+    // Any iterator adapter or consumer is a method call; the permitted method
+    // calls are an explicit list, so an unnamed adapter is flagged too.
+    let allowed = [
+        "checked_mul",
+        "try_from",
+        "normalized",
+        "normalized_pair",
+        "admits",
+        "admits_normalized",
+        "from_retained",
+    ];
+    for piece in text.split('.').skip(1) {
+        let name: String = piece
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if piece[name.len()..].starts_with('(') && !allowed.contains(&name.as_str()) {
+            found.push(format!(".{name}("));
+        }
+    }
+    found
+}
+
 #[test]
 #[trace("TC-950", "FR-402-AC-7")]
 fn source_inspection_of_proof_path_bodies() {
     let source = include_str!("../src/native_decimal.rs");
-    let bodies = [
-        body(source, "pub fn from_bindings"),
-        body(source, "pub fn normalized"),
-        body(source, "fn strip_zeros"),
-        body(source, "pub(crate) fn admits_normalized"),
-    ];
-    let banned_tokens = ["cfg(kani)", "Meter", "Vec", "Box", "String", "alloc"];
-    let banned_words = ["for", "while", "loop", "Integer", "Decimal", "Rational"];
-    for text in &bodies {
-        for token in banned_tokens {
-            assert!(!text.contains(token), "{token} in {text}");
-        }
-        for word in banned_words {
-            let found = text
-                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                .any(|w| w == word);
-            assert!(!found, "{word} in {text}");
-        }
-        for adapter in [
-            ".iter(",
-            ".map(",
-            ".filter(",
-            ".fold(",
-            ".all(",
-            ".any(",
-            ".find(",
-            "into_iter",
-        ] {
-            assert!(!text.contains(adapter), "{adapter} in {text}");
-        }
+    for signature in [
+        "pub fn from_bindings",
+        "pub fn normalized(",
+        "pub(crate) fn normalized_pair",
+        "fn strip_zeros",
+        "fn admits_normalized",
+        "pub(crate) fn admits(",
+    ] {
+        let text = body(source, signature);
+        assert_eq!(violations(&text), Vec::<String>::new(), "{signature}");
     }
 }
 
 #[test]
-#[trace("TC-950", "FR-402-AC-3")]
-fn refusal_carries_no_decimal_and_has_two_causes() {
-    let t = ty(0, 100, 0, 2);
-    assert_eq!(build(&t, 1, 3).unwrap_err(), Refusal::OutsideCarrierDomain);
-    assert_ne!(Refusal::TypeNotRepresentable, Refusal::OutsideCarrierDomain);
+#[trace("TC-950", "FR-402-AC-7")]
+fn source_inspection_flags_each_banned_construct() {
+    for (sample, expected) in [
+        ("(0..3).for_each(|i| drop(i))", ".for_each("),
+        ("xs.iter().sum()", ".iter("),
+        ("while a < b { a += 1 }", "while"),
+        ("loop { break }", "loop"),
+        ("for i in xs {}", "for"),
+        ("#[cfg(kani)] x", "cfg(kani)"),
+        ("Integer::from(1)", "Integer"),
+        ("x.try_fold(0, f)", ".try_fold("),
+        ("Vec::new()", "Vec"),
+    ] {
+        let found = violations(sample);
+        assert!(found.iter().any(|f| f == expected), "{sample}: {found:?}");
+    }
+    assert!(violations("match a.checked_mul(b) { Some(v) => v, None => 0 }").is_empty());
 }
 
 #[test]
