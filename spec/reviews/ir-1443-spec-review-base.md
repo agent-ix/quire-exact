@@ -90,6 +90,7 @@ Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
 | FND-004 | fixed | - |
 | FND-005 | fixed | - |
 | FND-006 | fixed | - |
+| FND-007 | fixed | - |
 
 Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unchanged); FND-004 closed by the lead's edit of the IR-1443 ticket text.
 
@@ -106,3 +107,5 @@ Round 3 rows (FND-006) in Dispositions follow fix commit 4b874ce on b68819e (ori
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-007 | low | The new precedence binding, the Decimal (1, 0) against Int[0, 2^127], is 'a binding against a type with a bound outside the native width', so item 8 and step 2 put it in the third intended-difference set labelled TypeNotRepresentable, while AC-5 expects CarrierMismatch. More generally, step 2 runs every boundary binding through the owner route, but a carrier-mismatched binding (this one and the six ordered mismatches) has no owner-route outcome to compare, and is neither an agreement nor one of the three listed differences, so AC-8's 'only disagreements are the three' has no defined result for them. State that carrier-mismatched bindings are checked against their literal CarrierMismatch only and are outside the differential, or limit the third set to bindings of the type's own carrier. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:28 |
+
+Round 4 rows (FND-007) in Dispositions follow fix commit 7cff974 on 4b874ce (origin/main 4fe7df6 unchanged).

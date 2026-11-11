@@ -109,3 +109,11 @@ Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unc
 | FND-011 | low | Item 6 now orders CarrierMismatch before TypeNotRepresentable, but no boundary binding or mutant exercises that pair: the six mismatches use native-width types and the too-wide types get only matching bindings. A constructor that checks the type first passes. Add a mismatched binding against a too-wide type, for example the Decimal binding (1, 0) against Int[0, 2^127], expected CarrierMismatch, and a mutant row for the swapped order. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:52 |
 
 Round 3 rows (FND-011) in Dispositions follow fix commit 4b874ce on b68819e (origin/main 4fe7df6 unchanged).
+
+Round 4 rows (none) in Dispositions follow fix commit 7cff974 on 4b874ce (origin/main 4fe7df6 unchanged).
+
+## New findings (disposition pass 4)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | low | Step 6 runs 'the input mutants through the host differential', but step 2 (the host differential of FR-398 item 8) now excludes every carrier-mismatched binding, so the mutant 'type representability judged before the carrier match', whose only input is the Decimal (1, 0) against Int[0, 2^127], is never run where it can fail; it is caught only by the literal check of step 1. Route the input mutants through steps 1 and 2. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:32 |
