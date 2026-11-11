@@ -70,6 +70,7 @@ mod ieee;
 mod integer;
 mod key;
 mod location;
+mod native_decimal;
 mod native_integer;
 mod node;
 mod numeric;
@@ -141,6 +142,7 @@ pub use integer::{
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
+pub use native_decimal::{NativeDecimal, NativeDecimalRefusal, NativeDecimalType};
 pub use native_integer::{
     charge_native_integer_schedule, evaluate_native_integer_arithmetic,
     evaluate_native_integer_division, evaluate_native_integer_equality,

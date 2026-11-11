@@ -119,7 +119,7 @@ Planned (IR-1508). No implementation, proof result or measurement exists; this s
 
 ## Dependencies
 
-- IR-1444 (merged, quire-exact PR 146) delivered the carrier, the native type and the constructor of [FR-402](./FR-402-kani-tractable-native-decimal-carrier.md), on which this requirement depends. FR-362 and QSpec FR-140 own the arithmetic and the charge schedule that this requirement refines. FR-384 is the precedent for admission before charge and for the typed capacity refusal.
+- IR-1444 (specified in quire-exact PR 146, implemented in PR 148) delivers the carrier, the native type and the constructor of [FR-402](./FR-402-kani-tractable-native-decimal-carrier.md), on which this requirement depends. FR-362 and QSpec FR-140 own the arithmetic and the charge schedule that this requirement refines. FR-384 is the precedent for admission before charge and for the typed capacity refusal.
 - FR-363 owns the ordering charges and the rule that the alignment power of ten is not materialized, and FR-372 owns Decimal membership; this requirement refines both. CG FR-051 is the consumer (prerequisite P1); CG's consumption is CG's ticket IR-259 and CG's credit, not this requirement's acceptance. CG FR-028 owns the 16 GiB ceiling.
 - The seven proofs of Behavior 37 are run only when the repository's standing instruction in CLAUDE.md on the Kani runners permits it; until then they stay unexecuted.
 - The `Meter` is the owner's and unchanged; its own allocation behaviour is outside this requirement.
