@@ -56,9 +56,16 @@ CHANGES REQUIRED. The owner fidelity of the stated schedule checks out against s
 | --- | --- | --- | --- |
 | FND-003 | low | Behavior 21 requires approximations of log2(10) with at least 96 fractional bits. With 96 bits, k < 2^32 times the upper approximation (< 4 x 2^96) is a 130-bit product, so the Kani path needs multi-limb multiplication. Independently checked: 96 bits is sufficient. The smallest distance from k log2(10) to an integer over 1 <= k < 2^32 is about 2^-34.5, at k = 579001193 (continued-fraction convergent; the next partial quotient is 42), and k x 2^-96 <= 2^-64. Any f of about 67 or more is exact, and f <= 94 keeps k x hi below 2^128. State the precision as a range (for example 67 to 94 bits) or keep only the 'floors agree' condition, so that a u128 multiply is allowed. | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:75 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | Behavior 16 starts at (|N|, |D|, 1). With N = 0 (a zero dividend over a nonzero divisor), u = 0 and the 'v is even and nonzero' branch keeps halving v, so g x (u + v) is the odd part of |D| (3 for D = 12), not gcd(0, |D|) = |D|. That contradicts 'the gcd is g x (u + v) once an operand is zero'. No outcome changes: the quotient 0 / D' is an integer, so it is placed exactly with no loss record, and D' <= |D| keeps ground (d) silent. This is a definition error, not an observable one. Fix it with a guard, for example 'a zero N reduces to 0 / 1', or by halving only while both operands are nonzero. | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:67 |
+
 ## Dispositions
 
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Verified in 3184a68f: (a) the owner forms `10^k` with `k` above 38 for a plan shift (`Add`, `Subtract` or `Divide`) or for the lift of the placed coefficient to `T` (`k = T - p` for the placed scale `p`), whatever the coefficient, a zero coefficient included, because `10^k` for `k` above 38 does not fit signed 128 bits; a zero placed at a scale `p` with `T - p` at most 38 is not refused, and a zero placed at `T` has lift 0; (b) a shifted  / Charge amounts are not a ground of refusal: with (a), every `bits(10^k)` of a non-ordering charge has `k` at most 38. Every operan |
 | FND-002 | fixed | Verified in 3184a68f: 24. The kernel SHALL carry a host differential. For every boundary operand and type of TC-951 the oracle SHALL be the owner route (`evaluate_decimal` and `order_numbers` over `Decimal::new` operands) run under a `Meter` with the same limits, and the native path and the oracle SHALL agree on the typed outcome, the read-out `Decim (the 'large T' sentence is removed; TC-951 step 8 has no 4096 rule) |
+| FND-003 | fixed | Verified in 4f9b241c: formed with no loop and no allocation by multiplying `k` in unsigned 128 bits by a lower and an upper approximation of `log2(10)` of the same fixed number of fractional bits, between 67 and 94 inclusive (enough for exactness, and small enough that the product fits 128 bits), whose floors agree for every `k` from 0 to 4294967295. |
