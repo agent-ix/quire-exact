@@ -58,3 +58,12 @@ FR-402 Behavior 7 names no API for the normalized view or the read-out. `normali
 | FR-402-AC-12 | examined | ... read through an i128 accessor ... read through a u32 accessor |
 | FR-403 | context_only | Inputs: carried Decimals built from bindings, from an earlier result or by the total retained-pair constructor of FR-402 Behavior 3; Behavior 10 membership; Behaviors 31-34 |
 | FR-398 | context_only | the six causes are CarrierMismatch, TypeNotRepresentable, ZeroDenominator, NonCanonical, OutsideCarrierDomain and NotRepresentable |
+
+## Dispositions
+
+Round 1, verified at 5331d53e. No new findings.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-403:122 now reads "IR-1444 (specified in quire-exact PR 146, implemented in PR 148) delivers the carrier, the native type and the constructor of FR-402". |
+| FND-002 | fixed | `admits_normalized` is now private and takes a crate-private `NormalizedPair`, whose fields are private and which only `NativeDecimal::normalized_pair()` produces. The crate-facing seam is `NativeDecimalType::admits(&NativeDecimal)`, which normalizes internally, and `from_bindings` uses it. `membership_is_judged_on_the_normalized_pair_even_for_a_retained_pair` checks (100,2) in Decimal[0,100;0,1] (admitted by the owner, by `admits` and by `from_bindings`) and (1,2) (refused). The reviewer's retained-pair mutant failed it. FR-403 names no membership API, and its Behavior 10 needs only a native membership test of the placed result, which `ty.admits(&NativeDecimal::from_retained(v x 10^T, T))` provides. No mismatch with FR-403. |

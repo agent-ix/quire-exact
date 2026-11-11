@@ -37,3 +37,12 @@ I ran `quire validate --scope . <file>` on each changed file, and on the origin/
 | FR-402 Status | examined | Implemented (IR-1444): the carrier, constructor, normalized view, read-out, ingress and host tests (AC-1 to AC-9, AC-12). The two Kani proofs of AC-10 are written and not executed, under the repository's standing instruction; AC-10 and AC-11 are not credited. No measurement exists and none is claimed. |
 | TC-950 Status | examined | Steps 1 to 4 and 6 (AC-1 to AC-9, AC-12) run on the host through tests/ir1444_native_decimal.rs, the unit binding of the references in src/native_decimal/tests.rs and the module doctests. The host half of step 5 (reference bound to the owner route) runs; the two Kani proofs are written and unexecuted. Step 7 (AC-11) has not run. No proof result or measurement exists. |
 | TC-950 Description | context_only | This case is planned; no part of it has run. |
+
+## Dispositions
+
+Round 1, verified at 5331d53e. `quire validate --scope . <file>` on FR-402, TC-950 and FR-403 exits 0, with output identical to the origin/main copies (one pre-existing advisory). No new findings.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-950 Status now reads: "Run on the host: steps 1 to 4 (AC-1 to AC-9, AC-12) ... and, for the host half of step 5, the reference binding ... step 6 (running the mutants) has not been run as a set; one mutant (the 32-place strip removed from the normalized view) was run once by a reviewer and was caught. The two Kani proofs of step 5 are written and unexecuted. Step 7 (AC-11) has not run." |
+| FND-002 | fixed | TC-950 Description now ends "Steps 1 to 4 run on the host; see Status for what has and has not run." |
