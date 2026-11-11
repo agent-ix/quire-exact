@@ -78,4 +78,4 @@ Every boundary binding yields the independently written retained pair, normalize
 
 ## Status
 
-Planned. No implementation, test, proof or measurement has run.
+Steps 1 to 4 and 6 (AC-1 to AC-9, AC-12) run on the host through `tests/ir1444_native_decimal.rs`, the unit binding of the references in `src/native_decimal/tests.rs` and the module doctests. The host half of step 5 (reference bound to the owner route) runs; the two Kani proofs are written and unexecuted. Step 7 (AC-11) has not run. No proof result or measurement exists.

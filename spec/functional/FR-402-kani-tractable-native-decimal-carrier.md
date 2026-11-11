@@ -75,7 +75,7 @@ A generated harness for `a + b` over `Decimal[0,100; 0,2]` calls `kani::any::<i6
 
 ## Status
 
-Planned (IR-1444). No implementation, proof result or measurement exists; this specification claims none.
+Implemented (IR-1444): the carrier, constructor, normalized view, read-out, ingress and host tests (AC-1 to AC-9, AC-12). The two Kani proofs of AC-10 are written and not executed, under the repository's standing instruction; AC-10 and AC-11 are not credited. No measurement exists and none is claimed.
 
 ## Dependencies
 
