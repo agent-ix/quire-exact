@@ -24,6 +24,7 @@ When a generated-code consumer evaluates an operation on native operands (FR-384
 ## Outputs
 
 - `evaluate_native_integer_division`, `evaluate_native_integer_modulo` and `evaluate_native_integer_equality`, each returning `Outcome` of `NativeInteger` or `bool`.
+- `evaluate_native_boolean_equality`, returning `Outcome` of `bool`.
 - `evaluate_native_integer_multiply_i64`, returning `Result<Outcome<NativeInteger>, NativeIntegerAdmissionError>`.
 - `charge_native_integer_schedule` over `NativeIntegerSchedule`, returning `Outcome<()>`.
 
@@ -34,6 +35,8 @@ When a generated-code consumer evaluates an operation on native operands (FR-384
 3. **Equality and Boolean.** `evaluate_native_integer_equality` returns whether the two payloads are equal and charges the `equality.plan-form`, `equality.plan`, `equality.pair` and `equality.result-retain` points `planned_equality` charges for two `Integer` values, for operands of any width. The Boolean connectives over native `bool` operands are `evaluate_boolean` and `retain_boolean`, which charge only `boolean.result-retain` and are unchanged.
 4. **Charge-only entry.** `charge_native_integer_schedule` charges, and computes nothing, the success-path schedule of the named native arithmetic, i64 multiply, division, modulus, ordering or equality operation, and returns `Undefined(DivisionByZero)` after the operands charge for a zero divisor. The evaluators and this entry call the same charge functions, and the `Integer` division and equality paths call those functions too, so the amounts and order cannot differ. It is success-path only: a consumer uses it after its bounds prove that the result and any result domain are satisfied.
 
+5. **Boolean equality.** `evaluate_native_boolean_equality` over two native `bool` operands returns whether they are equal and charges the `equality.plan-form`, `equality.plan`, `equality.pair` and `equality.result-retain` points `planned_equality` charges for two `Boolean` values, through the function that `evaluate_native_integer_equality` charges through, and not the `boolean.result-retain` point of `retain_boolean`. This is the kernel the Kani-tractable Boolean equality of a generated-code consumer calls.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -42,6 +45,7 @@ When a generated-code consumer evaluates an operation on native operands (FR-384
 | FR-397-AC-2 | `evaluate_native_integer_multiply_i64` at the pairs `(3037000499, 3037000499)`, `(-3037000499, 3037000499)`, `(i64::MIN, 1)`, `(i64::MIN, -1)` and `(3037000500, 3037000500)`, zero and one, returns the value `evaluate_integer_arithmetic` returns with equal charge events for each accepted pair, and returns `CapacityExceeded` or `OperandOutsideInterval` with no charge for each rejected pair, including a result interval that excludes the product. | Test (TC-944) |
 | FR-397-AC-3 | `evaluate_native_integer_equality` over equal, unequal, signed and different-width operands returns `planned_equality`'s value over `Value::Integer` operands with equal charge events; `evaluate_boolean` over the full truth tables of `And`, `Or`, `Implies` and `Not` returns the connective and charges only `boolean.result-retain`. | Test (TC-944) |
 | FR-397-AC-4 | For each `NativeIntegerSchedule`, the events and counters after `charge_native_integer_schedule` equal those of the corresponding evaluator on a successful operation, and for a zero divisor equal the evaluator's, at sufficient limits and at a limit one below each charge; an `Incomplete` names the same limit at the same charge point. | Test (TC-944) |
+| FR-397-AC-5 | `evaluate_native_boolean_equality` over the four `(left, right)` pairs returns `planned_equality`'s value over `Value::Boolean` operands with equal outcome, charge events and counters, at unlimited limits and at every limit from zero to the unlimited spend of each counted limit kind. | Test (TC-944) |
 
 ## Status
 

@@ -624,6 +624,24 @@ pub fn evaluate_native_integer_equality(
     )
 }
 
+/// Decide native Boolean equality with the `equality.*` schedule
+/// [`crate::planned_equality`] charges for a pair of `Boolean` values:
+/// `plan-form`, `plan`, one `pair`, `result-retain`. It makes the same four
+/// charges as [`evaluate_native_integer_equality`] because a `Boolean` is one
+/// value occurrence, and not the one `boolean.result-retain` charge of
+/// [`crate::retain_boolean`].
+pub fn evaluate_native_boolean_equality(
+    left: bool,
+    right: bool,
+    meter: &mut Meter,
+) -> Outcome<bool> {
+    Outcome::from_stop(
+        charge_equality_schedule(meter)
+            .map(|()| left == right)
+            .map_err(Stop::from),
+    )
+}
+
 fn charge_equality_schedule(meter: &mut Meter) -> Result<(), crate::accounting::Incomplete> {
     // An `Integer` is one value occurrence, so both operands and the plan count one.
     let one = Integer::one();

@@ -7,13 +7,14 @@ use std::fmt::Debug;
 use ix_trace_rs::trace;
 use quire_exact::{
     charge_native_integer_schedule, divide, evaluate_boolean, evaluate_integer_arithmetic,
-    evaluate_native_integer_arithmetic, evaluate_native_integer_division,
-    evaluate_native_integer_equality, evaluate_native_integer_modulo,
-    evaluate_native_integer_multiply_i64, evaluate_native_integer_ordering, modulo,
-    planned_equality, BooleanConnective, ChargeEvent, ChargePoint, CheckedInvariantCause,
-    DivisionMember, DivisionProfile, Integer, IntegerArithmetic, IntegerDomain, IntegerInterval,
-    LimitKind, Meter, NativeInteger as N, NativeIntegerAdmissionError as Error,
-    NativeIntegerInterval as Range, NativeIntegerOperands as Args, NativeIntegerOperation as Op,
+    evaluate_native_boolean_equality, evaluate_native_integer_arithmetic,
+    evaluate_native_integer_division, evaluate_native_integer_equality,
+    evaluate_native_integer_modulo, evaluate_native_integer_multiply_i64,
+    evaluate_native_integer_ordering, modulo, planned_equality, BooleanConnective, ChargeEvent,
+    ChargePoint, CheckedInvariantCause, DivisionMember, DivisionProfile, Integer,
+    IntegerArithmetic, IntegerDomain, IntegerInterval, LimitKind, Meter, NativeInteger as N,
+    NativeIntegerAdmissionError as Error, NativeIntegerInterval as Range,
+    NativeIntegerOperands as Args, NativeIntegerOperation as Op,
     NativeIntegerOperationKind as Kind, NativeIntegerPlan as Plan, NativeIntegerSchedule as Sched,
     OrderingOperator, Outcome, Refusal, ScalarLimits, Undefined, Value,
 };
@@ -376,6 +377,43 @@ fn equality_matches_planned_equality_over_integer_values() {
                 evaluate_native_integer_equality(N::new(a), N::new(b), &mut Meter::new(limits())),
                 Outcome::Completed(a == b)
             );
+        }
+    }
+}
+
+#[trace("TC-944", "FR-397-AC-5")]
+#[test]
+fn boolean_equality_matches_planned_equality_over_boolean_values() {
+    for l in [false, true] {
+        for r in [false, true] {
+            let (vl, vr) = (Value::Boolean(l), Value::Boolean(r));
+            let native = |m: &mut Meter| evaluate_native_boolean_equality(l, r, m);
+            let existing = |m: &mut Meter| planned_equality(&vl, &vr, m);
+            let (outcome, events, counters) = run(limits(), &existing);
+            assert_eq!(outcome, Outcome::Completed(l == r));
+            assert_eq!(events.len(), 4);
+            assert_eq!(events[0].point, ChargePoint::EqualityPlanForm);
+            assert_eq!(events[3].point, ChargePoint::EqualityResultRetain);
+            assert_eq!(run(limits(), &native), (outcome, events, counters.clone()));
+            // Every bound from zero to the full spend of each counted limit
+            // lands on every charge boundary of the four-charge schedule.
+            for (kind, spend) in KINDS.iter().zip(counters) {
+                for bound in 0..=spend {
+                    let mut lim = limits();
+                    match kind {
+                        LimitKind::IntegerBits => lim.integer_bits = bound,
+                        LimitKind::ValueOccurrences => lim.value_occurrences = bound,
+                        LimitKind::WorkUnits => lim.work_units = bound,
+                        LimitKind::ResultUnits => lim.result_units = bound,
+                        _ => continue,
+                    }
+                    assert_eq!(
+                        run(lim, &native),
+                        run(lim, &existing),
+                        "boolean eq {l} {r} {kind:?} {bound}"
+                    );
+                }
+            }
         }
     }
 }
