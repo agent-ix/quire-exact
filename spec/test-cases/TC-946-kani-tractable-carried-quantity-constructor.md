@@ -11,53 +11,65 @@ relationships:
 
 ## Description
 
-Verify FR-398-AC-1 through FR-398-AC-10 through the public kernel API, the host differential against the shipped owner route, the Kani proofs and the recorded fit measurement. Every control below is a real buildable variant of the constructor in a scratch copy, and each names the input in the boundary set that makes it fail. A control that no input distinguishes from the unmutated constructor is not admitted. This case is planned; no part of it has run.
+Verify FR-398-AC-1 through FR-398-AC-11 through the public kernel API, the host differential, the Kani proofs and the recorded fit measurement. Every mutant below is a real buildable variant of the constructor in a scratch copy of the shared body. Each names the input, or the inspection, that fails it; a mutant that no input and no inspection distinguishes from the unmutated constructor is not admitted. This case is planned; no part of it has run.
 
 ## Test Procedure
 
-The boundary set, used by steps 1 to 5 and 7, is fixed before the constructor is written and is derived from independent literals, not from the constructor:
+The boundary set, used by steps 1, 2, 3 and 5, is fixed before the constructor is written and is derived from independent literals, not from the constructor. A binding is `(coefficient, scale)` for Decimal and `(numerator, denominator)` for Rational; a Decimal scale is an `i64`.
 
-- `Int[-5, 100]`: `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX - 1`, `i64::MAX` against carriers `Int[i64::MIN, i64::MAX]` (all admitted) and `Int[-5, 100]` for `-6`, `-5`, `100`, `101` (the first and last refused, the middle two admitted).
-- `Decimal[-1000, 1000; 0, 2; Exact]`: `(10, 1)`, `(-5, 1)`, `(0, 7)`, `(1000, 0)`, `(100000, 2)`, `(100001, 2)`, `(i64::MIN, 0)`, `(i64::MAX, 0)`. `Decimal[0, 100; 0, 2; Exact]`: `(5000, 2)`, `(10001, 2)`, `(9999, 2)`, `(1, 3)`. `Decimal[0, 549755813888; 0, 4294967295; Exact]`: `(1, 37)`, `(1, 38)`, `(1, 39)`, `(1, 4294967295)`, `(549755813888, 39)` (that is 2^39 over 10^39, canonical `1/5^39`). `Decimal[0, 1; 0, 2; Exact]`: `(1, 39)` (outside the domain and not representable).
-- `Rational[-9223372036854775808, 9223372036854775807; 1, 9223372036854775807]`: `(0, 1)`, `(1, 1)`, `(-1, 1)`, `(1, 2)`, `(2, 1)`, `(i64::MIN, 1)`, `(1, i64::MAX)`, `(i64::MIN, i64::MAX)`, and the non-canonical or zero pairs `(2, 4)`, `(1, -2)`, `(-1, -2)`, `(0, 2)`, `(1, 0)`, `(0, 0)`. `Rational[1, 5; 2, 4]`: `(1, 2)`, `(1, 3)`, `(5, 4)`, `(0, 1)`, `(6, 5)`, `(1, 5)`.
-- Every carrier above is also presented with a binding of another carrier.
+- `Int[i64::MIN, i64::MAX]`: `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX - 1`, `i64::MAX`, all admitted. `Int[-5, 100]`: `-6` and `101` refused, `-5` and `100` admitted.
+- `Decimal[-1000, 1000; 0, 2; Exact]`: `(10, 1)`, `(-5, 1)`, `(0, 7)`, `(1000, 0)`, `(-1000, 0)`, `(100000, 2)`, `(1001, 0)`, `(-1001, 0)`, `(i64::MIN, 0)`, `(i64::MAX, 0)`, and the scales `-1` and `4294967296`. `Decimal[0, 100; 0, 2; Exact]`: `(5000, 2)`, `(10, 3)`, `(10001, 2)`, `(9999, 2)`, `(1, 3)`. `Decimal[0, 100; 2, 3; Exact]`: `(1, 0)`, `(2, 0)`. `Decimal[0, 100; 60, 70; Exact]`: `(1, 0)`, `(0, 0)`. `Decimal[-100, 0; 60, 70; Exact]`: `(-1, 0)`. `Decimal[0, 549755813888; 0, 4294967295; Exact]`: `(1, 37)`, `(1, 38)`, `(1, 39)`, `(1, 4294967295)`, `(549755813888, 39)` (2^39 over 10^39, canonical `1/5^39`). `Decimal[0, 1; 0, 2; Exact]`: `(1, 39)`.
+- `Rational[-9223372036854775808, 9223372036854775807; 1, 9223372036854775807]`: `(0, 1)`, `(1, 1)`, `(-1, 1)`, `(1, 2)`, `(2, 1)`, `(i64::MIN, 1)`, `(1, i64::MAX)`, `(i64::MIN, i64::MAX)`, and the pairs `(2, 4)`, `(1, -2)`, `(-1, -2)`, `(0, 2)`, `(1, 0)`, `(0, 0)`. `Rational[2, 5; 3, 7]`: the four corners `(2, 3)`, `(2, 7)`, `(5, 3)`, `(5, 7)`, and the one-at-a-time violations `(1, 4)`, `(6, 7)`, `(3, 2)`, `(2, 9)`. `Rational[1, 5; 2, 4]`: `(6, 10)`.
+- Types with a bound outside the native width: `Int[0, 2^127]`, a `Decimal[0, 2^127; 0, 2]` and a `Rational[1, 5; 2, 2^127]`, each against binding `1` or `(1, 0)` or `(1, 2)` as the carrier requires.
+- The six ordered mismatches: each carrier's binding presented with each of the other two carrier types.
 
-1. For AC-1, AC-2, AC-3 and AC-4, construct every boundary binding with the public constructor. Check the magnitude against independently written decimal literals as a numerator and denominator pair, the unit against the type's `UnitId`, and each refusal against its named cause. Include the order controls of AC-5: a pair that is `NonCanonical` and outside the domain, `Decimal[0,1;0,2]` `(1, 39)`, and the five `CarrierMismatch` presentations.
-2. For AC-7, build every admitted boundary binding a second time by the shipped owner route (`Integer::from`, `Decimal::new` then `to_rational`, or `Rational::new`, then `Quantity::new`) and check admission with `IntegerInterval::contains`, `DecimalType::contains` and `RationalDomain::contains`. Assert equal magnitude, unit and admission, equal `Quantity` under `Eq`, `ZeroDenominator` for both on `(1, 0)` and `(0, 0)`, and `NonCanonical` from the constructor where `Rational::new` returns the reduced value. Assert that these are the only disagreements by counting the whole set.
-3. For AC-6, build the crate for the host with default features and compile `Copy` and a no-`Meter`-parameter use as a static bound. Run the construction of the whole boundary set inside a counting global allocator window and assert zero allocations and unchanged counters of a `Meter` created beforehand. Inspect that no body is selected by `cfg(kani)`.
-4. For AC-8, compile `compile_fail` programs that pass a `BoundedQuantityType`, a bare `UnitId` and a `Rational` to the constructor.
-5. For AC-9, run the three Kani proofs with no unwind attribute and the cover, under the repository's authorized runner. Run the reference comparison on the host over the boundary set to bind the reference to the owner route. The proofs are credited only on `VERIFIED` with the cover satisfied.
-6. Run each mutant of the next section, host differential first, then, for the loop and allocation mutants, the Kani proof. Each must fail at its named input; a mutant that passes is a defect in this case, not a result.
-7. For AC-10, run CG's FR-050 composed harness against the delivered constructor on a Decimal, an Int and a Rational leaf under the authorized runner, and record the peak memory and its provenance, time, tool version and terminal outcome on IR-1443. If the harness cannot be built yet, record that the measurement is open and do not claim a fit.
+1. For AC-1 to AC-6, construct every boundary binding with the public constructor. Check the magnitude against independently written numerator and denominator literals, and each refusal against its named cause, including the precedence pairs `Rational[1,5; 2,4]` `(6, 10)` and `Decimal[0,1; 0,2]` `(1, 39)`.
+2. For AC-8, build every boundary binding a second time by the oracle of FR-398 item 8. Where the owner route runs (every binding except Decimal scale `4294967295`, and the scales `-1` and `4294967296`, which `Decimal::new`'s `u32` cannot take and whose expected `OutsideCarrierDomain` is a literal), use `Integer::from`, `Decimal::new` then `to_rational`, or `Rational::new`, then `Quantity::new`, with `IntegerInterval::contains`, `DecimalType::contains` and `RationalDomain::contains`. For Decimal scale `4294967295`, which the owner route would materialize as a power of ten of about 1.7 GB, run `DecimalType::contains` and take the canonical fraction and its fit from the exponent reference, which counts the factors of 2 and 5 of the coefficient and never builds `10^s`; check the reference itself against the owner route for every Decimal binding of scale at most 64. Assert equal magnitude, unit and admission, equal `Quantity` under `Eq`, and that the complete list of disagreements is exactly three sets: the `NonCanonical` pairs `(2, 4)`, `(1, -2)`, `(-1, -2)`, `(0, 2)`, `(6, 10)`; the `NotRepresentable` bindings `(1, 39)` and `(1, 4294967295)` in `Decimal[0, 549755813888; 0, 4294967295]`; and every binding against the three types with a bound outside the native width. `Decimal[0,1; 0,2]` `(1, 39)` is not in the second set, because the owner refuses it.
+3. For AC-7, inspect the constructor body's source for a `cfg(kani)` token, for `for`, `while`, `loop` and iterator adapters, and for a `Meter` parameter; build the crate for the host with default features; coerce the constructor to a function pointer of the `Meter`-free signature; check `Copy` and the absence of a `UnitId` field; and run the whole boundary set inside a counting global allocator window, asserting zero allocations. The read-out is called after the window.
+4. For AC-9, compile three `compile_fail,E0308` programs that pass a `BoundedQuantityType`, a bare `UnitId` and a `Rational` to the constructor; the pinned error code makes an unrelated compile error fail the control.
+5. For AC-10, run the three Kani proofs with no unwind attribute and the cover, under the repository's authorized runner, and run the host test that binds each reference to the owner route over the boundary set. A proof is credited only on `VERIFIED` with the cover satisfied.
+6. Run each mutant of the next section: the input mutants through the host differential, the inspection mutants through step 3. Each must fail as named; a mutant that passes is a defect in this case, not a result.
+7. For AC-11, once CG's FR-050 composed harness (IR-263) consumes the delivered constructor, run it on a Decimal, an Int and a Rational leaf under the authorized runner and record the peak memory and its provenance, time, tool version and terminal outcome under IR-1443. Until IR-263 delivers the harness this step is not executable and AC-11 stays unexecuted; no fit is claimed in the meantime.
 
 ### Mutants
 
-Each is a buildable variant of the constructor and fails the stated input.
-
-| Mutant | Failing input |
+| Mutant | Fails at |
 | --- | --- |
 | `Decimal` ignores the scale (`c/1`) | `(10, 1)`, expected `1/1` |
 | `Decimal` does not reduce (`c/10^s`) | `(10, 1)`, expected `1/1`, not `10/10` |
 | `Decimal` fits by `scale <= 38` instead of the canonical fraction | `(549755813888, 39)`, expected admitted |
-| `Decimal` fits by `scale <= 37` or `<= 39` | `(1, 38)` admitted, `(1, 39)` refused |
+| `Decimal` fits by `scale <= 37` | `(1, 38)`, expected admitted |
+| `Decimal` fits by `scale <= 39` | `(1, 39)`, expected `NotRepresentable` |
 | `Decimal` checks the raw coefficient against `[lo, hi]` | `(5000, 2)` in `Decimal[0, 100; 0, 2]`, expected admitted |
 | `Decimal` compares the value, not the normalized coefficient, with `[lo, hi]` | `(9999, 2)` in `Decimal[0, 100; 0, 2]`, expected `OutsideCarrierDomain` |
+| `Decimal` compares the unlifted coefficient (skips the `smin` lift) | `(2, 0)` in `Decimal[0, 100; 2, 3]`, expected `OutsideCarrierDomain` |
+| `Decimal` lifts with a wrapping multiply | `(1, 0)` in `Decimal[0, 100; 60, 70]`, expected `OutsideCarrierDomain` |
+| `Decimal` treats the sign of an oversize lift as positive | `(-1, 0)` in `Decimal[-100, 0; 60, 70]`, expected `OutsideCarrierDomain` |
+| `Decimal` tests `scale < smax` | `(10, 3)` in `Decimal[0, 100; 0, 2]` (normalized scale 2), expected admitted |
+| `Decimal` tests the raw scale against `smax` | `(0, 7)` in `Decimal[-1000, 1000; 0, 2]`, expected admitted |
 | `Decimal` drops the sign | `(-5, 1)`, expected `-1/2` |
+| `Decimal` low bound off by one | `(-1000, 0)` admitted and `(-1001, 0)` refused in `Decimal[-1000, 1000; 0, 2]` |
+| `Decimal` truncates the scale to `u32` | scale `4294967296`, expected `OutsideCarrierDomain` |
 | `Rational` swaps numerator and denominator | `(1, 2)`, expected `1/2` |
 | `Rational` reduces instead of refusing | `(2, 4)`, expected `NonCanonical` |
 | `Rational` accepts a negative denominator | `(1, -2)`, expected `NonCanonical` |
 | `Rational` reports `NonCanonical` for a zero denominator | `(1, 0)`, expected `ZeroDenominator` |
-| `Rational` checks only the numerator range | `(1, 3)` in `Rational[1, 5; 2, 4]` is admitted, `(1, 5)` and `(6, 5)` are refused |
+| `Rational` omits one range bound | the single-violation pair for that bound in `Rational[2, 5; 3, 7]`: `(1, 4)`, `(6, 7)`, `(3, 2)` or `(2, 9)` |
+| `Rational` refuses a corner | the corner pair of `Rational[2, 5; 3, 7]` that it refuses |
 | `Int` bound off by one at either end | `-6`, `-5`, `100`, `101` in `Int[-5, 100]` |
 | `Int` negates `i64::MIN` through `abs` | `i64::MIN`, expected `-9223372036854775808/1` |
-| Order reversed so the domain is checked before canonical form | the `NonCanonical`-and-outside pair of AC-5 |
-| A loop over the scale digits to compute `10^s` | the Kani proof with no unwind bound fails to complete |
-| The magnitude is held in a heap type | the `Copy` bound does not compile and the allocation counter is nonzero |
-| A body selected by `cfg(kani)` that differs from the host body | the host differential on `(10, 1)` fails |
+| Canonical form judged after membership | `Rational[1, 5; 2, 4]` `(6, 10)`, expected `NonCanonical` |
+| Representability judged before membership | `Decimal[0, 1; 0, 2]` `(1, 39)`, expected `OutsideCarrierDomain` |
+| An oversize type bound is compared after a lossy cast | the three types with a bound of `2^127`, expected `OutsideCarrierDomain` |
+| The magnitude is held in a heap type | the `Copy` check does not compile and the allocation counter is nonzero |
+| The result carries a `UnitId` | the `UnitId`-free `Copy` check does not compile |
+| A loop, fixed or binding-bounded, computes `10^s` | the source inspection of step 3 (a fixed-bound loop verifies under Kani, so only inspection catches it; a binding-bounded one also fails to complete in Kani, which is inconclusive, not the kill) |
+| A `cfg(kani)`-selected body | the source inspection of step 3 (a host build never compiles that body, so only inspection catches it) |
+| A `Meter` parameter is added | the function-pointer coercion of step 3 does not compile |
 
 ## Expected Results
 
-Every boundary binding yields the independently written magnitude or the named refusal, and the constructor and the shipped owner route agree on the whole set except the `NonCanonical` pairs. Construction allocates nothing, charges nothing and is `Copy`. The three proofs verify with no unwind bound and their cover. Every mutant fails at its named input. A timeout, memory exhaustion, missing cover or missing run is inconclusive and never a pass. The measurement of step 7 is a recorded number with its provenance, or an explicit open status; it is never a prediction.
+Every boundary binding yields the independently written magnitude or the named refusal. The constructor and the oracle agree on the whole set except the three listed sets. Construction allocates nothing and is `Copy`, and the source inspection finds no `cfg(kani)`, loop or iterator adapter. The three proofs verify with no unwind bound and their cover. Every mutant fails as named. A timeout, memory exhaustion, missing cover or missing run is inconclusive and never a pass. The measurement of step 7 is a recorded number with its provenance once IR-263 delivers its harness, and is never a prediction.
 
 ## Status
 
