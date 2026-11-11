@@ -1,13 +1,34 @@
 # Meter proof gate
 
-DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done.
+`make kani-meter-gate` runs the ignored test `units_kani_proofs_verify`
+(`tests/meter_kani_gate.rs`, bound to FR-359-AC-9). The test runs real Kani on
+the three `accounting::units_proofs` harnesses with `-Z function-contracts
+--exact --unwind 3 --jobs 1 --solver cadical` and requires each to report
+`VERIFICATION:- SUCCESSFUL` with every cover satisfied.
 
-The FR-359-AC-9 proof remains unqualified. Its source is retained in
-`src/accounting/kani_proofs.rs`, but `src/accounting.rs` excludes that module
-even during Kani builds. Direct harness selection therefore cannot run it.
+The gate is not part of `make ci`. Run one heavy job at a time. The test fails
+a harness that does not finish within 30 minutes. A timeout, memory exhaustion
+or compilation failure fails the gate; it is never a verdict.
 
-`make kani-meter-gate`, `scripts/meter_kani_scope.sh`, and
-`scripts/meter_kani_gate.py` print the warning, exit with failure, and skip
-proof setup. The ignored native test fails with the warning when selected with
-`--ignored`. None of these skip results qualify FR-359-AC-9 or satisfy its healthy proof
-and control requirements.
+The test enforces the 30-minute timeout but no memory cap. Run it in a cgroup
+so exhaustion is a hard stop:
+
+```bash
+systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0 make kani-meter-gate
+```
+
+The recorded receipts (FR-359, TC-931) used exactly this 24 GiB cap with swap
+disabled.
+
+The earlier monolithic harness `src/accounting/kani_proofs.rs` stays excluded
+from compilation and is not claimed by FR-359-AC-9.
+
+Harness rules that keep the proofs tractable:
+
+- Compare `Incomplete::next_charge` through `Integer::native()`, never
+  `to_u64()`: its `LargeDigits` arm owns a `Vec<u32>` that CBMC would execute
+  symbolically.
+- Reach the common path through `Meter::charge_units` and the private
+  `push_units`/`set_units` setters, not the `Integer`-typed `Charge::work`.
+- Name each check with `kani::assert(condition, "name")`; a formatted
+  `assert!` message is dropped and a mutant failure would not identify its check.
