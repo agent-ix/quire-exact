@@ -103,6 +103,12 @@ Manual criterion-strength analysis (Jev client unavailable): can each AC fail fo
 | FND-010 | low | [IR-1501] The clause '(and so differs between them)' holds only when an N, D or R site has the largest bound at both instantiations. If a module constant dominates, for example a table-search bound above 64, unwind_bound::<64,32,64>() equals unwind_bound::<16,8,16>(), and AC-9 still passes while its parenthetical is false. Either assert that every module-constant bound is below 16, so N/D/R dominate, or drop the claim. Wording: Behavior 6 says the module 'exposes UNWIND_BOUND as a const fn unwind_bound', but AC-9 and TC-949 name only unwind_bound. Use one name. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:55 |
 | FND-011 | low | [IR-1501] The array/slice comparison ban (b) decides the type from the operand's declared type (parameter, local, field, table const, & or *). It does not cover an index expression whose element is an array, such as 'DECOMP[i] == DECOMP[j]' for a table of [u32; K] rows, or a local with no type annotation whose type is only inferred ('let row = DECOMP[i]; row == other'). Either require a type annotation on every local of array type and treat an index into a table of arrays as array-typed, or add seeded copies for those two forms. Not blocking: such comparisons have constant length. The rule should still say what it actually decides. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 |
 
+## New findings (disposition pass 4)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | low | [IR-1501] The new assertion 'every module-constant bound is below 16' rules out the natural loop that copies one table decomposition into the D buffer with a constant bound equal to the longest entry. That bound is 18, from the 18-scalar compatibility decomposition of U+FDFA that AC-2 uses. The other likely module-constant loops fit: binary-search steps over the decomposition, composition and combining-class tables are about 10 to 13, and the UTF-8 scalar loop is 4. So the AC is satisfiable, but only if the per-entry copy loop is bounded by D, which still yields ExceedsCapacity at D < 18. State that in Behavior 4 or 6, so an implementer does not discover it through a failing assertion. No behaviour change. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:55 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -116,3 +122,5 @@ Manual criterion-strength analysis (Jev client unavailable): can each AC fail fo
 | FND-007 | fixed | fixed in 7e9b9c4f |
 | FND-008 | fixed | fixed in 450bf51b |
 | FND-009 | fixed | fixed in 450bf51b |
+| FND-010 | fixed | fixed in a16fdfd and b4d070bb |
+| FND-011 | fixed | fixed in a16fdfd |
