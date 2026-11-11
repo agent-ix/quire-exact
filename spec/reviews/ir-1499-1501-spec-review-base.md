@@ -81,3 +81,20 @@ Base checklist (consistency, naming, no hash/digest/pin antipattern, citations) 
 | FR-401-AC-6 | examined | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 | The proof-path module exposes a constant `UNWIND_BOUND`, and the test computes from the module's loop bounds (C, the decomposition-buffer size and the output capacity R) the largest trip count of any loop and asserts `UNWIND_BOUND` is greater than it by exactly the unwind margin the harness needs (one). A loop whose bound grows with the data, or a constant lowered by one, fails the equality. |
 | TC-949 | examined | spec/test-cases/TC-949-loop-free-proof-path-text-normalization.md:30 | - A mutant that skips canonical reordering fails `a` U+0307 U+0323; one that composes through a blocked mark fails `a` U+0310 U+0300; one that composes an excluded composite fails U+0915 U+093C; one that omits Hangul composition fails U+1100 U+1161 U+11A8 and the Hangul boundary scalars; one that skips compatibility decomposition fails U+FB03 and U+FDFA under `nfkc` and `nfkd`; one that treats `nfc` as `nfd` fails `u` U+0308 U+0301; one that normalizes with the wrong form fails the singleton U+212B under `nfc` against `nfd`; an off-by-one capacity fails step 2; a count that restarts for the... |
 | TC-949:step-6 | examined | spec/test-cases/TC-949-loop-free-proof-path-text-normalization.md:23 | 6. Read the proof-path module's loop bounds and `UNWIND_BOUND`, compute the largest loop trip count and assert `UNWIND_BOUND` equals it plus one. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | [IR-1500] 'the scalar ... whose `nfd` has the most UTF-8 bytes (U+16126 ...)' is not unique. U+16126, U+16127, U+16128 and U+16D6A all have 12-byte NFD among NFC- and NFKC-stable scalars (independent enumeration, Python unicodedata 16.0.0). State the tie-break (the first in scalar order). The 12-byte value itself is confirmed: nfd(U+16126) = U+1611E U+1611E U+1611F (12 bytes), and nfc and nfkc of it repeated 1 to 3 times give U+16126 repeated. | spec/functional/FR-400-text-payload-byte-bound-per-profile.md:55 |
+| FND-007 | low | [IR-1499] A is 'min(the largest attained payload length of FR-400-AC-6, C)', but FR-400-AC-6 defines A(profile, max) per declared max, for max 1 to 3 only. Say A(profile, max) at the operand's declared max, and how it is obtained when that max is above 3 (12 * max by the same construction). | spec/functional/FR-399-non-metered-text-constructor-from-admitted-parts.md:53 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in c3dec036 |
+| FND-002 | fixed | fixed in c3dec036 |
+| FND-003 | fixed | fixed in c3dec036 |
+| FND-004 | fixed | fixed in c3dec036 |
+| FND-005 | fixed | fixed in c3dec036 |

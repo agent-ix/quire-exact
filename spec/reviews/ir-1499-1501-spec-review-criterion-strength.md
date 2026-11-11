@@ -81,3 +81,20 @@ Manual criterion-strength analysis (Jev client unavailable): can each AC fail fo
 | FR-401-AC-6 | examined | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 | The proof-path module exposes a constant `UNWIND_BOUND`, and the test computes from the module's loop bounds (C, the decomposition-buffer size and the output capacity R) the largest trip count of any loop and asserts `UNWIND_BOUND` is greater than it by exactly the unwind margin the harness needs (one). A loop whose bound grows with the data, or a constant lowered by one, fails the equality. |
 | TC-949 | examined | spec/test-cases/TC-949-loop-free-proof-path-text-normalization.md:30 | - A mutant that skips canonical reordering fails `a` U+0307 U+0323; one that composes through a blocked mark fails `a` U+0310 U+0300; one that composes an excluded composite fails U+0915 U+093C; one that omits Hangul composition fails U+1100 U+1161 U+11A8 and the Hangul boundary scalars; one that skips compatibility decomposition fails U+FB03 and U+FDFA under `nfkc` and `nfkd`; one that treats `nfc` as `nfd` fails `u` U+0308 U+0301; one that normalizes with the wrong form fails the singleton U+212B under `nfc` against `nfd`; an off-by-one capacity fails step 2; a count that restarts for the... |
 | TC-949:step-6 | examined | spec/test-cases/TC-949-loop-free-proof-path-text-normalization.md:23 | 6. Read the proof-path module's loop bounds and `UNWIND_BOUND`, compute the largest loop trip count and assert `UNWIND_BOUND` equals it plus one. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | [IR-1501] Nothing ties the loops in the source to the site list that UNWIND_BOUND is computed from. AC-4 requires each `for` header's NAME to be some `const` of the module, not one of the listed site bounds. AC-9 measures only loops whose body contains `trip!(SITE)`. A loop `for i in 0..TABLE_LEN` with no `trip!` and no list entry (a linear table search, say) passes AC-4 and AC-9, and UNWIND_BOUND = max(listed) + 1 is then below its bound, so the Kani unwind would be insufficient while every host check is green. Add to AC-4's scanner: every `for` body contains exactly one `trip!(SITE)`, every SITE appears in the list, and every header NAME is the bound listed for that SITE. Add a seeded copy with an untracked loop. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:55 |
+| FND-007 | medium | [IR-1501] The scanner reads only the module text, and the token list misses std/core calls that loop internally with a data-dependent bound and need no closure: `binary_search`, `contains`, `starts_with`, `copy_from_slice`, `fill`, slice `==`, `iter_mut`, `into_iter`, `zip`, `windows`, `position` with a fn item, `str::from_utf8`. `binary_search` is the natural table lookup, and none of these loops is counted in UNWIND_BOUND. Mutual recursion (`f` calls `g` calls `f`) also passes the 'calls its own name' check. Either use an allow-list of callable paths (module fns, `char::from_u32`, arithmetic) instead of a deny-list, or add these names and a call-graph cycle check, each with a seeded copy. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in c3dec036 |
+| FND-002 | fixed | fixed in c3dec036 |
+| FND-003 | fixed | fixed in c3dec036 |
+| FND-004 | fixed | fixed in c3dec036 |
+| FND-005 | fixed | fixed in c3dec036 |

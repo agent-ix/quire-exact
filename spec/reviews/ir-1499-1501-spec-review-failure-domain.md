@@ -83,3 +83,22 @@ Unstated failure modes, identity confusion and edge cases, checked against src/t
 | FR-401-AC-6 | examined | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 | The proof-path module exposes a constant `UNWIND_BOUND`, and the test computes from the module's loop bounds (C, the decomposition-buffer size and the output capacity R) the largest trip count of any loop and asserts `UNWIND_BOUND` is greater than it by exactly the unwind margin the harness needs (one). A loop whose bound grows with the data, or a constant lowered by one, fails the equality. |
 | TC-949 | examined | spec/test-cases/TC-949-loop-free-proof-path-text-normalization.md:30 | - A mutant that skips canonical reordering fails `a` U+0307 U+0323; one that composes through a blocked mark fails `a` U+0310 U+0300; one that composes an excluded composite fails U+0915 U+093C; one that omits Hangul composition fails U+1100 U+1161 U+11A8 and the Hangul boundary scalars; one that skips compatibility decomposition fails U+FB03 and U+FDFA under `nfkc` and `nfkd`; one that treats `nfc` as `nfd` fails `u` U+0308 U+0301; one that normalizes with the wrong form fails the singleton U+212B under `nfc` against `nfd`; an off-by-one capacity fails step 2; a count that restarts for the... |
 | TC-949:step-6 | examined | spec/test-cases/TC-949-loop-free-proof-path-text-normalization.md:23 | 6. Read the proof-path module's loop bounds and `UNWIND_BOUND`, compute the largest loop trip count and assert `UNWIND_BOUND` equals it plus one. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | low | [IR-1501] 'Produced by a generator test that ... writes the const source': if this is an ordinary test, every `cargo test` rewrites a checked-in file under src/. That dirties CI and races with the compile of that same file. State that generation is a separately invoked mode (an env-gated or `#[ignore]`d test, or an xtask) and that the default test only compares, which AC-8 already does against the public API. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:37 |
+| FND-009 | low | [IR-1501] 'run in the release profile by the CI gate': no such gate exists. `.github/workflows/ci.yml` runs `make test`, which is plain `cargo test` plus `--features test-support`, with no `--release` and no `--ignored`. So as written the pair sweep never runs. The sweep is also not needed for equality with `apply`. The default-profile parts of AC-8 (every table triple validated by `compose`, and every scalar alone equal to `apply` under nfc/nfkc) already force every composition entry NFC can use: each primary composite is NFC-stable and has a unique canonical pair, so a missing or wrong triple fails the single-scalar check. Either name the CI/Makefile step the PR must add, or keep the sweep as an optional extra and record that argument as what the control rests on. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:54 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | fixed in c3dec036 |
+| FND-002 | fixed | fixed in c3dec036 |
+| FND-003 | fixed | fixed in c3dec036 |
+| FND-004 | fixed | fixed in c3dec036 |
+| FND-005 | fixed | fixed in c3dec036 |
+| FND-006 | fixed | fixed in c3dec036 |
+| FND-007 | fixed | fixed in c3dec036 |
