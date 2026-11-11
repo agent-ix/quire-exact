@@ -89,6 +89,7 @@ Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
 | FND-004 | still-open | Linear IR-1443's own AC still reads 'Memory stays within the K-DR budget' and 'CG's row harness consumes the carrier' with verification 'VERIFIED with a recorded peak memory'; the fix is an edit of the ticket text, not of the PR, and no edit was made. |
 | FND-004 | fixed | - |
 | FND-005 | fixed | - |
+| FND-006 | fixed | - |
 
 Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unchanged); FND-004 closed by the lead's edit of the IR-1443 ticket text.
 
@@ -97,3 +98,11 @@ Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unc
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-006 | low | Item 8's third intended difference is limited to a binding against a too-wide type 'that the owner admits', but the boundary set now holds (1, 0) against Rational[1,5;2,2^127], where the owner returns ZeroDenominator and the constructor TypeNotRepresentable (AC-6). That disagreement is outside item 8's three, so AC-8 ('the only disagreements are the three intended differences') fails on it, while TC-946 step 2 counts it ('every binding against the six types'). Drop 'that the owner admits' from item 8 so FR and TC agree. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:57 |
+
+Round 3 rows (FND-006) in Dispositions follow fix commit 4b874ce on b68819e (origin/main 4fe7df6 unchanged).
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The new precedence binding, the Decimal (1, 0) against Int[0, 2^127], is 'a binding against a type with a bound outside the native width', so item 8 and step 2 put it in the third intended-difference set labelled TypeNotRepresentable, while AC-5 expects CarrierMismatch. More generally, step 2 runs every boundary binding through the owner route, but a carrier-mismatched binding (this one and the six ordered mismatches) has no owner-route outcome to compare, and is neither an agreement nor one of the three listed differences, so AC-8's 'only disagreements are the three' has no defined result for them. State that carrier-mismatched bindings are checked against their literal CarrierMismatch only and are outside the differential, or limit the third set to bindings of the type's own carrier. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:28 |
