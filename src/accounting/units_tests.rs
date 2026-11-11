@@ -97,7 +97,9 @@ fn check(
     "FR-359-AC-2",
     "FR-359-AC-5",
     "FR-359-AC-6",
-    "FR-359-AC-8"
+    "FR-359-AC-8",
+    "FR-359-AC-9",
+    "TC-931"
 )]
 fn units_charge_matches_independent_boundary_model() {
     let edges = [0, 1, 2, u64::MAX - 1, u64::MAX];
@@ -135,7 +137,7 @@ fn units_charge_matches_independent_boundary_model() {
 }
 
 #[test]
-#[trace("FR-359-AC-6", "FR-359-AC-7", "FR-359-AC-8")]
+#[trace("FR-359-AC-6", "FR-359-AC-7", "FR-359-AC-8", "FR-359-AC-9", "TC-931")]
 fn units_charge_matches_independent_mixed_state_model() {
     let mut state = 0x7053_5900_0000_0001_u64;
     let mut draw = || {
@@ -160,7 +162,7 @@ fn units_charge_matches_independent_mixed_state_model() {
 }
 
 #[test]
-#[trace("FR-359-AC-3", "FR-359-AC-4", "FR-359-AC-8")]
+#[trace("FR-359-AC-3", "FR-359-AC-4", "FR-359-AC-8", "FR-359-AC-9", "TC-931")]
 fn units_adapter_keeps_exact_and_unrestricted_fallback() {
     let large = Integer::from(u64::MAX).add(&Integer::one());
     let charges = [
