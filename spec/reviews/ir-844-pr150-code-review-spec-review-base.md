@@ -46,3 +46,19 @@ Mergeable, with low findings. AC-9 is now a precise, falsifiable criterion: it n
 | TC-931 step 4 | examined | For AC-9 mutation controls, replace `previous.max(amount)` with `previous.min(amount)` ... The `LimitKind::ALL` traversal concern is covered by FR-359-AC-11 inspection. |
 | TC-931 Expected Results | examined | The three `units_proofs` harnesses must verify with every cover satisfied within 16 GiB and 600 seconds |
 | TC-931 Status | examined | AC-9 is bound by `units_kani_proofs_verify` and delivered as the three `accounting::units_proofs` harnesses ... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | Two stale sentences survive in the FR-359 Notes historical-baseline paragraph (the reviewer missed them in the review pass): "it does not qualify the current disabled head or identify the cause of historical memory exhaustion" and "that binding is removed at this head and no computed Covered status is claimed". Both contradict the new Status and the matrix, which now shows AC-9 `tagged`. Reword them to "it qualifies no current source" and "that earlier binding is historical; AC-9 is now bound by `units_kani_proofs_verify` (see Status)". | spec/functional/FR-359-cumulative-meter-boundary.md:69 |
+
+## Dispositions
+
+Round 1, fix head bf19b58a (reviewed head 307bf131); `git merge-tree` against origin/main 1f07457 is clean. Verified against `git diff 307bf131..bf19b58a` and the code. Reviewer focused job in a private worktree under the shared cargo lock: `cargo fmt --check` clean; `cargo test --locked --lib accounting` 40/40 and 43/43 with `test-support`; reviewer mutant R2 (a `LimitKind::ALL` loop in `charge_units_inner`) re-run: `units_charge_matches_independent_transition` FAILED at `unwinding assertion loop 0` (`charge_units_inner.unwind.0`, units.rs:101), 3.01 s verification, 4.2 s wall, 0.36 GB peak; source restored, worktree clean. `quire validate` passes on FR-359, TC-931 and the three committed SR files; `quire matrix` reports FR-359-AC-9 `tagged` (three host tests plus the ignored gate test). The three committed `spec/reviews/ir-844-pr150-code-review-*.md` files are byte-identical (`cmp`) to the reviewer's round-0 copies.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Every cited sentence is gone. FR-359 Notes now reads "... The monolithic harness stays excluded and unclaimed; AC-9 is carried by the units proofs (see Status)." TC-931 Status reads "they do not qualify the current source" and "... removed; `make kani-meter-gate` now runs the units proofs." Two other stale sentences in FR-359:69 are recorded as new finding FND-003. |
+| FND-002 | fixed | FR-359 `## Status` now has "AC-9 is delivered by IR-844 (three `units_proofs` harnesses, bound by `units_kani_proofs_verify`; measurements below)." |
+| FND-003 | still-open | New in disposition pass 1 and routed to the coder. FR-359:69 still says "does not qualify the current disabled head" and "that binding is removed at this head and no computed Covered status is claimed". |
