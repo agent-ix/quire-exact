@@ -44,3 +44,15 @@ ACCEPTABLE WITH NITS (low only). The Description uses an EARS optional-feature f
 | FR-403-B10 | examined | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:63 | 10. The kernel SHALL carry a host differential. For every boundary operand and type of TC-951 the oracle SHALL be the owner route (`evaluate_decimal` and `order_numbers` over `Decimal::new` operands) run under a `Meter` with the same limits. Where the owner route is exercised at a large `T`, the oracle is limited to the cases the owner can materialize. The native path and the oracle SHALL agree on the typed outcome, the read-out `DecimalResult` under its `Eq` (which includes the factored loss record), the ordered charges, every counter and the denied next charge at sufficient, exact and one... |
 | FR-403-B11 | examined | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:64 | 11. The kernel SHALL carry, for each of `Add`, `Subtract`, `Multiply`, `Divide`, `Negate`, `Round` and the ordering, a Kani proof without a loop unwind bound that, over all symbolic carried operands and all symbolic native types within the native width, equates the admission decision, the outcome, the completed value and the loss record to an independent bounded mathematical reference that shares no code with the native path, with covers that the completed path, a rounding step, each refusal and a capacity refusal are reachable. A host test SHALL bind each reference to the owner route over ... |
 | FR-403-B12 | examined | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:65 | 12. When CG's decimal row (CG FR-051, ticket IR-259) consumes the delivered operations, the memory and time of the composed proof under the 16 GiB per-request ceiling of CG FR-028 SHALL be measured and recorded under IR-1508 with the peak provenance and the terminal outcome. This requirement states no memory budget and claims no fit; a prediction is not a measurement. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The split leaves Behavior 22 with four SHALLs (Meter unchanged on refusal, Meter semantics, a denied charge stops, no manufactured charges) and Behavior 23 with four or more. Behaviors 3, 10, 13, 21, 24 and 25 have two each. quire validate raises no EARS warning, so this is not gated. Splitting Behaviors 22 and 23 would finish the round-1 split. | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:76 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in 3184a68f: 16. The kernel SHALL then charge `decimal.scale-expansion` with `scale_expansion` the shift of the first shifted operand whose shift is above zero (left before right, numerator before denominator) or  / 8. Under `exact` rounding, when the exact result is not an integer multiple of `10^-T`, the kernel SHALL return `Refused(InexactDecimal)` after the `decimal.arithmetic` charge and before any `decimal. |
