@@ -124,7 +124,9 @@ fn any_decimal() -> NativeDecimal {
 }
 
 /// The native decision equals the reference decision, with the covers.
+/// `zero divisor` is covered only where it is reachable, which is Divide.
 fn refines(ty: &NativeDecimalType, op: NativeDecimalOperation) {
+    let divides = matches!(op, NativeDecimalOperation::Divide(..));
     let native = native_decision(ty, op);
     assert_eq!(native, decide(ref_type(ty), ref_op(op)));
     kani::cover!(
@@ -137,7 +139,9 @@ fn refines(ty: &NativeDecimalType, op: NativeDecimalOperation) {
     );
     kani::cover!(matches!(native, Decision::Inexact), "exact refusal");
     kani::cover!(matches!(native, Decision::OutOfDomain), "domain refusal");
-    kani::cover!(matches!(native, Decision::DivisionByZero), "zero divisor");
+    if divides {
+        kani::cover!(matches!(native, Decision::DivisionByZero), "zero divisor");
+    }
     kani::cover!(matches!(native, Decision::Capacity(_)), "capacity refusal");
 }
 

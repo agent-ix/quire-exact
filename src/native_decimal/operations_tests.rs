@@ -182,7 +182,7 @@ fn operations(a: (i128, u32), b: (i128, u32)) -> [NativeDecimalOperation; 6] {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-11", "FR-403-AC-12")]
+#[trace("TC-951", "FR-403-AC-11")]
 fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
     let edge = [
         (0, 0),
@@ -240,7 +240,7 @@ fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-11", "FR-403-AC-12")]
+#[trace("TC-951", "FR-403-AC-11")]
 fn the_reference_is_bound_to_the_owner_route_over_random_operands() {
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     let mut bound = 0_u32;
@@ -319,59 +319,42 @@ fn bits_of_a_power_of_ten_is_exact_over_the_shift_range() {
     assert_ne!(power_of_ten_bits(u32::MAX), 130);
 }
 
+/// The simplest fraction strictly between `a/b` and `c/d` (`0 < a/b < c/d`,
+/// `a/b` not an integer), by continued fractions.
+fn simplest_between(a: u128, b: u128, c: u128, d: u128) -> (u128, u128) {
+    let whole = a / b;
+    if (whole + 1) * d < c {
+        return (whole + 1, 1);
+    }
+    assert!(!a.is_multiple_of(b), "the lower end is not an integer");
+    let (p, q) = simplest_between(d, c - whole * d, b, a - whole * b);
+    (whole * p + q, p)
+}
+
 #[test]
 #[trace("TC-951", "FR-403-AC-9")]
 fn the_log2_ten_approximations_share_a_floor_over_every_u32() {
     assert!((67..=94).contains(&LOG2_10_FRACTION));
     assert_eq!(LOG2_10_UPPER, LOG2_10_LOWER + 1);
-    // The approximations differ only where k x log2(10) lies within k x
-    // 2^-90 of an integer; for k < 2^32 that forces k to be the denominator
-    // of a continued-fraction convergent of log2(10), so those k (and every
-    // multiple, which names the same fraction) are the whole obligation.
-    let convergent_denominators: [u128; 22] = [
-        1,
-        3,
-        28,
-        59,
-        146,
-        643,
-        4004,
-        8651,
-        12655,
-        21306,
-        76573,
-        97879,
-        1_838_395,
-        1_936_274,
-        13_456_039,
-        15_392_313,
-        44_240_665,
-        59_632_978,
-        103_873_643,
-        475_127_550,
-        579_001_193,
-        2_507_285_164,
-    ];
-    for q in convergent_denominators {
-        for multiple in 1..=8_u128 {
-            let k = q * multiple;
-            if k > u128::from(u32::MAX) {
-                continue;
-            }
-            let lower = (k * LOG2_10_LOWER) >> LOG2_10_FRACTION;
-            let upper = (k * LOG2_10_UPPER) >> LOG2_10_FRACTION;
-            assert_eq!(lower, upper, "k = {k}");
-        }
-    }
-    let mut rng = Rng(0xD1B5_4A32_D192_ED03);
-    for _ in 0..2_000_000 {
-        let k = u128::from(rng.next() as u32);
-        assert_eq!(
-            (k * LOG2_10_LOWER) >> LOG2_10_FRACTION,
-            (k * LOG2_10_UPPER) >> LOG2_10_FRACTION,
-            "k = {k}"
-        );
-    }
+    // floor(k L / 2^F) differs from floor(k (L+1) / 2^F) exactly when an
+    // integer m has kL/2^F < m <= k(L+1)/2^F, that is, when the fraction m/k
+    // lies in (L/2^F, (L+1)/2^F]. Any such fraction has a reduced
+    // denominator of at most k, so the approximations share a floor for every
+    // k up to u32::MAX when the least denominator in that interval exceeds
+    // u32::MAX. The upper end is not the simplest fraction (its denominator is
+    // a power of two far above the bound), so the open interval decides.
+    let (low_n, high_n, scale) = (LOG2_10_LOWER, LOG2_10_UPPER, 1_u128 << LOG2_10_FRACTION);
+    let (numerator, denominator) = simplest_between(low_n, scale, high_n, scale);
+    // p x 2^F - L x q lies in (0, q) exactly when p/q is in (L/2^F, (L+1)/2^F);
+    // the products exceed 128 bits but their difference is small, so the
+    // wrapping difference is exact.
+    let offset = (numerator.wrapping_mul(scale)).wrapping_sub(low_n.wrapping_mul(denominator));
+    assert!(
+        offset > 0 && offset < denominator,
+        "the simplest fraction lies in the interval"
+    );
+    assert_eq!(denominator, 23_062_019_849_360);
+    assert!(denominator > u128::from(u32::MAX));
     assert!(u128::from(u32::MAX) * LOG2_10_UPPER < u128::MAX);
 }
 
@@ -455,7 +438,7 @@ fn the_gcd_takes_exactly_256_steps_and_handles_a_zero_operand() {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-12")]
+#[trace("TC-951", "FR-403-AC-11")]
 fn the_reference_rejects_wrong_decisions() {
     // Controls: the reference distinguishes the mutants of TC-951.
     let ty = NativeDecimalType::new(0, 100, 0, 2, RoundingMode::Exact).unwrap();

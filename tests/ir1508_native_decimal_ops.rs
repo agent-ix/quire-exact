@@ -1047,6 +1047,14 @@ fn swept() -> Vec<(Ty, Op)> {
         (ne, Op::Div((1, 0), (8, 0))),
         (ne, Op::Div((3, 0), (9, 0))),
         (ne, Op::Round((-125, 3))),
+        // unequal scales and rounding steps for Subtract, Negate and Multiply
+        (ty(-10_000, 10_000, 0, 3, M::Exact), Op::Sub((1, 0), (1, 3))),
+        (ne, Op::Sub((1, 3), (0, 0))),
+        (ne, Op::Sub((-125, 3), (1, 0))),
+        (ne, Op::Neg((-125, 3))),
+        (ty(-10_000, 10_000, 0, 3, M::Exact), Op::Neg((5, 1))),
+        (ty(-10_000, 10_000, 0, 3, M::Exact), Op::Mul((5, 1), (4, 0))),
+        (ne, Op::Mul((15, 1), (15, 2))),
         (ty(0, 100, 0, 0, M::NearestAway), Op::Round((1005, 1))),
         (ty(0, 100, 0, 2, M::TowardPositive), Op::Mul((1, 2), (1, 2))),
         (
@@ -1155,6 +1163,40 @@ fn charges_hold_at_every_limit_on_fresh_and_cumulative_meters() {
         }
         assert_eq!(seen(&mut native_meter), seen(&mut owner_meter));
     }
+}
+
+/// The differential also holds at the exact and one-less limit of every
+/// charge, not only at the default bounds, over a strided sample of the
+/// whole boundary set (every operation, every ordering).
+#[test]
+#[trace("TC-951", "FR-403-AC-7")]
+fn the_boundary_set_agrees_at_exact_and_one_less_limits() {
+    let values = operands();
+    let (mut index, mut cases, mut stopped) = (0_u32, 0_u32, 0_u32);
+    for t in types() {
+        for &a in &values {
+            for &b in &values {
+                for op in all_ops(a, b) {
+                    index += 1;
+                    if index % 97 != 0 || model(t, op).is_some() {
+                        continue;
+                    }
+                    cases += 1;
+                    for limits in limit_variants(t, op) {
+                        assert!(agree(t, op, limits));
+                        let (result, _) = run_native(t, op, limits).unwrap();
+                        if matches!(
+                            result,
+                            Res::Arith(Outcome::Incomplete(_)) | Res::Ord(Outcome::Incomplete(_))
+                        ) {
+                            stopped += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(cases > 100 && stopped > 100, "{cases} {stopped}");
 }
 
 #[test]
