@@ -99,6 +99,7 @@ Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
 | FND-009 | fixed | - |
 | FND-010 | fixed | - |
 | FND-011 | fixed | - |
+| FND-012 | fixed | - |
 
 Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unchanged); FND-004 closed by the lead's edit of the IR-1443 ticket text.
 
@@ -117,3 +118,5 @@ Round 4 rows (none) in Dispositions follow fix commit 7cff974 on 4b874ce (origin
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-012 | low | Step 6 runs 'the input mutants through the host differential', but step 2 (the host differential of FR-398 item 8) now excludes every carrier-mismatched binding, so the mutant 'type representability judged before the carrier match', whose only input is the Decimal (1, 0) against Int[0, 2^127], is never run where it can fail; it is caught only by the literal check of step 1. Route the input mutants through steps 1 and 2. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:32 |
+
+Round 5 rows (FND-012) in Dispositions follow fix commit acf0e95 on 7cff974 (origin/main 4fe7df6 unchanged). Final: every finding of this SpecReview has a closing outcome.
