@@ -1,17 +1,17 @@
 ---
-id: FR-399
+id: FR-400
 title: "State the payload-byte bound P of every text profile"
 type: FR
 org: agent-ix
 relationships:
-  - target: ix://agent-ix/quire-exact/FR-398
+  - target: ix://agent-ix/quire-exact/FR-399
     type: references
-  - target: ix://agent-ix/quire-exact/FR-400
+  - target: ix://agent-ix/quire-exact/FR-401
     type: references
   - target: ix://agent-ix/quire-contract-codegen/FR-052
     type: references
 ---
-# FR-399: State the payload-byte bound P of every text profile
+# FR-400: State the payload-byte bound P of every text profile
 
 ## Description
 
@@ -37,7 +37,7 @@ A `TextProfile` and a `max` (`u64`).
 
 **Derivation.** The retained sequence R of a payload X is `nfd(X)` for `nfd`, `nfkd(X)` for `nfkd`, `nfc(X)` for `nfc`, `nfkc(X)` for `nfkc` and X itself for the two non-normalizing profiles. Let `|.|` be the scalar count. A decomposition maps every scalar to at least one scalar and canonical reordering permutes, so `|nfd(X)| >= |X|` and `|nfkd(X)| >= |X|`. For `nfd` and `nfkd` this gives `|X| <= |R|`, so the ratio is 1. For `nfc`, normalization is idempotent on the decomposition (`nfd(nfc(X)) = nfd(X)`), and the length of a full decomposition is the sum over scalars of the length of each scalar's own decomposition, because reordering changes no count. With R = r_1 ... r_n, `|X| <= |nfd(X)| = sum |nfd(r_i)|`. Every scalar r_i of a normalized string satisfies `nfc(r_i) = r_i`, so each term is at most K_D and `|X| <= K_D * n`. The `nfkc` case is the same with `nfkd(nfkc(X)) = nfkd(X)` and K_KD. The payload is therefore at most `ratio * max` scalars of at most four bytes each. The ratio is attained: for a scalar c achieving K_D, the payload `nfd(c)` has K_D scalars and `nfc(nfd(c)) = c` has one (likewise `nfkd(c)` and K_KD).
 
-**Data.** An independent computation over the Unicode 17.0.0 `UnicodeData.txt` and `CompositionExclusions.txt` (full decomposition, Hangul algorithmic decomposition, singleton and non-starter decompositions excluded from composition) gives K_D = 4 and K_KD = 4, attained by U+1F82 and 35 further scalars (36 in all), and a longest single-scalar canonical decomposition of 4 (U+1FAF). The scalar U+FDFA, whose `nfkd` has 18 scalars, does not satisfy `nfkc(c) = c` and does not enter K_KD. So P is `4 * max` for `nfd` and `nfkd` and `16 * max` for `nfc` and `nfkc`. The constants are stated in the kernel as the values the exhaustive enumeration of FR-399-AC-1 recomputes from the pinned `unicode-normalization` tables on every test run, so a table change changes the test result, not a hidden pin.
+**Data.** An independent computation over the Unicode 17.0.0 `UnicodeData.txt` and `CompositionExclusions.txt` (full decomposition, Hangul algorithmic decomposition, singleton and non-starter decompositions excluded from composition) gives K_D = 4 and K_KD = 4, attained by U+1F82 and 35 further scalars (36 in all), and a longest single-scalar canonical decomposition of 4 (U+1FAF). The scalar U+FDFA, whose `nfkd` has 18 scalars, does not satisfy `nfkc(c) = c` and does not enter K_KD. So P is `4 * max` for `nfd` and `nfkd` and `16 * max` for `nfc` and `nfkc`. The constants are stated in the kernel as the values the exhaustive enumeration of FR-400-AC-1 recomputes from the pinned `unicode-normalization` tables on every test run, so a table change changes the test result, not a hidden pin.
 
 **Looseness.** P is an upper bound, not the supremum of payload bytes. The scalar factor is attained. The byte factor is attained for `binary-utf8`, `unicode-scalars`, `nfd` and `nfkd` by a four-byte scalar that is its own normal form, but for `nfc` and `nfkc` the payload that attains `ratio` scalars does not consist of four-byte scalars (the payload of U+1F82 is 8 bytes against the bound of 16 for `max` of 1). A consumer whose capacity C is below P for such a profile treats the profile as unsupported, which narrows its supported domain and never admits a payload outside it. A byte supremum for `nfc` and `nfkc` is not derived here.
 
@@ -45,11 +45,11 @@ A `TextProfile` and a `max` (`u64`).
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-399-AC-1 | For every Unicode scalar value (surrogates excluded), the test computes `nfd` and `nfkd` through `NormalizationForm::apply`, keeps the scalars c with `nfc(c) = c` (respectively `nfkc(c) = c`) as one-scalar strings, and takes the maximum output length. `payload_scalar_ratio` for `nfc` equals that K_D and for `nfkc` that K_KD. The test records one scalar that attains each maximum and asserts its `nfd` (respectively `nfkd`) has exactly that many scalars. It asserts that the `nfkd` maximum over all scalars without the stability filter (U+FDFA, 18 scalars) is strictly greater than K_KD, so a filter-free implementation fails. `payload_scalar_ratio` is 1 for `nfd`, `nfkd`, `unicode-scalars` and `binary-utf8`. | Test (TC-947) |
-| FR-399-AC-2 | `payload_byte_bound` equals `max` for `binary-utf8` and `4 * ratio * max` for the other five profiles, at `max` of 0, 1, 2 and 10 for every profile. | Test (TC-947) |
-| FR-399-AC-3 | At the overflow edge, `payload_byte_bound` returns `Some` at `max = u64::MAX / (4 * ratio)` and `None` at that value plus one for each of the five scaled profiles, and returns `Some(u64::MAX)` for `binary-utf8` at `u64::MAX`. No result wraps or saturates. | Test (TC-947) |
-| FR-399-AC-4 | Soundness: for every normalizing profile, every Unicode scalar value used alone as a payload, every ordered pair drawn from the scalars U+0061, U+0075, U+0041, U+0300, U+0301, U+0307, U+0308, U+0310, U+0323, U+0915, U+093C, U+1100, U+1161, U+11A8, U+1F82, U+1F600, U+212B, U+FB03, U+FDFA, and the payloads `"u\u{308}\u{301}"`, `"a\u{307}\u{323}"`, `"a\u{310}\u{300}"`, `"\u{1100}\u{1161}\u{11A8}"`, `nfd(c)` and `nfkd(c)` for the attaining scalar c of AC-1: with L the profile length of the retained sequence (`NormalizationForm::apply`), `admit_text` under `Text[L,L]` admits the payload and the payload's byte length is at most `payload_byte_bound(L)`. | Test (TC-947) |
-| FR-399-AC-5 | Tightness of the scalar factor: for `nfc` the payload `"u\u{308}\u{301}"` (three scalars, retained `"\u{1D8}"`, one scalar, five bytes) exceeds `payload_byte_bound(1)` computed with ratio 1, the attaining payload `nfd(c)` of AC-1 has exactly `payload_scalar_ratio` scalars and is admitted by `Text[1,1]` under `nfc`, and the payload `nfkd(c)` is admitted by `Text[1,1]` under `nfkc` with its scalar count equal to the ratio. A four-byte scalar that is its own normal form (`"\u{1F600}"`) has byte length equal to `payload_byte_bound(1)` for `unicode-scalars`, `nfd` and `nfkd`. | Test (TC-947) |
+| FR-400-AC-1 | For every Unicode scalar value (surrogates excluded), the test computes `nfd` and `nfkd` through `NormalizationForm::apply`, keeps the scalars c with `nfc(c) = c` (respectively `nfkc(c) = c`) as one-scalar strings, and takes the maximum output length. `payload_scalar_ratio` for `nfc` equals that K_D and for `nfkc` that K_KD. The test records one scalar that attains each maximum and asserts its `nfd` (respectively `nfkd`) has exactly that many scalars. It asserts that the `nfkd` maximum over all scalars without the stability filter (U+FDFA, 18 scalars) is strictly greater than K_KD, so a filter-free implementation fails. `payload_scalar_ratio` is 1 for `nfd`, `nfkd`, `unicode-scalars` and `binary-utf8`. | Test (TC-948) |
+| FR-400-AC-2 | `payload_byte_bound` equals `max` for `binary-utf8` and `4 * ratio * max` for the other five profiles, at `max` of 0, 1, 2 and 10 for every profile. | Test (TC-948) |
+| FR-400-AC-3 | At the overflow edge, `payload_byte_bound` returns `Some` at `max = u64::MAX / (4 * ratio)` and `None` at that value plus one for each of the five scaled profiles, and returns `Some(u64::MAX)` for `binary-utf8` at `u64::MAX`. No result wraps or saturates. | Test (TC-948) |
+| FR-400-AC-4 | Soundness: for every normalizing profile, every Unicode scalar value used alone as a payload, every ordered pair drawn from the scalars U+0061, U+0075, U+0041, U+0300, U+0301, U+0307, U+0308, U+0310, U+0323, U+0915, U+093C, U+1100, U+1161, U+11A8, U+1F82, U+1F600, U+212B, U+FB03, U+FDFA, and the payloads `"u\u{308}\u{301}"`, `"a\u{307}\u{323}"`, `"a\u{310}\u{300}"`, `"\u{1100}\u{1161}\u{11A8}"`, `nfd(c)` and `nfkd(c)` for the attaining scalar c of AC-1: with L the profile length of the retained sequence (`NormalizationForm::apply`), `admit_text` under `Text[L,L]` admits the payload and the payload's byte length is at most `payload_byte_bound(L)`. | Test (TC-948) |
+| FR-400-AC-5 | Tightness of the scalar factor: for `nfc` the payload `"u\u{308}\u{301}"` (three scalars, retained `"\u{1D8}"`, one scalar, five bytes) exceeds `payload_byte_bound(1)` computed with ratio 1, the attaining payload `nfd(c)` of AC-1 has exactly `payload_scalar_ratio` scalars and is admitted by `Text[1,1]` under `nfc`, and the payload `nfkd(c)` is admitted by `Text[1,1]` under `nfkc` with its scalar count equal to the ratio. A four-byte scalar that is its own normal form (`"\u{1F600}"`) has byte length equal to `payload_byte_bound(1)` for `unicode-scalars`, `nfd` and `nfkd`. | Test (TC-948) |
 
 ## Status
 
@@ -57,6 +57,6 @@ Planned (IR-1500). No Rust or test exists. The numeric values 4 and 4 are derive
 
 ## Dependencies
 
-- [FR-398](./FR-398-non-metered-text-constructor-from-admitted-parts.md) and [FR-400](./FR-400-loop-free-proof-path-text-normalization.md) are the sibling prerequisites; FR-400 uses `4 * max` bytes as the output capacity of admitted retained sequences.
+- [FR-399](./FR-399-non-metered-text-constructor-from-admitted-parts.md) and [FR-401](./FR-401-loop-free-proof-path-text-normalization.md) are the sibling prerequisites; FR-401 uses `4 * max` bytes as the output capacity of admitted retained sequences.
 - QSpec FR-141 owns the six text profiles; the module documentation of `text.rs` selects Unicode 17.0.0.
-- [TC-947](../test-cases/TC-947-text-payload-byte-bound-per-profile.md) is the verification home.
+- [TC-948](../test-cases/TC-948-text-payload-byte-bound-per-profile.md) is the verification home.
