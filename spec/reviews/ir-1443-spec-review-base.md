@@ -1,0 +1,111 @@
+---
+id: SR-17940486709564847047612
+title: "IR-1443 PR #144 FR-398 base spec review"
+type: SpecReview
+analysis: base
+date: 2026-11-11
+scope: "agent-ix/quire-exact; PR #144 @ 5183708 on origin/main 4fe7df6; IR-1443; spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md, spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-exact/FR-398
+    type: reviews
+  - target: ix://agent-ix/quire-exact/TC-946
+    type: reviews
+---
+
+## Summary
+
+Ticket: IR-1443. Spec-only PR #144 (head 5183708, one commit on origin/main 4fe7df6) adding FR-398 and TC-946, a Kani-tractable carried-quantity constructor from the carrier's physical bindings. Reviewed against quire-exact src/quantity.rs, src/decimal.rs, src/rational.rs, src/integer.rs, src/identity.rs, src/node.rs and src/native_integer.rs at the PR head; CG origin/main 42db5c62 spec/kani/functional/FR-050 and FR-025 (AC-18 and the Decimal, Rational and carried-leaf rows); QSV origin/main src/quantity.rs (convert_quantity); Linear IR-1443, IR-1497 (decision A2), IR-1436 (D4, D5 and the correction), IR-1444, IR-1445, IR-1446. Read-only: no edit, build or cargo command ran.
+
+## Verdict
+
+CHANGES REQUIRED. The carrier choice and its arithmetic hold: a canonical i128 fraction represents every Int and Rational i64 binding, 10^38 < 2^127 - 1 < 10^39 so (1, 38) fits and (1, 39) does not, 2^39 = 549755813888 and 5^39 is about 1.8 x 10^27, so (2^39, 39) reduces to 1/5^39 and is admitted. Against quire-exact origin/main 4fe7df6, DecimalType::contains (src/decimal.rs:431) normalizes the pair, lifts to s* = max(s, smin) and compares the lifted coefficient with [lo, hi], so (5000, 2) is admitted and (9999, 2) and (10001, 2) are refused in Decimal[0,100;0,2] as stated. The five refusal names are new constructor-local reasons and are each producible by a design that takes a runtime binding value (none clashes with an existing src/ name). 'Unmetered' agrees with CG FR-050, whose charges are the conversions' and then the operation's, with no leaf-construction charge. Defects: the host differential's 'sole disagreement' contradicts AC-4 and is infeasible on one boundary binding, AC-2 contradicts itself and the owner on the scale rule, the Copy result conflicts with an owned UnitId, and the ticket AC differs from the spec.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | AC-7 and Behavior 5 say NonCanonical is the only constructor/owner disagreement, but every NotRepresentable binding of AC-4 is admitted by the owner route ((1, 39) is 1/10^39, Decimal::to_rational succeeds) and refused by the constructor. The owner route for the boundary binding (1, 4294967295) materializes 10^4294967295 (Decimal::to_rational -> Rational::divided_by_power_of_ten -> Integer::power_of_ten, src/decimal.rs:94, src/rational.rs:88), a ~1.7 GB integer plus a gcd, so TC-946 step 2 as written is not runnable. List NotRepresentable as a second intended difference, and drive the owner side for it by DecimalType::contains only (no to_rational), or exclude it from the owner build. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:51 |
+| FND-002 | medium | AC-2 says '(0, 7) is 0/1' and, of the same carrier family, 'a scale above smax is OutsideCarrierDomain'; in TC-946 (0, 7) is in Decimal[-1000,1000;0,2], whose smax is 2. The owner refuses by the normalized scale, not the raw one (DecimalType::contains normalizes first), so (0, 7) and (10, 3) in Decimal[0,100;0,2] are admitted. State the rule as 'a normalized scale above smax', matching Behavior 3. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:46 |
+| FND-003 | medium | AC-6 requires the result to be Copy and Behavior 1 says the unit of the result is the type's UnitId, but UnitId is not Copy and has drop glue: Declared(NodeKey) holds an Arc (src/node.rs:219) and Compound a Box slice whose clone allocates (src/identity.rs:191-196). Behavior 1 limits Copy to the magnitude storage; AC-6 extends it to the result. IR-1436 D4 asks for Copy with no drop glue. State that the result borrows the type's unit (or carries none and the read-out pairs it), and that the read-out's UnitId clone is outside the zero-allocation window. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:50 |
+| FND-004 | low | IR-1443's own AC ('Memory stays within the K-DR budget', 'CG's row harness consumes the carrier', verification 'VERIFIED with a recorded peak memory') no longer matches the spec, which claims no fit and gives CG consumption to CG's ticket. The ticket text needs the matching edit so the ticket is not closed against its stale AC, or left open forever by it. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:39 |
+
+## Scope
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-398 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:22 | The kernel SHALL provide a carried-quantity constructor that builds an owner carried quantity of a `CarriedQuantityType` from the physical bindings of that type's carrier, using only fixed-width native arithmetic, so that a generated Kani proof can draw the bindings symbolically and reach the quanti |
+| FR-398-B1 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:32 | 1. **Bindings.** The constructor takes a `CarriedQuantityType` and the carrier's physical bindings in the order CG FR-025-AC-18 defines: an `Int` carrier one `i64`; a `Decimal` carrier an `i64` coefficient then a `u32` scale; a `Rational` carrier an `i64` numerator then an `i64` denominator. It perf |
+| FR-398-B2 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:33 | 2. **Exact magnitude.** An `Int` binding `n` gives `n/1`. A `Decimal` binding `(c, s)` gives the exact value `c / 10^s`. A `Rational` binding `(n, d)` gives `n/d`. The magnitude is held as a canonical fraction (lowest terms, positive denominator, zero as `0/1`) of two native signed 128-bit integers, |
+| FR-398-B3 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:34 | 3. **Admission.** The constructor admits a binding when it is a member of the type's carrier by the owner's own membership: an `Int` binding by `IntegerInterval::contains`; a `Decimal` binding by `DecimalType::contains` of the pair as the owner defines it, which first removes trailing decimal zeros, |
+| FR-398-B4 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:35 | 4. **Refusals.** The constructor returns a typed refusal and no quantity for each of these, and for no other reason: `CarrierMismatch` when the bindings are not of the type's carrier; `ZeroDenominator` for a `Rational` denominator of zero; `NonCanonical` for a `Rational` pair that is not in lowest t |
+| FR-398-B5 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:36 | 5. **Host differential.** For every carrier, each binding in the boundary set of the test case is built twice, once by the constructor and once by the shipped owner route (`Integer`, `Decimal::to_rational` or `Rational::new`, then `Quantity::new`, with `DecimalType::contains`, `IntegerInterval::cont |
+| FR-398-B6 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:37 | 6. **No other source.** The constructor accepts no `BoundedQuantityType` (FR-387), no bare unit and no caller-supplied `Rational`, since none forms a finite binding domain. |
+| FR-398-B7 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:38 | 7. **Proof.** For each carrier the kernel carries a Kani proof, without a loop unwind bound, that over all symbolic bindings the constructor's outcome and magnitude equal an independent bounded mathematical reference that shares no code with the constructor, and a cover that the success path is reac |
+| FR-398-B8 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:39 | 8. **Fit.** The memory and time of the composed proof (leaf construction, owner conversion and owner operation in one harness) under the 16 GiB per-request ceiling of CG FR-028 are measured in the code slice of IR-1443 by running CG's FR-050 harness against the delivered constructor, and recorded wi |
+| FR-398-Dependencies | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:64 | - The sibling Kani carriers IR-1445 (text) and IR-1446 follow the same host-differential pattern and are not prerequisites. |
+| FR-398-AC-1 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:45 | For an `Int[lo, hi]` carrier, bindings `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX - 1` and `i64::MAX`, each inside a carrier that contains it, yield magnitude `n/1` in the type's unit, equal to the owner route; the endpoints `lo` and `hi` are admitted and `lo - 1` and `hi + 1` are `Outsid |
+| FR-398-AC-2 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:46 | For a `Decimal[lo, hi; smin, smax; mode]` carrier, `(c, s)` yields the exact canonical value `c / 10^s`: `(10, 1)` is `1/1`, `(-5, 1)` is `-1/2`, `(0, 7)` is `0/1`, and `(5000, 2)` in `Decimal[0,100; 0,2]` is admitted as `50/1` although its raw coefficient is outside `[0, 100]`. `(10001, 2)` and `(9 |
+| FR-398-AC-3 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:47 | For a `Rational[n1, n2; d1, d2]` carrier, a canonical `(n, d)` inside both ranges yields `n/d` in the type's unit with numerator and denominator in that order (`(1, 2)` is `1/2`, not `2/1`); `(2, 4)`, `(1, -2)`, `(-1, -2)` and `(0, 2)` are `NonCanonical`, `(1, 0)` is `ZeroDenominator`, and a canonic |
+| FR-398-AC-4 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:48 | A `Decimal` binding whose canonical numerator or denominator exceeds the native 128-bit width is `NotRepresentable`: `(1, 38)` is admitted as `1/10^38`, `(1, 39)` and `(1, u32::MAX)` are `NotRepresentable`, and `(2^39, 39)`, whose canonical form is `1/5^39`, is admitted. The decision is by the canon |
+| FR-398-AC-5 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:49 | A binding of one carrier presented with a type of another (an `i64` pair against an `Int` type, a single `i64` against a `Decimal` or `Rational` type) is `CarrierMismatch`. For a binding that is both `NonCanonical` and outside the domain, `NonCanonical` is reported; for one that is both outside the  |
+| FR-398-AC-6 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:50 | The constructor builds in an ordinary host build and in a `cfg(kani)` build from the same source, with no `cfg(kani)`-selected body. Its result is `Copy`, its construction performs zero heap allocations as observed by a counting allocator around the call, and it has no `Meter` parameter and leaves a |
+| FR-398-AC-7 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:51 | Over the boundary set of TC-946, the constructor and the shipped owner route agree on admission, magnitude, unit and the refusal reasons of Behavior 5, and the read-out `Quantity` equals the owner's under `Eq`; the sole disagreement is the `NonCanonical` pairs that the owner normalizes. |
+| FR-398-AC-8 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:52 | The type system offers no way to build the carrier from a `BoundedQuantityType`, a bare `UnitId` or a `Rational`; a program that tries fails to compile. |
+| FR-398-AC-9 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:53 | For each of `Int`, `Decimal` and `Rational`, a Kani proof with no unwind bound verifies that, for all symbolic bindings, the constructor's outcome and magnitude equal the independent reference, with a success-reachable cover. A proof that does not complete, exhausts memory or lacks the cover is not  |
+| FR-398-AC-10 | examined | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:54 | The peak memory, time, tool version and terminal outcome of the composed convert-and-operation proof with the delivered constructor are recorded under IR-1443, naming the harness run and the peak provenance. A fit or a non-fit at 16 GiB is stated as measured; a non-fit is followed by a filed QSpec f |
+| TC-946-boundary-int | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:20 | - `Int[-5, 100]`: `i64::MIN`, `i64::MIN + 1`, `-1`, `0`, `1`, `i64::MAX - 1`, `i64::MAX` against carriers `Int[i64::MIN, i64::MAX]` (all admitted) and `Int[-5, 100]` for `-6`, `-5`, `100`, `101` (the first and last refused, the middle two admitted). |
+| TC-946-boundary-decimal | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:21 | - `Decimal[-1000, 1000; 0, 2; Exact]`: `(10, 1)`, `(-5, 1)`, `(0, 7)`, `(1000, 0)`, `(100000, 2)`, `(100001, 2)`, `(i64::MIN, 0)`, `(i64::MAX, 0)`. `Decimal[0, 100; 0, 2; Exact]`: `(5000, 2)`, `(10001, 2)`, `(9999, 2)`, `(1, 3)`. `Decimal[0, 549755813888; 0, 4294967295; Exact]`: `(1, 37)`, `(1, 38)` |
+| TC-946-boundary-rational | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:22 | - `Rational[-9223372036854775808, 9223372036854775807; 1, 9223372036854775807]`: `(0, 1)`, `(1, 1)`, `(-1, 1)`, `(1, 2)`, `(2, 1)`, `(i64::MIN, 1)`, `(1, i64::MAX)`, `(i64::MIN, i64::MAX)`, and the non-canonical or zero pairs `(2, 4)`, `(1, -2)`, `(-1, -2)`, `(0, 2)`, `(1, 0)`, `(0, 0)`. `Rational[1 |
+| TC-946-step-1 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:25 | 1. For AC-1, AC-2, AC-3 and AC-4, construct every boundary binding with the public constructor. Check the magnitude against independently written decimal literals as a numerator and denominator pair, the unit against the type's `UnitId`, and each refusal against its named cause. Include the order co |
+| TC-946-step-2 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:26 | 2. For AC-7, build every admitted boundary binding a second time by the shipped owner route (`Integer::from`, `Decimal::new` then `to_rational`, or `Rational::new`, then `Quantity::new`) and check admission with `IntegerInterval::contains`, `DecimalType::contains` and `RationalDomain::contains`. Ass |
+| TC-946-step-3 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:27 | 3. For AC-6, build the crate for the host with default features and compile `Copy` and a no-`Meter`-parameter use as a static bound. Run the construction of the whole boundary set inside a counting global allocator window and assert zero allocations and unchanged counters of a `Meter` created before |
+| TC-946-step-4 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:28 | 4. For AC-8, compile `compile_fail` programs that pass a `BoundedQuantityType`, a bare `UnitId` and a `Rational` to the constructor. |
+| TC-946-step-5 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:29 | 5. For AC-9, run the three Kani proofs with no unwind attribute and the cover, under the repository's authorized runner. Run the reference comparison on the host over the boundary set to bind the reference to the owner route. The proofs are credited only on `VERIFIED` with the cover satisfied. |
+| TC-946-step-6 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:30 | 6. Run each mutant of the next section, host differential first, then, for the loop and allocation mutants, the Kani proof. Each must fail at its named input; a mutant that passes is a defect in this case, not a result. |
+| TC-946-step-7 | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:31 | 7. For AC-10, run CG's FR-050 composed harness against the delivered constructor on a Decimal, an Int and a Rational leaf under the authorized runner, and record the peak memory and its provenance, time, tool version and terminal outcome on IR-1443. If the harness cannot be built yet, record that th |
+| TC-946-mutant-order | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:53 | / Order reversed so the domain is checked before canonical form / the `NonCanonical`-and-outside pair of AC-5 / |
+| TC-946-mutant-loop | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:54 | / A loop over the scale digits to compute `10^s` / the Kani proof with no unwind bound fails to complete / |
+| TC-946-mutant-heap | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:55 | / The magnitude is held in a heap type / the `Copy` bound does not compile and the allocation counter is nonzero / |
+| TC-946-mutant-cfg-kani | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:56 | / A body selected by `cfg(kani)` that differs from the host body / the host differential on `(10, 1)` fails / |
+| TC-946-mutant-rational-numerator | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:50 | / `Rational` checks only the numerator range / `(1, 3)` in `Rational[1, 5; 2, 4]` is admitted, `(1, 5)` and `(6, 5)` are refused / |
+| TC-946-expected | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:60 | Every boundary binding yields the independently written magnitude or the named refusal, and the constructor and the shipped owner route agree on the whole set except the `NonCanonical` pairs. Construction allocates nothing, charges nothing and is `Copy`. The three proofs verify with no unwind bound  |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Item 5 reuses OutsideCarrierDomain for a type the carrier cannot represent, so a binding the owner admits in an unsupported type is reported the same as a non-member; FR-384 keeps a distinct EndpointNotRepresentable for this. A caller (CG replay) cannot tell 'outside the domain' from 'type not supported'. Consider a distinct type-capacity reason, or state why one reason suffices. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:51 |
+
+## Dispositions
+
+Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | still-open | Linear IR-1443's own AC still reads 'Memory stays within the K-DR budget' and 'CG's row harness consumes the carrier' with verification 'VERIFIED with a recorded peak memory'; the fix is an edit of the ticket text, not of the PR, and no edit was made. |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
+| FND-007 | fixed | - |
+
+Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unchanged); FND-004 closed by the lead's edit of the IR-1443 ticket text.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | Item 8's third intended difference is limited to a binding against a too-wide type 'that the owner admits', but the boundary set now holds (1, 0) against Rational[1,5;2,2^127], where the owner returns ZeroDenominator and the constructor TypeNotRepresentable (AC-6). That disagreement is outside item 8's three, so AC-8 ('the only disagreements are the three intended differences') fails on it, while TC-946 step 2 counts it ('every binding against the six types'). Drop 'that the owner admits' from item 8 so FR and TC agree. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:57 |
+
+Round 3 rows (FND-006) in Dispositions follow fix commit 4b874ce on b68819e (origin/main 4fe7df6 unchanged).
+
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | low | The new precedence binding, the Decimal (1, 0) against Int[0, 2^127], is 'a binding against a type with a bound outside the native width', so item 8 and step 2 put it in the third intended-difference set labelled TypeNotRepresentable, while AC-5 expects CarrierMismatch. More generally, step 2 runs every boundary binding through the owner route, but a carrier-mismatched binding (this one and the six ordered mismatches) has no owner-route outcome to compare, and is neither an agreement nor one of the three listed differences, so AC-8's 'only disagreements are the three' has no defined result for them. State that carrier-mismatched bindings are checked against their literal CarrierMismatch only and are outside the differential, or limit the third set to bindings of the type's own carrier. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:28 |
+
+Round 4 rows (FND-007) in Dispositions follow fix commit 7cff974 on 4b874ce (origin/main 4fe7df6 unchanged).
