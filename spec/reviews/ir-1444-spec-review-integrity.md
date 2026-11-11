@@ -52,3 +52,13 @@ CHANGES REQUIRED. Cross-checked every AC literal against the TC-950 boundary set
 | TC-950-S1 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:30 | 1. For AC-1 to AC-5, build every type and construct every boundary binding with the public API. Check each retained and normalized pair against independently written literals and each refusal against its named cause. Check that `(100, 2)` and `(1, 0)` in `Decimal[0, 100; 0, 2]` are unequal under ... |
 | TC-950-S6 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:35 | 6. Run each mutant of the next section: the input mutants through the checks of steps 1 and 2 (step 1 catches the retention, lift, scale-cast and ingress mutants; step 2 catches the membership mutants), the inspection mutants through step 3. |
 | TC-950-MUT | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:40 | \| Mutant \| Fails at \| |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in b5c7fa1e: In `Decimal[0,100; 0,2]`, `(1, 4294967295)` and `(10, 4294967295)` are `OutsideCarrierDomain`. \| Test (TC-950) \| |
+| FND-002 | fixed | Verified in b5c7fa1e: For the total constructor: `(1, 3)` for `(10^37, 40)`, `(-1, 0)` for `(-(10^38), 38)`, `(i128::MIN, 0)` for `(i128::MIN, 0)`, `(i128::MIN, 4294967295)` for `(i128::MIN, 4294967295)` (`2^127` has no factor of five) and `(1, 4294967257)` for `(10^38, 4294967295)` (38 zeros removed). \| Test (TC-950) \| |
+| FND-003 | fixed | Verified in b5c7fa1e: and in `Decimal[0,100; 60,70]`, `(1, 0)` and `(-1, 0)` are `OutsideCarrierDomain` and `(0, 0)` is admitted. On the negative side of the width, in `Decimal[i128::MIN, 0; 38, 38]`, `(-1, 0)` is admitted (lifted `-10^38` fits) and `(-2, 0)` is `OutsideCarrierDomain` (`-2 x 10^38` is below `i128::MIN`). |
+| FND-004 | fixed | Verified in b5c7fa1e: 6. Run each mutant of the next section: the input mutants through the checks of steps 1 and 2 by this rule: a mutant whose failing input has a literal expectation in the boundary set (retention, membership, lift, scale-cast, normalized-view, structural-equality, type-constructor and ingress mutants) |
+| FND-005 | fixed | Verified in b5c7fa1e: and the ingress and the constructor SHALL return no other refusal (the checked type constructor's `MalformedDecimalType` of Behavior 1 is the owner's `IllTyped`, not a carrier refusal). FR-398's `CarrierMismatch`, `ZeroDenominator` and `NonCanonical` have no counterpart because there is one carrier  |

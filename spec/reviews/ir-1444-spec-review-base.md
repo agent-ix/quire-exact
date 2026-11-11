@@ -44,3 +44,11 @@ CHANGES REQUIRED (see the sibling SR files for the remaining medium findings; th
 | FR-402-DEPS | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:81 | - FR-372 and QSpec FR-140 own Decimal membership, on which the constructor depends. FR-384 is the native-width and host-availability precedent. FR-398 (IR-1443) is the sibling constructor and the precedent for the boundary vocabulary, the refusal names and the differential. |
 | TC-950 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:14 | Verify FR-402-AC-1 through FR-402-AC-11 through the public kernel API, the host differential, the Kani proofs and the recorded measurement. Every mutant below is a real buildable variant of the shared body in a scratch copy. Each names the input, or the inspection, that fails it; a mutant that no... |
 | TC-950-S2 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:31 | 2. For AC-6 and AC-8, build every boundary binding with scale in `0..=4294967295` a second time by the owner route: `Decimal::new(Integer::from(coefficient), scale)` and `DecimalType::contains` on an owner `DecimalType` built from the same bounds, and the owner's `normalized()`. Compare admission... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in b5c7fa1e: The owner route runs for every such scale: `Decimal::new` forms no power of ten, and `DecimalType::contains` compares digit counts first (the shifted digit count saturates) and materializes a power of ten only when the lifted coefficient has the bound's digit count, so the power is bounded by the di |
+| FND-002 | fixed | Verified in b5c7fa1e: IR-1444 (FR-402) retains the Decimal pair rather than the fraction; it and this constructor share the owner Decimal membership rule and must not diverge in it. |
+| FND-003 | fixed | Verified in b5c7fa1e: This requirement states no memory budget and claims no fit: a configured ceiling or a prediction is not a measurement. |

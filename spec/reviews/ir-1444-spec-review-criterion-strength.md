@@ -49,3 +49,17 @@ CHANGES REQUIRED (low only in this file). Jev (typesafe.ai System One) is not av
 | TC-950-S5 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:34 | 5. For AC-10, run the two Kani proofs `native_decimal_from_bindings_refines_owner_membership` and `native_decimal_normalized_is_least_scale_pair` with no unwind attribute and their covers, under the repository's authorized runner, and run the host test that binds each independent reference to the... |
 | TC-950-S6 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:35 | 6. Run each mutant of the next section: the input mutants through the checks of steps 1 and 2 (step 1 catches the retention, lift, scale-cast and ingress mutants; step 2 catches the membership mutants), the inspection mutants through step 3. |
 | TC-950-MUT | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:40 | \| Mutant \| Fails at \| |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | low | Regression from the FND-003 alignment: Behavior 7 requires the normalized view to use no allocation and no Integer, but AC-7 and step 3 now scan only the constructor for owner types, and the allocation window covers only 'the construction of the whole boundary set'. An Integer-based normalized view passes every check (its Kani proof would only fail to complete, which is inconclusive). Add the normalized view to the owner-type scan and call it inside the allocation window. | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:69 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in b5c7fa1e: \| The decimal value rather than the lifted normalized coefficient is compared with `[lo, hi]` \| `(9999, 2)` in `Decimal[0, 100; 0, 2]`, expected `OutsideCarrierDomain` \| |
+| FND-002 | fixed | Verified in b5c7fa1e: \| The normalized view strips zeros from the absolute value and returns it unsigned \| `(-1000, 3)`, expected `(-1, 0)` (fails by value, independent of overflow checks) \| |
+| FND-003 | fixed | Verified in b5c7fa1e: and the source of the constructor for the owner types `Integer`, `Decimal` and `Rational` (matched as the owner paths `crate::integer::Integer`, `crate::decimal::Decimal` and `crate::rational::Rational`, or as a whole-word identifier, never as a substring of the carrier's own `NativeDecimal` names); |

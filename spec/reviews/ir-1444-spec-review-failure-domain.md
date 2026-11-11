@@ -46,3 +46,11 @@ CHANGES REQUIRED. Boundaries present: scale 0, scale u32::MAX (member and non-me
 | TC-950-SET | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:18 | The boundary set, used by steps 1 to 4, is fixed before the constructor is written and is derived from independent literals, not from the constructor. A binding is `(coefficient, scale)`, both `i64`. Types are written `Decimal[lo, hi; smin, smax]`; the rounding spelling is `Exact` throughout and ... |
 | TC-950-S2 | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:31 | 2. For AC-6 and AC-8, build every boundary binding with scale in `0..=4294967295` a second time by the owner route: `Decimal::new(Integer::from(coefficient), scale)` and `DecimalType::contains` on an owner `DecimalType` built from the same bounds, and the owner's `normalized()`. Compare admission... |
 | TC-950-MUT | examined | spec/test-cases/TC-950-kani-tractable-native-decimal-carrier.md:40 | \| Mutant \| Fails at \| |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in b5c7fa1e: On the negative side of the width, in `Decimal[i128::MIN, 0; 38, 38]`, `(-1, 0)` is admitted (lifted `-10^38` fits) and `(-2, 0)` is `OutsideCarrierDomain` (`-2 x 10^38` is below `i128::MIN`). In `Decimal[0,100; 0,2]`, `(9999, 2)` is `OutsideCarrierDomain` although its value 99.99 lies in `[0, 100]` |
+| FND-002 | fixed | Verified in b5c7fa1e: exactly one intended difference, stated at the level of the type: for each owner type with a bound outside the native width, `DecimalType::new` succeeds and the ingress returns `TypeNotRepresentable`, so no native type and no binding against it exists. A binding whose scale is outside `0..=429496729 |
+| FND-003 | fixed | Verified in b5c7fa1e: with covers that the member path, the out-of-scale-range path, the non-member in-range path, the in-range nonzero lift (`s*` above `s'`, lifted coefficient inside the native width) and the oversize lift decided by sign are each reachable. A second proof SHALL verify, over all signed 128-bit coeffici |

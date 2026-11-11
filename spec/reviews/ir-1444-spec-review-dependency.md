@@ -40,3 +40,10 @@ CHANGES REQUIRED. Edges checked: depends_on FR-372 (owner Decimal membership; th
 | FR-402-B6 | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:50 | 6. The refusal vocabulary is that of FR-398 reduced to what this carrier can produce. The causes are `TypeNotRepresentable` (at ingress, before any binding exists) and `OutsideCarrierDomain` (at construction), and no other refusal SHALL exist. FR-398's `CarrierMismatch`, `ZeroDenominator` and `No... |
 | FR-402-B10 | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:57 | 10. When CG's decimal row (CG FR-051, ticket IR-259) consumes the delivered carrier, the memory and time of the proof harness that draws its operands through the carrier under the 16 GiB per-request ceiling of CG FR-028 SHALL be measured and recorded under IR-1444 with the peak provenance and the... |
 | FR-402-AC-11 | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:73 | \| FR-402-AC-11 \| When CG's decimal row (CG FR-051, IR-259) consumes the delivered carrier, the peak memory, time, tool version and terminal outcome of the proof harness that draws its operands through the carrier are recorded under IR-1444 with the harness run and the peak provenance. A fit or a ... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in b5c7fa1e: Operations over the carrier (arithmetic, rounding and ordering, with their charges) are not specified here, and are owned by Linear IR-1508 (native Decimal operations over the carrier), which CG FR-051's prerequisite P1 also needs: CG FR-051 cannot be credited with a native expression until IR-1508  |
+| FND-002 | fixed | Verified in b5c7fa1e: The carrier's envelope, which CG FR-051 asks its prerequisite P1 to state, SHALL be: the coefficient binding is an `i64`, the scale binding is accepted over `0..=4294967295`, the retained coefficient is an `i128` and the retained scale is a `u32`. A total constructor from any signed 128-bit coeffici |

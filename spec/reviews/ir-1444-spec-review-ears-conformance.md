@@ -43,3 +43,10 @@ CHANGES REQUIRED (low only). The Description statement, Behaviors 1-3, 5, 8 and 
 | FR-402-B8 | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:55 | 8. The kernel SHALL carry a host differential. For every boundary binding of TC-950 whose scale is in `0..=4294967295`, the oracle SHALL be the shipped owner route: `Decimal::new(Integer::from(coefficient), scale)` and `DecimalType::contains` on the owner type, with the owner's `normalized()` for... |
 | FR-402-B9 | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:56 | 9. The kernel SHALL carry a Kani proof, without a loop unwind bound, that over all symbolic `i64` bindings and all symbolic native type bounds (`lower <= upper` signed 128-bit, `min_scale <= max_scale` over `u32`, including values at which the lift of Behavior 5 wraps or exceeds the native width)... |
 | FR-402-B10 | examined | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:57 | 10. When CG's decimal row (CG FR-051, ticket IR-259) consumes the delivered carrier, the memory and time of the proof harness that draws its operands through the carrier under the 16 GiB per-request ceiling of CG FR-028 SHALL be measured and recorded under IR-1444 with the peak provenance and the... |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified in b5c7fa1e: When the binding is admitted (Behavior 5), the constructor SHALL return the carried Decimal retaining exactly the pair drawn: no normalization, scaling or reordering. The constructor SHALL perform no allocation, SHALL create no `Integer`, `Decimal` or `Rational`, SHALL contain no loop and no iterato |
+| FND-002 | fixed | Verified in b5c7fa1e: The native normalized view SHALL equal the `normalized()` of the owner `Decimal` that the read-out yields. The read-out may allocate, and its allocation is outside the constructor's zero-allocation window. |
