@@ -395,13 +395,15 @@ fn boolean_equality_matches_planned_equality_over_boolean_values() {
             assert_eq!(events[0].point, ChargePoint::EqualityPlanForm);
             assert_eq!(events[3].point, ChargePoint::EqualityResultRetain);
             assert_eq!(run(limits(), &native), (outcome, events, counters.clone()));
-            // Every bound from zero to the full spend of each counted limit
-            // lands on every charge boundary of the four-charge schedule.
+            // Every bound from zero to the full spend of each of the three
+            // limit kinds the schedule spends. Bounds stop only at plan-form
+            // and plan: equality.plan reserves the pair and result-retain
+            // work and result units, so those two points are denied only by
+            // the injected-denial test below.
             for (kind, spend) in KINDS.iter().zip(counters) {
                 for bound in 0..=spend {
                     let mut lim = limits();
                     match kind {
-                        LimitKind::IntegerBits => lim.integer_bits = bound,
                         LimitKind::ValueOccurrences => lim.value_occurrences = bound,
                         LimitKind::WorkUnits => lim.work_units = bound,
                         LimitKind::ResultUnits => lim.result_units = bound,
@@ -413,6 +415,47 @@ fn boolean_equality_matches_planned_equality_over_boolean_values() {
                         "boolean eq {l} {r} {kind:?} {bound}"
                     );
                 }
+            }
+        }
+    }
+}
+
+#[trace("TC-944", "FR-397-AC-5")]
+#[test]
+fn boolean_equality_denied_at_each_charge_point_matches_planned_equality() {
+    use std::num::NonZeroU64;
+
+    use quire_exact::InjectedDenial;
+    for point in [
+        ChargePoint::EqualityPlanForm,
+        ChargePoint::EqualityPlan,
+        ChargePoint::EqualityPair,
+        ChargePoint::EqualityResultRetain,
+    ] {
+        for l in [false, true] {
+            for r in [false, true] {
+                let (vl, vr) = (Value::Boolean(l), Value::Boolean(r));
+                let denied = |f: &dyn Fn(&mut Meter) -> Outcome<bool>| {
+                    let mut meter = Meter::new(limits()).with_injected_denial(InjectedDenial {
+                        point,
+                        occurrence: NonZeroU64::MIN,
+                    });
+                    meter.enable_charge_capture(64, 256);
+                    let outcome = f(&mut meter);
+                    let counters: Vec<u64> = KINDS.iter().map(|k| meter.consumed(*k)).collect();
+                    let events = match meter.disable_charge_capture() {
+                        Some(Ok(capture)) => capture.events().to_vec(),
+                        _ => panic!("capture missing or truncated"),
+                    };
+                    (outcome, events, counters)
+                };
+                let native = denied(&|m| evaluate_native_boolean_equality(l, r, m));
+                let existing = denied(&|m| planned_equality(&vl, &vr, m));
+                assert!(
+                    matches!(&native.0, Outcome::Incomplete(i) if i.charge_point == point),
+                    "denial at {point:?} must stop there"
+                );
+                assert_eq!(native, existing, "denied {point:?} {l} {r}");
             }
         }
     }
