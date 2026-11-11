@@ -94,3 +94,15 @@ Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
 | FND-004 | fixed | - |
 | FND-005 | fixed | - |
 | FND-006 | fixed | - |
+| FND-007 | fixed | - |
+| FND-008 | fixed | - |
+| FND-009 | fixed | - |
+| FND-010 | fixed | - |
+
+Round 2 rows above follow fix commit b68819e on 441e6d8 (origin/main 4fe7df6 unchanged); FND-004 closed by the lead's edit of the IR-1443 ticket text.
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-011 | low | Item 6 now orders CarrierMismatch before TypeNotRepresentable, but no boundary binding or mutant exercises that pair: the six mismatches use native-width types and the too-wide types get only matching bindings. A constructor that checks the type first passes. Add a mismatched binding against a too-wide type, for example the Decimal binding (1, 0) against Int[0, 2^127], expected CarrierMismatch, and a mutant row for the swapped order. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:52 |
