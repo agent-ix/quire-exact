@@ -81,6 +81,6 @@ Planned (IR-1444). No implementation, proof result or measurement exists; this s
 
 - FR-372 and QSpec FR-140 own Decimal membership, on which the constructor depends. FR-384 is the native-width and host-availability precedent. FR-398 (IR-1443) is the sibling constructor and the precedent for the boundary vocabulary, the refusal names and the differential.
 - CG FR-051 (merged, specified under IR-1440) is the consumer and names the carrier as prerequisite P1; CG FR-025-AC-15 defines the bindings, CG FR-028 the 16 GiB ceiling. CG's consumption of the carrier is CG's ticket IR-259 and CG's credit, not this requirement's acceptance.
-- IR-1508 (native Decimal operations over the carrier) owns the native expression that CG FR-051's prerequisite P1 also needs; this requirement is the operand half of P1 and IR-1508 depends on it.
+- IR-1508 (native Decimal operations over the carrier, specified in [FR-403](./FR-403-native-decimal-operations-refine-owner-path.md)) owns the native expression that CG FR-051's prerequisite P1 also needs; this requirement is the operand half of P1 and IR-1508 depends on it.
 - IR-1445 (text) and IR-1446 (float) are sibling carriers and not prerequisites. IR-1443 (quantity) is merged and not a prerequisite; the two Decimal constructors share the owner membership rule and must not diverge in it.
 - The generated oracle (CG FR-014) and the harness are CG's; the composed proof therefore runs in CG's harness, not in this repository.
