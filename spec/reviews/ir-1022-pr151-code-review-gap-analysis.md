@@ -42,3 +42,11 @@ No coverage gap. AC-5 is bound to a test that asserts it, the test fails on beha
 | src/lib.rs re-export | examined | pub use native_integer::{ ..., evaluate_native_boolean_equality, ... } |
 | tests/ir1422_native_entries.rs boolean_equality_matches_planned_equality_over_boolean_values | examined | #[trace("TC-944", "FR-397-AC-5")] differential over four pairs and a 0..=spend sweep of four limit kinds |
 | FR-397-AC-1 to AC-4 matrix rows | context_only | existing binders unchanged |
+
+## Dispositions
+
+Round 1, fix head 28ccedc9 (reviewed head f3a25430); merge-tree with origin/main 5f2745c clean.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | New test denies each of the four points for all four pairs and checks the native Incomplete names the denied point and the full tuple equals planned_equality's. Reviewer mutants skipping only the pair charge and only the result-retain charge each fail it by name at tests/ir1422_native_entries.rs:454 (the stop-point assertion). |

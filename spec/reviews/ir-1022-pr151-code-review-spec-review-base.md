@@ -47,3 +47,13 @@ One medium finding: the FR's requirement statement, title and Dependencies were 
 | TC-944 step 4 | examined | Compare `evaluate_native_boolean_equality` with `planned_equality` over `Value::Boolean` for the four pairs, at unlimited limits and at every limit from zero to each counter's spend. |
 | TC-944 step 5 | examined | Run `charge_native_integer_schedule` and the matching evaluator on separate meters ... (renumbered from 4, text unchanged) |
 | FR-397 Behavior 3, Behavior 4, AC-3, AC-4 | context_only | equality and charge-only entry text the new behavior is modelled on |
+
+## Dispositions
+
+Round 1, fix head 28ccedc9 (reviewed head f3a25430); merge-tree with origin/main 5f2745c clean.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | SHALL sentence, title and H1 name Boolean equality; Dependencies names the quire-contract-codegen harness (IR-1022) as consumer. |
+| FND-002 | fixed | Consumer sentence removed from Behavior 5 (now in Dependencies); the shared-function clause is replaced by the observable 'same four charges, same order, same units'. |
+| FND-003 | fixed | AC-5 and TC-944 step 4 name value_occurrences, work_units and result_units; the integer_bits arm is gone from the sweep. Claim checked: equality charges only a value_occurrences size, work and result units, so the other seven kinds (integer_bits, decimal_digits, scale_expansion, text_input_bytes, text_scalars, normalized_scalars, unit_edges) spend zero; the round-0 probe showed integer_bits and decimal_digits at bound 0 complete. |

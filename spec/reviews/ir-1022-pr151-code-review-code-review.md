@@ -56,3 +56,11 @@ Mergeable on the code. The kernel is correct, minimal and exported consistently 
 | tests/ir1422_native_entries.rs boolean_equality_matches_planned_equality_over_boolean_values | examined | four pairs; reference shape asserts; full-tuple native vs reference at unlimited limits and bounds 0..=spend of integer_bits, value_occurrences, work_units, result_units |
 | src/equality.rs planned_equality_stop, charge_plan_form, charge_pairs, plan_pairs | context_only | charge_plan_form(&left.occ(), &right.occ(), meter)?; ... charge_pairs(&plan.pairs, meter)? |
 | src/accounting.rs Meter::charge_plan | context_only | EqualityPlan event: work 1, work_reservation pairs+2, result_reservation 1, size value_occurrences pairs |
+
+## Dispositions
+
+Round 1, fix head 28ccedc9 (reviewed head f3a25430); merge-tree with origin/main 5f2745c clean.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Comment at tests/ir1422_native_entries.rs:398-402 now states bounds stop only at plan-form and plan, with pair and result-retain covered by the injected-denial test. |
