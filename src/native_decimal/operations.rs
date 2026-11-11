@@ -68,9 +68,9 @@ pub enum NativeDecimalCapacityQuantity {
     Product,
     /// The negation (ground c).
     Negation,
-    /// The numerator `N` of a `Divide` (grounds b and c).
+    /// The numerator `N` of a `Divide` (ground c).
     Numerator,
-    /// The denominator `D` of a `Divide` (grounds b and c).
+    /// The denominator `D` of a `Divide` (ground c).
     Denominator,
     /// The reduced numerator or denominator of a `Divide` (ground d).
     CanonicalQuotient,

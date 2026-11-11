@@ -69,3 +69,19 @@ No mutant survived. Independent checks: `LOG2_10_LOWER` equals floor(log2(10) x 
 | src/decimal.rs | examined | DecimalLoss::from_factored, DecimalResult::from_parts, inexact/out_of_domain widened to pub(crate) |
 | src/lib.rs | examined | re-exports evaluate_native_decimal, order_native_decimals, AdmittedNativeDecimalOperation, NativeDecimalCapacityQuantity, NativeDecimalCapacityRefusal, NativeDecimalLoss, NativeDecimalOperation, NativeDecimalResult |
 | FR-403 Behaviors 1-38 | context_only | Admission, evaluation, charges, shape and evidence of FR-403 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The fix narrowed FR-403 Behavior 3 (b) to "a shifted operand of `Add` or `Subtract`". The doc comments of `NativeDecimalCapacityQuantity::Numerator` and `::Denominator` still say "(grounds b and c)". They should now read "(ground c)", or the code documentation contradicts the spec it cites. | src/native_decimal/operations.rs:71, src/native_decimal/operations.rs:73 |
+
+## Dispositions
+
+Round 1, head cf296b07. Verified against `git diff 0cc3bb82..cf296b07`. Reviewer job: `--test ir1508_native_decimal_ops` passed 17 of 17, and `--lib native_decimal::operations_tests` passed 8 of 8. A production mutant P1 (the Subtract `decimal.arithmetic` digits drop the left shift) was KILLED by three tests, including both new AC-7 tests.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `refines()` now computes `let divides = matches!(op, NativeDecimalOperation::Divide(..));` and emits `if divides { kani::cover!(matches!(native, Decision::DivisionByZero), "zero divisor"); }`. The other five covers remain, and each is reachable for every operation. |
+| FND-002 | fixed | The convergent/random argument is replaced by a deterministic `simplest_between(L, 2^90, L+1, 2^90)`, a continued-fraction recursion that is correct for the open interval. The test checks that `p x 2^90 - L x q` lies in (0, q), so the fraction really is in the interval, and asserts `denominator == 23_062_019_849_360` and `denominator > u32::MAX`. That matches the reviewer's independent value. The closed upper end has a power-of-two reduced denominator far above 2^32, so the open interval decides. |
+| FND-003 | still-open | New in disposition pass 1 and routed to the coder. The Numerator/Denominator doc comments still cite "grounds b and c"; the one-line fix is "(ground c)". |

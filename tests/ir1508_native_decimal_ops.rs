@@ -1128,23 +1128,57 @@ fn limit_variants(t: Ty, op: Op) -> Vec<ScalarLimits> {
 #[test]
 #[trace("TC-951", "FR-403-AC-7")]
 fn charges_hold_at_every_limit_on_fresh_and_cumulative_meters() {
+    let mut denied_kinds: Vec<K> = Vec::new();
     for (t, op) in swept() {
         let variants = limit_variants(t, op);
         assert!(variants.len() > 3);
         let mut stopped = 0;
+        let mut case_denied: Vec<K> = Vec::new();
         for limits in &variants {
             if !agree(t, op, *limits) {
                 continue;
             }
             let (result, _) = run_native(t, op, *limits).unwrap();
-            if matches!(
-                result,
-                Res::Arith(Outcome::Incomplete(_)) | Res::Ord(Outcome::Incomplete(_))
-            ) {
+            if let Res::Arith(Outcome::Incomplete(record)) | Res::Ord(Outcome::Incomplete(record)) =
+                result
+            {
                 stopped += 1;
+                if !case_denied.contains(&record.limit_kind) {
+                    case_denied.push(record.limit_kind);
+                }
+                if !denied_kinds.contains(&record.limit_kind) {
+                    denied_kinds.push(record.limit_kind);
+                }
             }
         }
         assert!(stopped > 0, "{t:?} {op:?}: no limit denied a charge");
+        // every size kind the case charges is denied by its one-less limit:
+        // a sweep with only the exact limits cannot deny the largest charge
+        let (_, charged) = run_owner(t, op, bounded());
+        for event in &charged.events {
+            for (kind, amount) in &event.sizes {
+                if matches!(
+                    kind,
+                    K::IntegerBits | K::DecimalDigits | K::ScaleExpansion | K::ValueOccurrences
+                ) && amount.to_u64().unwrap() > 0
+                {
+                    assert!(
+                        case_denied.contains(kind),
+                        "{t:?} {op:?}: {kind:?} is charged but never denied"
+                    );
+                }
+            }
+        }
+    }
+    // each size limit is denied at least once, so the one-less size limits
+    // are not silently dropped from the sweep
+    for kind in [
+        K::IntegerBits,
+        K::DecimalDigits,
+        K::ScaleExpansion,
+        K::ValueOccurrences,
+    ] {
+        assert!(denied_kinds.contains(&kind), "{kind:?} never denied");
     }
     // One cumulative Meter across the whole sequence, native beside owner.
     let sequence: Vec<(Ty, Op)> = swept();

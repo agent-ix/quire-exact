@@ -42,3 +42,12 @@ Ruling on the coder's gap, which is option (ii), an acceptable implementer choic
 | FR-403 Behavior 3 | examined | ... (b) a shifted operand lies outside signed 128 bits; (c) the aligned sum, difference, product or negation, or N or D, lies outside signed 128 bits ... |
 | FR-403-AC-9 | context_only | ... the lower and upper approximations of log2(10) ... give the same floor for every k from 0 to 4294967295, which is checked by a proof over all symbolic u32 values. |
 | FR-403-AC-12 | context_only | For each of the six operations and the ordering, a Kani proof with no unwind bound verifies the refinement of Behavior 37, with its covers. |
+
+## Dispositions
+
+Round 1, head cf296b07. `quire validate --scope .` on FR-403 and TC-951 at cf296b07 exits 0 with no new warnings. The consequent doc-comment drift in operations.rs is recorded as code-review FND-003.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-951 Status now reads "Run on the host: steps 1 to 8 ... The boundary set holds each mutant's distinguishing input ... but the TC-951 mutants were not built and run as a set (step 10). The PR #149 reviewer ran eight controls on the unmutated branch, all killed by an assertion failure: M1 ... M8 ...". It also gives the differential's real size, 19 types and 38 operands. |
+| FND-002 | fixed | FR-403 Behavior 3 (b) now reads "a shifted operand of `Add` or `Subtract` lies outside signed 128 bits", and `N` and `D` stay in (c). The code was already consistent with this (Divide names Numerator or Denominator). |

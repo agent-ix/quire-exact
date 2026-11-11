@@ -51,3 +51,19 @@ Source-inspection scanner (AC-10): it is an allowlist. Any `.name(` method call 
 | FR-403-AC-11 | examined | Native and owner agree over the boundary set except listed capacity refusals. |
 | FR-403-AC-12 | examined | Kani proof per operation and ordering with covers. |
 | FR-403-AC-13 | examined | CG measurement under IR-259. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | AC-7 asks for the one-less limit of each limit kind, but no test asserts that a size-limit denial actually happens. Reviewer harness mutant B2 changes `limit_variants` from `[amount, amount.saturating_sub(1)]` to `[amount]`, dropping every one-less size limit. B2 SURVIVED: all 17 tests pass, because the `stopped > 0` and `stopped > 100` counters are met by work-unit and result-unit denials alone. Gather the `Incomplete` records' `limit_kind` across the sweep and assert that each of `IntegerBits`, `DecimalDigits`, `ScaleExpansion` and `ValueOccurrences` is denied at least once. Production mutants are still caught at the default bounds, so the risk is that the AC-7 evidence could be lost silently. | tests/ir1508_native_decimal_ops.rs:1086-1094, tests/ir1508_native_decimal_ops.rs:1173-1200 |
+
+## Dispositions
+
+Round 1, head cf296b07. Verified against `git diff 0cc3bb82..cf296b07` and `quire matrix --scope .`. The reviewer ran three mutation controls. Production mutant P1 (the Subtract arithmetic digits drop the left shift) was KILLED by `native_and_owner_agree_over_the_boundary_set`, `charges_hold_at_every_limit_on_fresh_and_cumulative_meters` and the new `the_boundary_set_agrees_at_exact_and_one_less_limits`. Harness mutant B1 (sample stride raised from 97 to 100000) was KILLED by the new test's `cases > 100` guard, at line 1199. Harness mutant B2 SURVIVED, recorded as FND-003. Judgement on the 1-in-97 sample: acceptable. The categories AC-7 names (every operation and the ordering, at equal scales, unequal scales and a rounding step) are now enumerated exhaustively in `swept()`, at sufficient, exact and one-less limits on fresh Meters and on one cumulative Meter. The sampled test adds breadth on top of that and is not the AC-7 evidence. The stride is deterministic, and 97 is prime against the 10 operations per operand pair, so every operation kind is sampled.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The three tags now read `#[trace("TC-951", "FR-403-AC-11")]`. `quire matrix` shows FR-403-AC-12 as `(none) \| untagged`. |
+| FND-002 | fixed | `swept()` gained `Sub((1,0),(1,3))` in [-10000,10000;0,3], `Sub((1,3),(0,0))` and `Sub((-125,3),(1,0))` under nearest-even with T=2 (rounding steps), `Neg((-125,3))` under nearest-even, `Neg((5,1))` with T=3, `Mul((5,1),(4,0))` and `Mul((15,1),(15,2))` under nearest-even (a rounding step). Every operation now has its equal-scale, unequal-scale and rounding cases at every limit, and the new sampled test extends exact and one-less limits across the boundary set. |
+| FND-003 | still-open | New in disposition pass 1 and routed to the coder. Mutant B2 (no one-less size limits) survives the AC-7 tests; add an assertion that each size limit kind is denied at least once. |
