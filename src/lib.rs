@@ -142,7 +142,11 @@ pub use integer::{
 };
 pub use key::compare_keys;
 pub use location::{Location, Origin, Role};
-pub use native_decimal::{NativeDecimal, NativeDecimalRefusal, NativeDecimalType};
+pub use native_decimal::{
+    evaluate_native_decimal, order_native_decimals, AdmittedNativeDecimalOperation, NativeDecimal,
+    NativeDecimalCapacityQuantity, NativeDecimalCapacityRefusal, NativeDecimalLoss,
+    NativeDecimalOperation, NativeDecimalRefusal, NativeDecimalResult, NativeDecimalType,
+};
 pub use native_integer::{
     charge_native_integer_schedule, evaluate_native_integer_arithmetic,
     evaluate_native_integer_division, evaluate_native_integer_equality,

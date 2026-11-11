@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-403-AC-1 through FR-403-AC-13 by running the native operations beside the owner's `evaluate_decimal` and `order_numbers`, each under a `Meter` with the same limits. Each mutant below is a buildable variant of the named site in a scratch copy and names the input, or the inspection, that fails it and the step at which it fails; a mutant that no input and no inspection distinguishes from the unmutated body is not admitted. This case is planned; no part of it has run.
+Verify FR-403-AC-1 through FR-403-AC-13 by running the native operations beside the owner's `evaluate_decimal` and `order_numbers`, each under a `Meter` with the same limits. Each mutant below is a buildable variant of the named site in a scratch copy and names the input, or the inspection, that fails it and the step at which it fails; a mutant that no input and no inspection distinguishes from the unmutated body is not admitted. The host steps have run (see Status); the Kani proofs and the CG measurement have not.
 
 ## Test Procedure
 
@@ -100,4 +100,4 @@ Every case yields the independently written outcome, retained pair, loss record 
 
 ## Status
 
-Planned. No implementation, test, proof or measurement has run.
+Run on the host: steps 1 to 8 and 10 for the input and inspection mutants, through `tests/ir1508_native_decimal_ops.rs` (literal cases, the differential against `evaluate_decimal` and `order_numbers` with an independently modelled capacity set, the limit sweeps and the source inspection) and `src/native_decimal/operations_tests.rs` (the reference binding of Behavior 38, `bits(10^k)`, the gcd and the wide product). Each mutant's distinguishing input is asserted against its literal in the step the table names; the mutants have not been built and run as a set. The seven proofs of step 9 and the all-`u32` proof of step 6 are written and unexecuted. Step 11 waits for IR-259. No proof result or measurement exists.

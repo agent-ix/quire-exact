@@ -309,6 +309,25 @@ fn split_factor_five(value: &Integer, limit: u64) -> (Integer, u64) {
 }
 
 impl DecimalLoss {
+    /// The loss record of the native Decimal path, from its factored parts.
+    pub(crate) fn from_factored(
+        (numerator, cofactor): (Integer, Integer),
+        (twos, fives): (u64, u64),
+        rounded: DecimalRepresentation,
+        mode: RoundingMode,
+    ) -> Self {
+        Self {
+            exact: ExactLossValue {
+                numerator,
+                cofactor,
+                twos,
+                fives,
+            },
+            rounded,
+            mode,
+        }
+    }
+
     /// Reduced exact numerator.
     pub fn exact_numerator(&self) -> &Integer {
         &self.exact.numerator
@@ -508,6 +527,11 @@ impl PartialEq for DecimalResult {
 impl Eq for DecimalResult {}
 
 impl DecimalResult {
+    /// A result from its retained value and loss record, for the native path.
+    pub(crate) fn from_parts(value: Decimal, loss: Option<DecimalLoss>) -> Self {
+        Self { value, loss }
+    }
+
     /// The result, retaining its representation (`v × 10^T`, `T`).
     pub fn value(&self) -> &Decimal {
         &self.value
@@ -808,14 +832,14 @@ struct Coefficient {
 
 impl DecimalType {
     /// The strict-`exact` refusal for this declared target.
-    fn inexact(&self) -> Refusal {
+    pub(crate) fn inexact(&self) -> Refusal {
         Refusal::InexactDecimal {
             target: InexactTarget::Decimal(Box::new(self.clone())),
         }
     }
 
     /// The refusal for a value outside this target's membership.
-    fn out_of_domain(&self) -> Refusal {
+    pub(crate) fn out_of_domain(&self) -> Refusal {
         Refusal::DecimalOutOfDomain {
             target: Box::new(self.clone()),
         }

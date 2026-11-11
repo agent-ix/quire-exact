@@ -115,7 +115,7 @@ For a retained coefficient `c` and a shift `k`: `bits(c)` is the bit length of `
 
 ## Status
 
-Planned (IR-1508). No implementation, proof result or measurement exists; this specification claims none.
+Implemented (IR-1508): the admission, evaluation, gcd, ordering and read-out, with the host differential, the independent reference binding and the source inspection (AC-1 to AC-11). The seven proofs of Behavior 37 and the approximation proof of AC-9 are written and not executed, under the repository's standing instruction; AC-12 is not credited, and the all-`u32` half of AC-9 stands on the host checks until the proof runs. No measurement exists and none is claimed; AC-13 waits for CG's decimal row (IR-259).
 
 ## Dependencies
 
