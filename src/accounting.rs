@@ -22,8 +22,8 @@ use core::num::NonZeroU64;
 #[cfg(test)]
 mod ieee_units_tests;
 
-// DO NOT RUN: exhausts fixed 16 GiB ceiling, returns Inconclusive MemoryExhausted, proves nothing, blocked work for a week; Peter ordered it never run until all feature work is done.
-// Keep the proof source, but exclude its module even when Kani selects a harness directly.
+// The monolithic three-charge schedule harness exhausts memory and is not claimed by FR-359-AC-9
+// (see `units_proofs`). Keep its source, but exclude the module even when Kani selects a harness directly.
 #[cfg(all(kani, any()))]
 mod kani_proofs;
 mod units;

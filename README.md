@@ -141,4 +141,4 @@ committed is described in [`CONTENT_RIGHTS.md`](CONTENT_RIGHTS.md).
 
 AGPL-3.0-or-later. See [`LICENSE`](LICENSE).
 
-The standalone [Meter Kani gate](docs/meter-kani-gate.md) is disabled by Peter's order until all feature work is complete. Its target warns and fails before starting Kani; FR-359-AC-9 remains unqualified at this head.
+The [Meter Kani gate](docs/meter-kani-gate.md) (`make kani-meter-gate`) runs the units proofs that bind FR-359-AC-9. It is not part of `make ci`.
