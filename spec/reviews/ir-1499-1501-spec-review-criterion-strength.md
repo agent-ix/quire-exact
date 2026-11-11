@@ -96,6 +96,13 @@ Manual criterion-strength analysis (Jev client unavailable): can each AC fail fo
 | FND-008 | medium | [IR-1501] Behavior 6 and AC-4(d) require every loop header to be 'for <ident> in 0..<NAME>' with NAME 'a const of the module', and Behavior 6 and AC-9 make UNWIND_BOUND a module constant equal to the largest declared bound plus one. Since round 1, though, the dominant bounds are the function's const generic parameters N, D and R (Inputs), and AC-9 itself requires equality 'for the sites bounded by N, D and R'. A const generic parameter is not a module const, so a literal scanner rejects the legitimate 'for i in 0..N'. A module-level UNWIND_BOUND cannot depend on N, D or R either, so it is either wrong for some instantiations or impossible to state. Allow NAME to be a module const or one of the const generic parameters N, D, R. Make UNWIND_BOUND a const fn of (N, D, R), or an associated const of the generic instantiation, that the carrier evaluates at C. AC-9 should assert it at N = 64, D = 32, R = 64 and at one other instantiation. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:55 |
 | FND-009 | low | [IR-1501] The ban on internally looping comparisons is keyed on '==' or '!=' with a bare buffer or table name, which a textual scanner cannot fully enforce. It misses '&payload == &other', '*a == *b', a field or index-path operand ('self.buf == x.buf'), the ordering operators '<', '<=', '>', '>=' on arrays (lexicographic and looping), and the allow-listed 'min' and 'max' used as Ord::min/max on arrays ('buf.max(other)' compiles and loops). Key the ban on operand type instead: any operand that names an identifier declared with array or slice type, with optional & or * or a field path, for all six comparison operators and for min/max receivers. Add seeded copies for '&a == &b' and 'a < b' on buffers. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 |
 
+## New findings (disposition pass 3)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-010 | low | [IR-1501] The clause '(and so differs between them)' holds only when an N, D or R site has the largest bound at both instantiations. If a module constant dominates, for example a table-search bound above 64, unwind_bound::<64,32,64>() equals unwind_bound::<16,8,16>(), and AC-9 still passes while its parenthetical is false. Either assert that every module-constant bound is below 16, so N/D/R dominate, or drop the claim. Wording: Behavior 6 says the module 'exposes UNWIND_BOUND as a const fn unwind_bound', but AC-9 and TC-949 name only unwind_bound. Use one name. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:55 |
+| FND-011 | low | [IR-1501] The array/slice comparison ban (b) decides the type from the operand's declared type (parameter, local, field, table const, & or *). It does not cover an index expression whose element is an array, such as 'DECOMP[i] == DECOMP[j]' for a table of [u32; K] rows, or a local with no type annotation whose type is only inferred ('let row = DECOMP[i]; row == other'). Either require a type annotation on every local of array type and treat an index into a table of arrays as array-typed, or add seeded copies for those two forms. Not blocking: such comparisons have constant length. The rule should still say what it actually decides. | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:50 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -107,3 +114,5 @@ Manual criterion-strength analysis (Jev client unavailable): can each AC fail fo
 | FND-005 | fixed | fixed in c3dec036 |
 | FND-006 | fixed | fixed in 7e9b9c4f |
 | FND-007 | fixed | fixed in 7e9b9c4f |
+| FND-008 | fixed | fixed in 450bf51b |
+| FND-009 | fixed | fixed in 450bf51b |
