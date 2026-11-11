@@ -72,3 +72,25 @@ CHANGES REQUIRED. Jev (typesafe.ai System One) is not available here, so each of
 | TC-946-mutant-cfg-kani | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:56 | / A body selected by `cfg(kani)` that differs from the host body / the host differential on `(10, 1)` fails / |
 | TC-946-mutant-rational-numerator | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:50 | / `Rational` checks only the numerator range / `(1, 3)` in `Rational[1, 5; 2, 4]` is admitted, `(1, 5)` and `(6, 5)` are refused / |
 | TC-946-expected | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:60 | Every boundary binding yields the independently written magnitude or the named refusal, and the constructor and the shipped owner route agree on the whole set except the `NonCanonical` pairs. Construction allocates nothing, charges nothing and is `Copy`. The three proofs verify with no unwind bound  |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | medium | The wrapping-lift mutant cannot fail at its named input. In Decimal[0,100;60,70], (1, 0) lifts by 10^60, and 10^60 mod 2^128 is 2^60 times the odd number 5^60 mod 2^68: nonzero, and either negative or at least 2^60, so the wrapped coefficient is outside [0, 100] and the mutant also returns OutsideCarrierDomain. Use a lift of at least 128 digits, where 10^k = 2^k x 5^k wraps to 0: for example Decimal[0, 100; 128, 130] with (1, 0), which the mutant admits as 0 and the constructor refuses. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:46 |
+| FND-008 | medium | The mutant 'treats the sign of an oversize lift as positive' is equivalent: by item 4 the type's bounds fit the native width, so an oversize lifted coefficient is outside [lo, hi] whatever its sign, and the mutant (exceeds hi) and the constructor (below lo) both return OutsideCarrierDomain on (-1, 0) in Decimal[-100,0;60,70] and on every other input. The TC admits no mutant that nothing distinguishes; drop it, or replace it with one that can fail (for example 'treats an oversize lift as inside'). | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:47 |
+| FND-009 | low | 'compared after a lossy cast' fails only for a saturating cast. A wrapping `as` cast takes 2^127 to i128::MIN, reversing [0, 2^127], [0, 2^127] and [2, 2^127], so the bindings 1, (1, 0) and (1, 2) are refused by the mutant too. Name the saturating cast, or add a bound such as 2^128 + 1 that wraps to 1 and makes the wrapping mutant admit. | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:63 |
+| FND-010 | low | The boundary set lists 'the scales -1 and 4294967296' with no coefficient. The u32-truncation mutant is caught only when the truncated binding (c, 0) is admitted, so c must lie in [-1000, 1000]; name the bindings, for example (1, -1) and (1, 4294967296). | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:21 |
+
+## Dispositions
+
+Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |

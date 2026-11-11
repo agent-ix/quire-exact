@@ -71,3 +71,15 @@ CHANGES REQUIRED. Covered edges hold: i64::MIN, i64::MAX, zero over 0/1, negativ
 | TC-946-mutant-cfg-kani | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:56 | / A body selected by `cfg(kani)` that differs from the host body / the host differential on `(10, 1)` fails / |
 | TC-946-mutant-rational-numerator | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:50 | / `Rational` checks only the numerator range / `(1, 3)` in `Rational[1, 5; 2, 4]` is admitted, `(1, 5)` and `(6, 5)` are refused / |
 | TC-946-expected | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:60 | Every boundary binding yields the independently written magnitude or the named refusal, and the constructor and the shipped owner route agree on the whole set except the `NonCanonical` pairs. Construction allocates nothing, charges nothing and is `Copy`. The three proofs verify with no unwind bound  |
+
+## Dispositions
+
+Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |

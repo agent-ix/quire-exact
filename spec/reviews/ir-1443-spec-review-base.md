@@ -70,3 +70,20 @@ CHANGES REQUIRED. The carrier choice and its arithmetic hold: a canonical i128 f
 | TC-946-mutant-cfg-kani | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:56 | / A body selected by `cfg(kani)` that differs from the host body / the host differential on `(10, 1)` fails / |
 | TC-946-mutant-rational-numerator | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:50 | / `Rational` checks only the numerator range / `(1, 3)` in `Rational[1, 5; 2, 4]` is admitted, `(1, 5)` and `(6, 5)` are refused / |
 | TC-946-expected | examined | spec/test-cases/TC-946-kani-tractable-carried-quantity-constructor.md:60 | Every boundary binding yields the independently written magnitude or the named refusal, and the constructor and the shipped owner route agree on the whole set except the `NonCanonical` pairs. Construction allocates nothing, charges nothing and is `Copy`. The three proofs verify with no unwind bound  |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Item 5 reuses OutsideCarrierDomain for a type the carrier cannot represent, so a binding the owner admits in an unsupported type is reported the same as a non-member; FR-384 keeps a distinct EndpointNotRepresentable for this. A caller (CG replay) cannot tell 'outside the domain' from 'type not supported'. Consider a distinct type-capacity reason, or state why one reason suffices. | spec/functional/FR-398-kani-tractable-carried-quantity-constructor.md:51 |
+
+## Dispositions
+
+Round 1, fix commit 441e6d85 on head 5183708 (origin/main 4fe7df6 unchanged).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | still-open | Linear IR-1443's own AC still reads 'Memory stays within the K-DR budget' and 'CG's row harness consumes the carrier' with verification 'VERIFIED with a recorded peak memory'; the fix is an edit of the ticket text, not of the PR, and no edit was made. |
