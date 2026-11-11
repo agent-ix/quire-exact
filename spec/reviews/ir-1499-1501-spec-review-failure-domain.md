@@ -102,3 +102,5 @@ Unstated failure modes, identity confusion and edge cases, checked against src/t
 | FND-005 | fixed | fixed in c3dec036 |
 | FND-006 | fixed | fixed in c3dec036 |
 | FND-007 | fixed | fixed in c3dec036 |
+| FND-008 | fixed | fixed in 7e9b9c4f |
+| FND-009 | fixed | fixed in 7e9b9c4f |

@@ -98,3 +98,5 @@ Base checklist (consistency, naming, no hash/digest/pin antipattern, citations) 
 | FND-003 | fixed | fixed in c3dec036 |
 | FND-004 | fixed | fixed in c3dec036 |
 | FND-005 | fixed | fixed in c3dec036 |
+| FND-006 | fixed | fixed in 7e9b9c4f |
+| FND-007 | fixed | fixed in 7e9b9c4f |
