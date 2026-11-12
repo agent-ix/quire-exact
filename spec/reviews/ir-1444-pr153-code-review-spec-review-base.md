@@ -54,3 +54,17 @@ Honest in substance. One evidence sentence in the spec misstates the measurement
 | TC-950 steps 5, Expected Results, Status | examined | For AC-10, run the host tests `references_agree_with_the_owner_route_over_the_grid` and `least_scale_reference_rejects_wrong_pairs` ... |
 | TC-951 steps 6, 9, Expected Results, Status | examined | For AC-12, run the host tests named by that criterion ... AC-15 is not executable: it waits on a separate Verus track. |
 | PR #153 body | examined | Removed / Not claimed / Checks run sections |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | FR-403-AC-15 says the four small harnesses 'stalled in a final solver query'; RESULTS.md records the log2 harness stalled in its first UNSAT query (13.6k vars / 70k clauses), the other three in their final one. Say 'stalled in an unreturned solver query'. | spec/functional/FR-403-native-decimal-operations-refine-owner-path.md:120 |
+
+## Dispositions
+
+Round 1 verified at fix head 377414e1 (merge 52358d3 of main e82db48 is a clean, conflict-free merge: `git diff e82db48 52358d3` equals `git diff e20118a 1ead035`, so it carries only #152's files beyond this PR). Reviewer runs under flock: fmt --check, clippy -D warnings (default, test-support, thumb lib), cargo doc -D warnings --all-features clean; `cargo test --lib native_decimal` 13 passed, `--test ir1508_native_decimal_ops` 17 passed, `--test ir1444_native_decimal` 11 passed, each also with test-support; quire validate clean; matrix unchanged in status (FR-403-AC-14 and AC-9 gain the new constant test). Mutants: LOG2_10_LOWER L-1 and L+1 each fail `the_log2_ten_constant_is_the_floor_of_the_true_value` (left 4112347796288069798443794287) and the closed-form test; MODES without Exact fails both grid and random tests with 'exact refusal was never reached'; exact refusal disabled in kernel and reference fails both at the owner comparison (operations_tests.rs:192). log2(10) digits checked independently (Python decimal, 80 digits): 3.3219280948873623478703194294893901758648|3139..., and floor(log2(10)*2^90) = L.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |

@@ -50,3 +50,12 @@ Mergeable once the medium finding is addressed (a wording change is enough). The
 | tests/ir1508_native_decimal_ops.rs | examined | trace tag FR-403-AC-12 on `native_and_owner_agree_over_the_boundary_set` |
 | src/native_decimal/operations.rs | context_only | `power_of_ten_bits`, `LOG2_10_LOWER`, `LOG2_10_UPPER` |
 | src/native_decimal/reference.rs | context_only | module doc, `native_decision`, `is_least_scale_pair`, `is_member` |
+
+## Dispositions
+
+Round 1 verified at fix head 377414e1 (merge 52358d3 of main e82db48 is a clean, conflict-free merge: `git diff e82db48 52358d3` equals `git diff e20118a 1ead035`, so it carries only #152's files beyond this PR). Reviewer runs under flock: fmt --check, clippy -D warnings (default, test-support, thumb lib), cargo doc -D warnings --all-features clean; `cargo test --lib native_decimal` 13 passed, `--test ir1508_native_decimal_ops` 17 passed, `--test ir1444_native_decimal` 11 passed, each also with test-support; quire validate clean; matrix unchanged in status (FR-403-AC-14 and AC-9 gain the new constant test). Mutants: LOG2_10_LOWER L-1 and L+1 each fail `the_log2_ten_constant_is_the_floor_of_the_true_value` (left 4112347796288069798443794287) and the closed-form test; MODES without Exact fails both grid and random tests with 'exact refusal was never reached'; exact refusal disabled in kernel and reference fails both at the owner comparison (operations_tests.rs:192). log2(10) digits checked independently (Python decimal, 80 digits): 3.3219280948873623478703194294893901758648|3139..., and floor(log2(10)*2^90) = L.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |

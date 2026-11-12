@@ -44,3 +44,17 @@ Low only. One stale sentence remains (FND-001).
 | FR-402 Status | examined | Implemented (IR-1444) ... The full-width proof is PLANNED on a separate Verus track (AC-13) and is not claimed. |
 | FR-403 Status | examined | Implemented (IR-1508) ... the full-width proof is PLANNED on a separate Verus track (AC-15) and is not claimed. |
 | FR-403 Dependencies | examined | A full-width proof of the operations waits on a separate Verus proof track (Behavior 41). |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | low | The new TC-951 mutant row 'The exact-rounding refusal is unreachable (rounding mode dispatch)' says the grid and random tests fail 'on the unreached `exact refusal` class'. A mutant at the dispatch site (exact refusal disabled in `rounding_tail`, with or without the reference) fails both tests earlier, at the owner comparison in `bind` (operations_tests.rs:192). Only an input mutant (MODES without Exact) fails by the class name. Both tests fail either way; correct the expected failure text. | spec/test-cases/TC-951-native-decimal-operations-match-owner-path.md:85 |
+
+## Dispositions
+
+Round 1 verified at fix head 377414e1 (merge 52358d3 of main e82db48 is a clean, conflict-free merge: `git diff e82db48 52358d3` equals `git diff e20118a 1ead035`, so it carries only #152's files beyond this PR). Reviewer runs under flock: fmt --check, clippy -D warnings (default, test-support, thumb lib), cargo doc -D warnings --all-features clean; `cargo test --lib native_decimal` 13 passed, `--test ir1508_native_decimal_ops` 17 passed, `--test ir1444_native_decimal` 11 passed, each also with test-support; quire validate clean; matrix unchanged in status (FR-403-AC-14 and AC-9 gain the new constant test). Mutants: LOG2_10_LOWER L-1 and L+1 each fail `the_log2_ten_constant_is_the_floor_of_the_true_value` (left 4112347796288069798443794287) and the closed-form test; MODES without Exact fails both grid and random tests with 'exact refusal was never reached'; exact refusal disabled in kernel and reference fails both at the owner comparison (operations_tests.rs:192). log2(10) digits checked independently (Python decimal, 80 digits): 3.3219280948873623478703194294893901758648|3139..., and floor(log2(10)*2^90) = L.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
