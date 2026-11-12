@@ -60,3 +60,13 @@ Behavior-preserving: the u64 plan charge matches `charge_plan(&1)` in amounts, u
 | src/equality.rs charge_plan_form doc comment | examined | The native equality entries charge the same amounts in u64 units (charge_equality_schedule), pinned equal by their differential tests. |
 | src/accounting.rs Meter::charge_plan, charge_plan_inner, charge, check_injected, injected_denial, incomplete, admit | context_only | reference Integer path the u64 plan mirrors |
 | tests/ir1422_native_entries.rs (unchanged) | context_only | 9 differential tests, AC-1 to AC-5 |
+
+## Dispositions
+
+Round 1, fix head e34ec5c3 (reviewed head e88fc800); merge-tree with origin/main e20118a clean. Reviewer reran fmt, clippy (all targets, test-support, thumb lib), ir1422 (9/9, also with test-support), `--lib accounting` (42; 45 with test-support) and `--lib native_integer` (1): all pass. The schedule's four charges are identical in value and order (plan-form VO 1 work 2, one-pair plan, pair work 1, result-retain results 1); the constructors and module consts are trivial and Kani inlines calls, so no step-count change is plausible.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | charge_equality_schedule and the AC-6 test both use UnitsCharge::equality_plan_form/equality_pair/equality_result_retain; reviewer mutant M4 (work 2 -> 1 in equality_plan_form) now FAILS the_equality_schedule_requests_are_native_common_charges by name, plus the three ir1422 equality tests. |
+| FND-002 | fixed | Comment now reads "charged in `u64` units with no arbitrary-precision arithmetic". |
+| FND-003 | fixed | PLAN_PAIRS and PLAN_RESERVATION are module consts defined once in src/accounting/units.rs and used by both functions. |

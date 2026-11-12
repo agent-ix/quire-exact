@@ -43,3 +43,13 @@ Accurate, testable and bounded, but AC-6 bundles two obligations, its subjects a
 | TC-944 step 5 | examined | In the accounting unit tests, build the three u64 requests of the Boolean schedule and assert each equals the Common form of the matching Charge, and run the one-pair u64 plan charge and charge_plan of one pair on separate meters over the limit grid and an injected denial, comparing result, counters, admissions and captured events. |
 | TC-944 step 6 | examined | renumbered from 5, text unchanged |
 | FR-397 statement, Behavior 5, AC-5 | context_only | SHALL sentence and the Boolean equality behavior Behavior 6 refines |
+
+## Dispositions
+
+Round 1, fix head e34ec5c3 (reviewed head e88fc800); merge-tree with origin/main e20118a clean. `quire validate` exit 0 on FR-397, TC-944 and the three committed review files (pre-existing inline-data-schema notice only); `quire matrix` tags FR-397-AC-6 at src/accounting/units.rs:282 and FR-397-AC-7 at :306.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-6 now covers only the three requests being Common; AC-7 covers charge_plan_one_pair vs charge_plan over the grid and injected denial; the by-construction sentence moved to a new Notes section; each AC has its own binder. |
+| FND-002 | fixed | TC-944 Description scopes "through the public API" to AC-1 through AC-5; step 5 says in-crate accounting unit tests on private types; AC-7 names Meter::charge_plan_one_pair. |
+| FND-003 | fixed | Behavior 6 names both evaluate_native_boolean_equality and evaluate_native_integer_equality and states they return planned_equality's value, outcome, charge events and counters. |
