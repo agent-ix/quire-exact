@@ -144,8 +144,8 @@ fn planned_equality_stop(
 }
 
 /// `equality.plan-form`: the larger occurrence count as size and the sum of
-/// both counts as work. Shared with the native integer equality entry so the
-/// two cannot charge differently.
+/// both counts as work. The native equality entries charge the same amounts in `u64`
+/// units (`charge_equality_schedule`), pinned equal by their differential tests.
 pub(crate) fn charge_plan_form(
     left_occ: &Integer,
     right_occ: &Integer,

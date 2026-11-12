@@ -6,7 +6,6 @@ use alloc::boxed::Box;
 
 use crate::accounting::{ChargePoint, LimitKind, Meter, UnitsCharge};
 use crate::division::{self, DivisionMember, DivisionProfile, DivisionSchedule};
-use crate::equality;
 use crate::integer::{Integer, IntegerInterval};
 use crate::numeric::OrderingOperator;
 use crate::outcome::{CheckedInvariantCause, Outcome, Refusal, Stop, Undefined};
@@ -643,10 +642,13 @@ pub fn evaluate_native_boolean_equality(
 }
 
 fn charge_equality_schedule(meter: &mut Meter) -> Result<(), crate::accounting::Incomplete> {
-    // An `Integer` is one value occurrence, so both operands and the plan count one.
-    let one = Integer::one();
-    equality::charge_plan_form(&one, &one, meter)?;
-    equality::charge_pairs(&one, meter)
+    // One value occurrence per operand: plan-form, a one-pair plan, the pair
+    // and the retain, charged in `u64` units with no arbitrary-precision
+    // arithmetic.
+    meter.charge_units(UnitsCharge::equality_plan_form())?;
+    meter.charge_plan_one_pair()?;
+    meter.charge_units(UnitsCharge::equality_pair())?;
+    meter.charge_units(UnitsCharge::equality_result_retain())
 }
 
 /// One native operation whose complete success-path charge schedule is
