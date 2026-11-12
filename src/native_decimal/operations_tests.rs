@@ -182,7 +182,7 @@ fn operations(a: (i128, u32), b: (i128, u32)) -> [NativeDecimalOperation; 6] {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-11")]
+#[trace("TC-951", "FR-403-AC-11", "FR-403-AC-12")]
 fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
     let edge = [
         (0, 0),
@@ -240,7 +240,7 @@ fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-11")]
+#[trace("TC-951", "FR-403-AC-11", "FR-403-AC-12")]
 fn the_reference_is_bound_to_the_owner_route_over_random_operands() {
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     let mut bound = 0_u32;
@@ -405,7 +405,7 @@ fn the_wide_product_is_exact() {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-5")]
+#[trace("TC-951", "FR-403-AC-5", "FR-403-AC-12")]
 fn the_gcd_takes_exactly_256_steps_and_handles_a_zero_operand() {
     // 252 steps are needed here (Behavior 16): the gcd is 1.
     let (n, d) = ((1_u128 << 126) - 1, 1_u128 << 126);
@@ -473,4 +473,44 @@ fn the_reference_rejects_wrong_decisions() {
         ),
         Decision::Capacity(NativeDecimalCapacityQuantity::DoubledRemainder)
     );
+}
+
+/// `bits(10^k) = floor(k x log2(10)) + 1`, written apart from the kernel with
+/// `log2(10)` bracketed above by the fixed-point constant `L + 1` over `2^90`.
+fn ten_power_bits_reference(shift: u32) -> u64 {
+    const UPPER: u128 = 4_112_347_796_288_069_798_443_794_288;
+    ((u128::from(shift) * UPPER) >> 90) as u64 + 1
+}
+
+/// Every one of the 2^32 shifts, not a sample: the lower and upper
+/// approximations share a floor, the product fits, and the kernel's
+/// `bits(10^k)` equals the reference.
+#[test]
+#[trace("TC-951", "FR-403-AC-9", "FR-403-AC-14")]
+fn bits_of_a_power_of_ten_matches_the_reference_for_every_u32_shift() {
+    const THREADS: u64 = 16;
+    const CHUNK: u64 = (1_u64 << 32) / THREADS;
+    std::thread::scope(|scope| {
+        for thread in 0..THREADS {
+            scope.spawn(move || {
+                for shift in thread * CHUNK..(thread + 1) * CHUNK {
+                    let shift = shift as u32;
+                    let k = u128::from(shift);
+                    let lower = (k * LOG2_10_LOWER) >> LOG2_10_FRACTION;
+                    let upper = (k * LOG2_10_UPPER) >> LOG2_10_FRACTION;
+                    assert_eq!(lower, upper, "k = {shift}");
+                    assert_eq!(
+                        power_of_ten_bits(shift),
+                        ten_power_bits_reference(shift),
+                        "k = {shift}"
+                    );
+                    assert_eq!(
+                        u128::from(power_of_ten_bits(shift)),
+                        lower + 1,
+                        "k = {shift}"
+                    );
+                }
+            });
+        }
+    });
 }

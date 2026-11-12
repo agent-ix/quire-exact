@@ -1009,7 +1009,7 @@ fn agree(t: Ty, op: Op, limits: ScalarLimits) -> bool {
 }
 
 #[test]
-#[trace("TC-951", "FR-403-AC-11")]
+#[trace("TC-951", "FR-403-AC-11", "FR-403-AC-12")]
 fn native_and_owner_agree_over_the_boundary_set() {
     let values = operands();
     let (mut compared, mut refused) = (0_u32, 0_u32);

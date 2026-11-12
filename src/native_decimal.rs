@@ -307,11 +307,9 @@ pub use operations::{
 };
 pub use readout::{evaluate_native_decimal, order_native_decimals};
 
-#[cfg(kani)]
-mod kani_proofs;
 #[cfg(test)]
 mod operations_tests;
-#[cfg(any(test, kani))]
+#[cfg(test)]
 mod reference;
 #[cfg(test)]
 mod tests;
