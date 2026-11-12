@@ -43,6 +43,11 @@ impl UnitsCharge {
         }
     }
 
+    pub(crate) fn work(mut self, amount: u64) -> Self {
+        self.work = amount;
+        self
+    }
+
     pub(crate) fn results(mut self, amount: u64) -> Self {
         self.results = amount;
         self
@@ -136,5 +141,175 @@ impl Meter {
             record,
         );
         Ok(())
+    }
+
+    /// The `equality.plan` charge of a plan with exactly one pair, in `u64`
+    /// arithmetic: the same denial, reservation, size and consumption as
+    /// [`Meter::charge_plan`] with `pairs = 1`, which needs 3 remaining work
+    /// units and 1 remaining result unit and consumes one work unit.
+    pub(crate) fn charge_plan_one_pair(&mut self) -> Result<(), Incomplete> {
+        const PAIRS: u64 = 1;
+        const RESERVATION: u64 = PAIRS + 2;
+        let request = self.charge_capture.as_ref().map(|capture| {
+            capture.can_record(1).then(|| ChargeEvent {
+                point: ChargePoint::EqualityPlan,
+                work_units: Integer::one(),
+                result_units: Integer::from(0_u64),
+                work_reservation: Some(Integer::from(RESERVATION)),
+                result_reservation: Some(Integer::one()),
+                sizes: alloc::vec![(LimitKind::ValueOccurrences, Integer::from(PAIRS))],
+                admission: ChargeAdmission::Denied,
+            })
+        });
+        let result = self.charge_plan_one_pair_inner();
+        self.record_capture(request, result.is_ok());
+        result
+    }
+
+    fn charge_plan_one_pair_inner(&mut self) -> Result<(), Incomplete> {
+        const PAIRS: u64 = 1;
+        const RESERVATION: u64 = PAIRS + 2;
+        let point = ChargePoint::EqualityPlan;
+        let kind = LimitKind::ValueOccurrences;
+        if let Some(consumed) = self.injected_denial(point) {
+            return Err(Incomplete {
+                limit_kind: LimitKind::WorkUnits,
+                limit: consumed,
+                consumed,
+                next_charge: Integer::from(RESERVATION),
+                charge_point: point,
+            });
+        }
+        if PAIRS > kind.limit(&self.counters.limits) {
+            return Err(self.incomplete(kind, Integer::from(PAIRS), point));
+        }
+        let remaining = |kind: LimitKind| {
+            kind.limit(&self.counters.limits)
+                .saturating_sub(self.consumed(kind))
+        };
+        if RESERVATION > remaining(LimitKind::WorkUnits) {
+            return Err(self.incomplete(LimitKind::WorkUnits, Integer::from(RESERVATION), point));
+        }
+        if remaining(LimitKind::ResultUnits) < 1 {
+            return Err(self.incomplete(LimitKind::ResultUnits, Integer::one(), point));
+        }
+        let mut sizes = [None; LimitKind::COUNT];
+        sizes[kind.index()] = Some(PAIRS);
+        self.capture_charge(
+            &sizes,
+            self.consumed(LimitKind::WorkUnits) + 1,
+            self.consumed(LimitKind::ResultUnits),
+        );
+        let slot = &mut self.counters.consumed[kind.index()];
+        *slot = (*slot).max(PAIRS);
+        let work = &mut self.counters.consumed[LimitKind::WorkUnits.index()];
+        *work = work.saturating_add(1);
+        self.admit(
+            point,
+            #[cfg(feature = "test-support")]
+            AdmittedCharge {
+                value_occurrences: Some(PAIRS),
+                ..AdmittedCharge::new(point)
+            },
+        );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::num::NonZeroU64;
+
+    use ix_trace_rs::trace;
+
+    use super::*;
+
+    fn limits(work: u64, results: u64, occurrences: u64) -> ScalarLimits {
+        ScalarLimits {
+            integer_bits: u64::MAX,
+            decimal_digits: u64::MAX,
+            scale_expansion: u64::MAX,
+            text_input_bytes: u64::MAX,
+            text_scalars: u64::MAX,
+            normalized_scalars: u64::MAX,
+            unit_edges: u64::MAX,
+            value_occurrences: occurrences,
+            work_units: work,
+            result_units: results,
+        }
+    }
+
+    type Observed = (Result<(), Incomplete>, Vec<u64>, u64, Vec<ChargeEvent>);
+
+    fn observe(mut meter: Meter, f: impl Fn(&mut Meter) -> Result<(), Incomplete>) -> Observed {
+        meter.enable_charge_capture(8, 16);
+        let result = f(&mut meter);
+        let counters = LimitKind::ALL.iter().map(|k| meter.consumed(*k)).collect();
+        let events = match meter.disable_charge_capture() {
+            Some(Ok(capture)) => capture.events().to_vec(),
+            _ => panic!("capture missing or truncated"),
+        };
+        (result, counters, meter.admission_count(), events)
+    }
+
+    #[trace("TC-944", "FR-397-AC-6")]
+    #[test]
+    fn the_equality_schedule_requests_are_native_common_charges() {
+        // Each request the Boolean kernel makes equals a `Common` (all-`u64`)
+        // `Charge`, never the `General` arbitrary-precision storage.
+        let plan_form = Charge::new(ChargePoint::EqualityPlanForm)
+            .exact_size(LimitKind::ValueOccurrences, Integer::one())
+            .work(Integer::from(2_u64));
+        let pair = Charge::new(ChargePoint::EqualityPair);
+        let retain = Charge::new(ChargePoint::EqualityResultRetain).results(1);
+        for (charge, native) in [
+            (
+                plan_form,
+                UnitsCharge::one(
+                    ChargePoint::EqualityPlanForm,
+                    LimitKind::ValueOccurrences,
+                    1,
+                )
+                .work(2),
+            ),
+            (pair, UnitsCharge::new(ChargePoint::EqualityPair)),
+            (
+                retain,
+                UnitsCharge::new(ChargePoint::EqualityResultRetain).results(1),
+            ),
+        ] {
+            let common = UnitsCharge::from_charge(&charge).expect("common storage");
+            assert_eq!(common.point, native.point);
+            assert_eq!(common.first, native.first);
+            assert_eq!(common.second, native.second);
+            assert_eq!(common.work, native.work);
+            assert_eq!(common.results, native.results);
+        }
+    }
+
+    #[trace("TC-944", "FR-397-AC-6")]
+    #[test]
+    fn one_pair_plan_in_u64_equals_the_integer_plan_charge() {
+        for work in 0..=5 {
+            for results in 0..=2 {
+                for occurrences in 0..=2 {
+                    let l = limits(work, results, occurrences);
+                    assert_eq!(
+                        observe(Meter::new(l), Meter::charge_plan_one_pair),
+                        observe(Meter::new(l), |m| m.charge_plan(&Integer::one())),
+                        "{work} {results} {occurrences}"
+                    );
+                }
+            }
+        }
+        let denial = InjectedDenial {
+            point: ChargePoint::EqualityPlan,
+            occurrence: NonZeroU64::MIN,
+        };
+        let build = || Meter::new(limits(9, 9, 9)).with_injected_denial(denial);
+        assert_eq!(
+            observe(build(), Meter::charge_plan_one_pair),
+            observe(build(), |m| m.charge_plan(&Integer::one()))
+        );
     }
 }

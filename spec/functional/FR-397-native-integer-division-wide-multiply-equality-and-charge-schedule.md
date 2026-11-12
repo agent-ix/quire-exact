@@ -37,6 +37,8 @@ When a generated-code consumer evaluates an operation on native operands (FR-384
 
 5. **Boolean equality.** `evaluate_native_boolean_equality` over two native `bool` operands returns whether they are equal and charges the `equality.plan-form`, `equality.plan`, `equality.pair` and `equality.result-retain` points `planned_equality` charges for two `Boolean` values, with the same four charges, in the same order and with the same units as `evaluate_native_integer_equality`, and not the `boolean.result-retain` point of `retain_boolean`.
 
+6. **Native Boolean schedule.** `evaluate_native_boolean_equality` makes its four charges as all-`u64` requests, so no charge it makes carries arbitrary-precision `Integer` storage; the observable outcome of the charges is unchanged.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -46,6 +48,7 @@ When a generated-code consumer evaluates an operation on native operands (FR-384
 | FR-397-AC-3 | `evaluate_native_integer_equality` over equal, unequal, signed and different-width operands returns `planned_equality`'s value over `Value::Integer` operands with equal charge events; `evaluate_boolean` over the full truth tables of `And`, `Or`, `Implies` and `Not` returns the connective and charges only `boolean.result-retain`. | Test (TC-944) |
 | FR-397-AC-4 | For each `NativeIntegerSchedule`, the events and counters after `charge_native_integer_schedule` equal those of the corresponding evaluator on a successful operation, and for a zero divisor equal the evaluator's, at sufficient limits and at a limit one below each charge; an `Incomplete` names the same limit at the same charge point. | Test (TC-944) |
 | FR-397-AC-5 | `evaluate_native_boolean_equality` over the four `(left, right)` pairs returns `planned_equality`'s value over `Value::Boolean` operands with equal outcome, charge events and counters, at unlimited limits, at every `value_occurrences`, `work_units` and `result_units` limit from zero to its unlimited spend (the other seven limit kinds are spent as zero by the schedule, so no bound denies a charge), and with a denial injected at each of `equality.plan-form`, `equality.plan`, `equality.pair` and `equality.result-retain`, the denied point being the one the `Incomplete` names. | Test (TC-944) |
+| FR-397-AC-6 | Each of the `equality.plan-form`, `equality.pair` and `equality.result-retain` requests of the Boolean equality schedule equals a `Common` (all-`u64`) `Charge` and not a `General` one, and the u64 `equality.plan` charge for a one-pair plan returns the same result, counters, admission count and captured event as `Meter::charge_plan` of one pair at every combination of `work_units` 0 to 5, `result_units` 0 to 2 and `value_occurrences` 0 to 2 and under an injected denial. Absence of bignum arithmetic in the code path is by construction and is not otherwise host-observable. | Test (TC-944) |
 
 ## Status
 
