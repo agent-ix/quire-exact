@@ -129,6 +129,35 @@ fn owner_loss(loss: RefLoss, scale: u32) -> DecimalLoss {
     )
 }
 
+const CLASSES: [&str; 6] = [
+    "completed without a rounding step",
+    "completed with a rounding step",
+    "exact refusal",
+    "domain refusal",
+    "zero divisor",
+    "capacity refusal",
+];
+
+/// The outcome class of the reference decision, indexing [`CLASSES`].
+fn class_of(ty: &NativeDecimalType, op: NativeDecimalOperation) -> usize {
+    match decide(ref_type(ty), ref_op(op)) {
+        Decision::Completed { loss: None, .. } => 0,
+        Decision::Completed { loss: Some(_), .. } => 1,
+        Decision::Inexact => 2,
+        Decision::OutOfDomain => 3,
+        Decision::DivisionByZero => 4,
+        Decision::Capacity(_) => 5,
+    }
+}
+
+/// Every outcome class was reached, so a mutant that makes a branch
+/// unreachable fails here and not only on an aggregate count.
+fn assert_every_class_reached(counts: &[u32; 6]) {
+    for (name, count) in CLASSES.iter().zip(counts) {
+        assert!(*count > 0, "{name} was never reached: {counts:?}");
+    }
+}
+
 /// The reference, the native path and the owner route agree on one case.
 fn bind(ty: &NativeDecimalType, op: NativeDecimalOperation) -> bool {
     let reference = decide(ref_type(ty), ref_op(op));
@@ -211,6 +240,7 @@ fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
         (1, u32::MAX),
     ];
     let (mut bound, mut capacity) = (0_u32, 0_u32);
+    let mut reached = [0_u32; 6];
     for (lower, upper) in BOUNDS {
         for (min_scale, max_scale) in SCALE_RANGES {
             for mode in MODES {
@@ -225,6 +255,7 @@ fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
                 for a in edge {
                     for b in edge {
                         for op in operations(a, b) {
+                            reached[class_of(&ty, op)] += 1;
                             if bind(&ty, op) {
                                 bound += 1;
                             } else {
@@ -237,6 +268,7 @@ fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
         }
     }
     assert!(bound > 20_000 && capacity > 5_000, "{bound} {capacity}");
+    assert_every_class_reached(&reached);
 }
 
 #[test]
@@ -244,6 +276,7 @@ fn the_reference_is_bound_to_the_owner_route_over_the_grid() {
 fn the_reference_is_bound_to_the_owner_route_over_random_operands() {
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     let mut bound = 0_u32;
+    let mut reached = [0_u32; 6];
     for round in 0..60_000_u32 {
         let (lower, upper) = BOUNDS[(rng.next() % BOUNDS.len() as u64) as usize];
         let (min_scale, max_scale) =
@@ -262,6 +295,7 @@ fn the_reference_is_bound_to_the_owner_route_over_random_operands() {
             (rng.coefficient(), rng.scale()),
         );
         let op = operations(a, b)[(round % 6) as usize];
+        reached[class_of(&ty, op)] += 1;
         if bind(&ty, op) {
             bound += 1;
         }
@@ -274,6 +308,7 @@ fn the_reference_is_bound_to_the_owner_route_over_random_operands() {
         assert_eq!(order_ref(a, b), expected, "{a:?} {b:?}");
     }
     assert!(bound > 5_000, "{bound}");
+    assert_every_class_reached(&reached);
 }
 
 const KNOWN_BITS: [(u32, u64); 8] = [
@@ -513,4 +548,24 @@ fn bits_of_a_power_of_ten_matches_the_reference_for_every_u32_shift() {
             });
         }
     });
+}
+
+/// The constant `L` is `floor(log2(10) x 2^90)`: exact integer arithmetic on
+/// 40 published decimal places of `log2(10)`, with both ends of that decimal
+/// interval giving the same integer part, so the interval holds no integer
+/// boundary. A constant one unit low or high fails here by name, which the
+/// shift-by-shift test cannot see (the scheme absorbs a unit).
+#[test]
+#[trace("TC-951", "FR-403-AC-9", "FR-403-AC-14")]
+fn the_log2_ten_constant_is_the_floor_of_the_true_value() {
+    use num_bigint::BigUint;
+    let digits = BigUint::parse_bytes(b"33219280948873623478703194294893901758648", 10).unwrap();
+    // log2(10) = 3.3219280948873623478703194294893901758648..., truncated to
+    // 40 decimal places: the true value lies in [digits, digits + 1) / 10^40.
+    let scale = BigUint::from(10_u8).pow(40);
+    let two_pow = BigUint::from(1_u8) << LOG2_10_FRACTION;
+    let low = (&digits * &two_pow) / &scale;
+    let high = ((&digits + 1_u8) * &two_pow) / &scale;
+    assert_eq!(low, high, "the decimal interval holds an integer boundary");
+    assert_eq!(low, BigUint::from(LOG2_10_LOWER));
 }

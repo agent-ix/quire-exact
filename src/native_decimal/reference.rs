@@ -206,7 +206,7 @@ pub(super) const FIVE_POWERS: [u128; 55] = [
 
 /// Count of `k` in the listed range, `k <= limit`, with `table[k]` dividing
 /// the magnitude: the multiplicity of the prime power, unrolled without a
-/// loop so a proof needs no unwind bound.
+/// loop.
 macro_rules! multiplicity {
     ($magnitude:expr, $limit:expr, $table:expr, [$($k:literal),*]) => {
         0_u64 $(+ u64::from($k <= $limit && $magnitude % $table[$k] == 0))*

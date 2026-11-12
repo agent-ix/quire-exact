@@ -75,10 +75,19 @@ fn references_agree_with_the_owner_route_over_the_grid() {
                     );
                     if let Ok(c) = i64::try_from(coefficient) {
                         let ty = NativeDecimalType::try_from(&owner).unwrap();
-                        assert_eq!(
-                            NativeDecimal::from_bindings(&ty, c, i64::from(scale)).is_ok(),
-                            owner.contains(&decimal)
-                        );
+                        let built = NativeDecimal::from_bindings(&ty, c, i64::from(scale));
+                        let member = is_member(lower, upper, min_scale, max_scale, c2, s2);
+                        assert_eq!(built.is_ok(), member);
+                        assert_eq!(built.is_ok(), owner.contains(&decimal));
+                        if let Ok(retained) = built {
+                            // the retained pair is the drawn pair, as the owner holds it
+                            assert_eq!(retained.coefficient(), coefficient);
+                            assert_eq!(retained.scale(), scale);
+                            assert_eq!(
+                                retained.to_decimal().representation(),
+                                decimal.representation()
+                            );
+                        }
                     }
                 }
             }

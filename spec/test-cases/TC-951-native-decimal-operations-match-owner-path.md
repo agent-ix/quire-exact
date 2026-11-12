@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-403-AC-1 through FR-403-AC-15 by running the native operations beside the owner's `evaluate_decimal` and `order_numbers`, each under a `Meter` with the same limits. Each mutant below is a buildable variant of the named site in a scratch copy and names the input, or the inspection, that fails it and the step at which it fails; a mutant that no input and no inspection distinguishes from the unmutated body is not admitted. The host steps have run (see Status); the Kani proofs and the CG measurement have not.
+Verify FR-403-AC-1 through FR-403-AC-15 by running the native operations beside the owner's `evaluate_decimal` and `order_numbers`, each under a `Meter` with the same limits. Each mutant below is a buildable variant of the named site in a scratch copy and names the input, or the inspection, that fails it and the step at which it fails; a mutant that no input and no inspection distinguishes from the unmutated body is not admitted. The host steps have run (see Status); the CG measurement has not, and no Kani harness remains.
 
 ## Test Procedure
 
@@ -81,6 +81,8 @@ The operand and type set is fixed before the implementation is written, from ind
 | The negation of `i128::MIN` wraps (negation admission) | `Negate` of `(i128::MIN, 0)`, expected a capacity refusal naming the negation | step 2 |
 | The power of ten of the placement is formed when the proxy applies (placement) | `Multiply` of `(1, 4294967295)` and `(1, 4294967295)` under toward-positive in `Decimal[0, 100; 0, 2]`, expected admitted with `(1, 2)` (the mutant forms `10^8589934590`, which does not fit, and refuses) | step 2 |
 | The doubled remainder is taken before reducing the pair (nearest comparison) | `Divide` of `(2^126, 0)` by `(2^127 - 2, 0)` under nearest-even in `Decimal[0, 1; 0, 0]`, expected admitted with `(1, 0)` (the mutant refuses by capacity) | step 2 |
+| The `log2(10)` constant is one unit low or one unit high (bits of a power of ten) | `the_log2_ten_constant_is_the_floor_of_the_true_value` and `the_log2_ten_approximations_share_a_floor_over_every_u32` fail; the shift-by-shift test alone does not | step 6 |
+| The exact-rounding refusal is unreachable (rounding mode dispatch) | `the_reference_is_bound_to_the_owner_route_over_the_grid` and `..._over_random_operands` fail on the unreached `exact refusal` class | step 9 |
 | The gcd sequence is shorter than 256 steps, for example 128 (gcd step sequence) | `Divide` of `(2^126 - 1, 0)` by `(2^126, 0)` in `Decimal[0, 1; 0, 0; nearest-even]`, expected loss numerator `2^126 - 1`, cofactor 1, twos 126, fives 0 (this pair needs 252 steps of Behavior 16; after 128 steps the state is `(2^124 - 1, 1)` with `g` 1 and the mutant reads the gcd `2^124`, so its reduced pair and loss record differ) | step 4 |
 | The gcd step halves an even operand while the other is zero (gcd step) | `Divide` of `(0, 0)` by `(12, 0)` in `Decimal[0, 100; 0, 2; Exact]`, expected completed `(0, 2)` with no `decimal.rounding` charge (the mutant ends with gcd 3, reduces to `0/4`, sees a non-integer quotient and returns `Refused(InexactDecimal)`) | step 1 |
 | The quotient is not reduced by the gcd (gcd) | `Divide` of `(3, 0)` by `(9, 0)` in `Decimal[-100, 100; 0, 2; nearest-even]`, expected loss numerator 1, cofactor 3 (the mutant gives numerator 3, cofactor 9) | step 4 |
