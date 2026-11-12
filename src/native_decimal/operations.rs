@@ -22,7 +22,7 @@ pub(super) const LOG2_10_FRACTION: u32 = 90;
 /// `floor(log2(10) x 2^90)`: the lower approximation, used for `bits(10^k)`.
 pub(super) const LOG2_10_LOWER: u128 = 4_112_347_796_288_069_798_443_794_287;
 /// The upper approximation, one unit in the last place above the lower one.
-#[cfg(any(test, kani))]
+#[cfg(test)]
 pub(super) const LOG2_10_UPPER: u128 = LOG2_10_LOWER + 1;
 
 /// `5^1, 5^2, 5^4, 5^8, 5^16, 5^32`, the ladder of the five-adic strip.
