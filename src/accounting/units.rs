@@ -4,6 +4,11 @@
 
 use super::*;
 
+/// Pairs of the single-pair plan of two single-occurrence values.
+const PLAN_PAIRS: u64 = 1;
+/// Work units `equality.plan` requires to remain: its own, the pairs and the retain.
+const PLAN_RESERVATION: u64 = PLAN_PAIRS + 2;
+
 #[derive(Clone, Copy)]
 pub(crate) struct UnitsCharge {
     pub(super) point: ChargePoint,
@@ -41,6 +46,26 @@ impl UnitsCharge {
             second: Some(second),
             ..Self::new(point)
         }
+    }
+
+    /// The `equality.plan-form` request of a pair of single-occurrence values.
+    pub(crate) fn equality_plan_form() -> Self {
+        Self::one(
+            ChargePoint::EqualityPlanForm,
+            LimitKind::ValueOccurrences,
+            1,
+        )
+        .work(2)
+    }
+
+    /// The `equality.pair` request of a one-pair plan.
+    pub(crate) fn equality_pair() -> Self {
+        Self::new(ChargePoint::EqualityPair)
+    }
+
+    /// The `equality.result-retain` request.
+    pub(crate) fn equality_result_retain() -> Self {
+        Self::new(ChargePoint::EqualityResultRetain).results(1)
     }
 
     pub(crate) fn work(mut self, amount: u64) -> Self {
@@ -148,16 +173,14 @@ impl Meter {
     /// [`Meter::charge_plan`] with `pairs = 1`, which needs 3 remaining work
     /// units and 1 remaining result unit and consumes one work unit.
     pub(crate) fn charge_plan_one_pair(&mut self) -> Result<(), Incomplete> {
-        const PAIRS: u64 = 1;
-        const RESERVATION: u64 = PAIRS + 2;
         let request = self.charge_capture.as_ref().map(|capture| {
             capture.can_record(1).then(|| ChargeEvent {
                 point: ChargePoint::EqualityPlan,
                 work_units: Integer::one(),
                 result_units: Integer::from(0_u64),
-                work_reservation: Some(Integer::from(RESERVATION)),
+                work_reservation: Some(Integer::from(PLAN_RESERVATION)),
                 result_reservation: Some(Integer::one()),
-                sizes: alloc::vec![(LimitKind::ValueOccurrences, Integer::from(PAIRS))],
+                sizes: alloc::vec![(LimitKind::ValueOccurrences, Integer::from(PLAN_PAIRS))],
                 admission: ChargeAdmission::Denied,
             })
         });
@@ -167,8 +190,6 @@ impl Meter {
     }
 
     fn charge_plan_one_pair_inner(&mut self) -> Result<(), Incomplete> {
-        const PAIRS: u64 = 1;
-        const RESERVATION: u64 = PAIRS + 2;
         let point = ChargePoint::EqualityPlan;
         let kind = LimitKind::ValueOccurrences;
         if let Some(consumed) = self.injected_denial(point) {
@@ -176,39 +197,43 @@ impl Meter {
                 limit_kind: LimitKind::WorkUnits,
                 limit: consumed,
                 consumed,
-                next_charge: Integer::from(RESERVATION),
+                next_charge: Integer::from(PLAN_RESERVATION),
                 charge_point: point,
             });
         }
-        if PAIRS > kind.limit(&self.counters.limits) {
-            return Err(self.incomplete(kind, Integer::from(PAIRS), point));
+        if PLAN_PAIRS > kind.limit(&self.counters.limits) {
+            return Err(self.incomplete(kind, Integer::from(PLAN_PAIRS), point));
         }
         let remaining = |kind: LimitKind| {
             kind.limit(&self.counters.limits)
                 .saturating_sub(self.consumed(kind))
         };
-        if RESERVATION > remaining(LimitKind::WorkUnits) {
-            return Err(self.incomplete(LimitKind::WorkUnits, Integer::from(RESERVATION), point));
+        if PLAN_RESERVATION > remaining(LimitKind::WorkUnits) {
+            return Err(self.incomplete(
+                LimitKind::WorkUnits,
+                Integer::from(PLAN_RESERVATION),
+                point,
+            ));
         }
         if remaining(LimitKind::ResultUnits) < 1 {
             return Err(self.incomplete(LimitKind::ResultUnits, Integer::one(), point));
         }
         let mut sizes = [None; LimitKind::COUNT];
-        sizes[kind.index()] = Some(PAIRS);
+        sizes[kind.index()] = Some(PLAN_PAIRS);
         self.capture_charge(
             &sizes,
             self.consumed(LimitKind::WorkUnits) + 1,
             self.consumed(LimitKind::ResultUnits),
         );
         let slot = &mut self.counters.consumed[kind.index()];
-        *slot = (*slot).max(PAIRS);
+        *slot = (*slot).max(PLAN_PAIRS);
         let work = &mut self.counters.consumed[LimitKind::WorkUnits.index()];
         *work = work.saturating_add(1);
         self.admit(
             point,
             #[cfg(feature = "test-support")]
             AdmittedCharge {
-                value_occurrences: Some(PAIRS),
+                value_occurrences: Some(PLAN_PAIRS),
                 ..AdmittedCharge::new(point)
             },
         );
@@ -255,7 +280,7 @@ mod tests {
     #[trace("TC-944", "FR-397-AC-6")]
     #[test]
     fn the_equality_schedule_requests_are_native_common_charges() {
-        // Each request the Boolean kernel makes equals a `Common` (all-`u64`)
+        // Each request the equality schedule makes (the constructors it calls) equals a `Common` (all-`u64`)
         // `Charge`, never the `General` arbitrary-precision storage.
         let plan_form = Charge::new(ChargePoint::EqualityPlanForm)
             .exact_size(LimitKind::ValueOccurrences, Integer::one())
@@ -263,20 +288,9 @@ mod tests {
         let pair = Charge::new(ChargePoint::EqualityPair);
         let retain = Charge::new(ChargePoint::EqualityResultRetain).results(1);
         for (charge, native) in [
-            (
-                plan_form,
-                UnitsCharge::one(
-                    ChargePoint::EqualityPlanForm,
-                    LimitKind::ValueOccurrences,
-                    1,
-                )
-                .work(2),
-            ),
-            (pair, UnitsCharge::new(ChargePoint::EqualityPair)),
-            (
-                retain,
-                UnitsCharge::new(ChargePoint::EqualityResultRetain).results(1),
-            ),
+            (plan_form, UnitsCharge::equality_plan_form()),
+            (pair, UnitsCharge::equality_pair()),
+            (retain, UnitsCharge::equality_result_retain()),
         ] {
             let common = UnitsCharge::from_charge(&charge).expect("common storage");
             assert_eq!(common.point, native.point);
@@ -287,7 +301,7 @@ mod tests {
         }
     }
 
-    #[trace("TC-944", "FR-397-AC-6")]
+    #[trace("TC-944", "FR-397-AC-7")]
     #[test]
     fn one_pair_plan_in_u64_equals_the_integer_plan_charge() {
         for work in 0..=5 {

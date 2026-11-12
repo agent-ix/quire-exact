@@ -643,18 +643,12 @@ pub fn evaluate_native_boolean_equality(
 
 fn charge_equality_schedule(meter: &mut Meter) -> Result<(), crate::accounting::Incomplete> {
     // One value occurrence per operand: plan-form, a one-pair plan, the pair
-    // and the retain, charged in `u64` units with no `Integer` arithmetic.
-    meter.charge_units(
-        UnitsCharge::one(
-            ChargePoint::EqualityPlanForm,
-            LimitKind::ValueOccurrences,
-            1,
-        )
-        .work(2),
-    )?;
+    // and the retain, charged in `u64` units with no arbitrary-precision
+    // arithmetic.
+    meter.charge_units(UnitsCharge::equality_plan_form())?;
     meter.charge_plan_one_pair()?;
-    meter.charge_units(UnitsCharge::new(ChargePoint::EqualityPair))?;
-    meter.charge_units(UnitsCharge::new(ChargePoint::EqualityResultRetain).results(1))
+    meter.charge_units(UnitsCharge::equality_pair())?;
+    meter.charge_units(UnitsCharge::equality_result_retain())
 }
 
 /// One native operation whose complete success-path charge schedule is

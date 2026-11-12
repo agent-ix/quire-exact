@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-397-AC-1 through FR-397-AC-6 through the public API by running each native entry and the existing `Integer` entry on the same values with meters that capture every charge, and comparing outcomes, captured events and counters.
+Verify FR-397-AC-1 through FR-397-AC-7. AC-1 through AC-5 run through the public API, running each native entry and the existing `Integer` entry on the same values with meters that capture every charge, comparing outcomes, captured events and counters.
 
 ## Test Procedure
 
@@ -19,7 +19,7 @@ Verify FR-397-AC-1 through FR-397-AC-6 through the public API by running each na
 2. For the i64 multiply boundary pairs, compare with `evaluate_integer_arithmetic`; for rejected pairs assert the admission error and an empty capture.
 3. Compare native equality with `planned_equality` over `Value::Integer`, and `evaluate_boolean` over every truth-table row.
 4. Compare `evaluate_native_boolean_equality` with `planned_equality` over `Value::Boolean` for the four pairs, at unlimited limits, at every `value_occurrences`, `work_units` and `result_units` limit from zero to its unlimited spend (the schedule spends the other seven limit kinds as zero), and with an injected denial at each of the four `equality.*` points, comparing outcome, captured events and counters.
-5. In the accounting unit tests, build the three u64 requests of the Boolean schedule and assert each equals the `Common` form of the matching `Charge`, and run the one-pair u64 plan charge and `charge_plan` of one pair on separate meters over the limit grid and an injected denial, comparing result, counters, admissions and captured events.
+5. In the in-crate accounting unit tests (private types, FR-397-AC-6 and AC-7), take the three requests from `UnitsCharge::equality_plan_form`, `equality_pair` and `equality_result_retain`, which the schedule calls, and assert each equals the `Common` form of the matching `Charge`, then run `Meter::charge_plan_one_pair` and `Meter::charge_plan` of one pair on separate meters over the limit grid and an injected denial, comparing result, counters, admissions and captured events.
 6. Run `charge_native_integer_schedule` and the matching evaluator on separate meters and compare captures and counters, at sufficient limits and one below each charge.
 
 ## Expected Results
