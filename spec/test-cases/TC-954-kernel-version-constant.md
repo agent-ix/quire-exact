@@ -28,6 +28,7 @@ Verify FR-406-AC-1 through FR-406-AC-5 through the public API, a golden outcome 
 | An IEEE add rounds a tie away instead of to even | the IEEE case of step 2 |
 | A division charges one atom fewer | the charge comparison of step 2 |
 | Integer modulo returns the dividend's sign | the modulo case of step 2 |
+| `IntegerArithmeticResultRetain` charges two result units instead of one | the consumed work and result totals of the integer cases of step 2 |
 
 ## Expected Results
 
@@ -35,4 +36,4 @@ The constant is readable and the golden grid passes on the unchanged source. An 
 
 ## Status
 
-Not run. No constant or golden test exists.
+Steps 1 to 3 run in `tests/ir1532_kernel_version.rs` (default and `test-support` builds; the three mutants were applied by hand and each fails the grid at the named case). Steps 4 and 5 are inspection at review.
