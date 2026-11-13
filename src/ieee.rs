@@ -244,7 +244,7 @@ impl IeeeFlags {
             .filter(move |flag| self.contains(*flag))
     }
 
-    fn with(self, flag: IeeeFlag) -> Self {
+    pub(crate) fn with(self, flag: IeeeFlag) -> Self {
         Self(self.0 | flag.mask())
     }
 }
