@@ -56,6 +56,36 @@ extern crate alloc;
 #[macro_use]
 extern crate std;
 
+/// The semantic epoch of the kernel's operations, bumped by hand.
+///
+/// `Cargo.toml`'s version is `0.1.0` on every commit of a `branch = main`
+/// dependency, so it cannot tell a consumer that behaviour changed; this
+/// constant can. A consumer that records the value it measured against treats
+/// a record whose value differs from this one as stale.
+///
+/// Whoever changes the kernel bumps it by at least one, in the same change,
+/// when the change can alter, for some input:
+/// - the result of a public operation: a returned value, a flag, a refusal or
+///   its cause, or an outcome kind;
+/// - a charge: its point, order, limit kind or amount;
+/// - the cost or size of the verification problem a public operation presents
+///   to a Kani harness (wall time or peak memory for harnesses that run
+///   `Value`, `Integer`, `Meter`, `build_typed_prestate` or the collection
+///   types), including a semantics-preserving change of a carrier
+///   representation.
+///
+/// No bump is needed for a rename, a comment, a new operation or type that no
+/// existing operation uses, or a refactor with no effect on results or
+/// verification cost. The value never decreases.
+///
+/// It is a plain integer literal, not a digest, so it depends on the source
+/// only: no build time, git revision or feature set changes it. The golden
+/// test in `tests/ir1532_kernel_version.rs` catches an unintended outcome or
+/// charge change inside its grid; it does not catch a change outside the grid,
+/// a change to verification cost, or re-recorded expectations without a bump,
+/// which review has to catch.
+pub const KERNEL_VERSION: u32 = 1;
+
 mod accounting;
 mod cancel;
 mod collection;

@@ -35,4 +35,4 @@ The constant is readable and the golden grid passes on the unchanged source. An 
 
 ## Status
 
-Not run. No constant or golden test exists.
+Steps 1 to 3 run in `tests/ir1532_kernel_version.rs` (default and `test-support` builds; the three mutants were applied by hand and each fails the grid at the named case). Steps 4 and 5 are inspection at review.

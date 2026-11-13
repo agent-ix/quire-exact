@@ -40,7 +40,7 @@ The constant is a hand-bumped integer, not a digest of source files. A content h
 
 ## Status
 
-Specified (IR-1532). Not implemented; no Rust accompanies this requirement.
+Implemented (IR-1532): `KERNEL_VERSION` in `src/lib.rs`, golden grid in `tests/ir1532_kernel_version.rs`. AC-1 to AC-3 are test-backed; AC-4 and AC-5 are checked by inspection at review.
 
 ## Dependencies
 
