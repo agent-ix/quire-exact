@@ -75,7 +75,7 @@ CG FR-049 draws each operand as a symbolic `i64` index in `0..member_count` and 
 
 ## Status
 
-Specified (IR-262). Not implemented; no Rust accompanies this requirement, no Kani harness has run and no measurement exists.
+Implemented (IR-262) for FR-407-AC-1 through AC-6 and AC-8, backed by host tests in `tests/ir262_native_enum.rs`. FR-407-AC-7 is Planned: the differential lives in quire-semantic-value under its own QSV ticket. FR-407-AC-9 is Planned: the harnesses of Behavior 9 are written in `src/native_enum/kani_proofs.rs` and compile-checked under `cfg(kani)`, but no Kani run has executed and no verdict exists.
 
 ## Dependencies
 

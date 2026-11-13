@@ -101,6 +101,10 @@ mod integer;
 mod key;
 mod location;
 mod native_decimal;
+mod native_enum;
+#[cfg(kani)]
+#[path = "native_enum/kani_proofs.rs"]
+mod native_enum_kani_proofs;
 mod native_integer;
 mod native_text;
 #[cfg(kani)]
@@ -181,6 +185,7 @@ pub use native_decimal::{
     NativeDecimalCapacityQuantity, NativeDecimalCapacityRefusal, NativeDecimalLoss,
     NativeDecimalOperation, NativeDecimalRefusal, NativeDecimalResult, NativeDecimalType,
 };
+pub use native_enum::{compare_native_enum, NativeEnum, NativeEnumRefusal};
 pub use native_integer::{
     charge_native_integer_schedule, evaluate_native_boolean_equality,
     evaluate_native_integer_arithmetic, evaluate_native_integer_division,

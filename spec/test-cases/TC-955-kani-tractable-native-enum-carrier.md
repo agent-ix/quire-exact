@@ -55,4 +55,4 @@ Every step passes, each mutant fails at the step it names, and the evidence reco
 
 ## Status
 
-Specified (IR-262). No step has run.
+Steps 1 to 4, the quire-exact half of step 5 (AC-6) and step 6 are implemented in `tests/ir262_native_enum.rs`. The differential half of step 5 (AC-7) is not run here. Step 7 is not executed: the harnesses are written, no Kani verdict exists. Step 8 (mutants) has not been run.
