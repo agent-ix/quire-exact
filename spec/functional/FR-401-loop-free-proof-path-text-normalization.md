@@ -4,6 +4,8 @@ title: "Normalize text on the Kani proof path without allocation or iterator loo
 type: FR
 org: agent-ix
 relationships:
+  - target: ix://agent-ix/quire-exact/FR-404
+    type: depends_on
   - target: ix://agent-ix/quire-exact/FR-400
     type: references
   - target: ix://agent-ix/quire-exact/FR-367
@@ -15,11 +17,11 @@ relationships:
 
 ## Description
 
-When the Kani text carrier (ticket IR-1445) needs the retained sequence of a payload under `nfc`, `nfd`, `nfkc` or `nfkd`, the kernel SHALL provide a normalization over fixed-capacity buffers whose scalars, order and count equal those of the shipped `NormalizationForm::apply`. The shipped `apply` streams through `unicode-normalization` iterators and `prepare` collects into `String`s, which the IR-1436 design review (D4) bans from a Kani carrier. Contract Codegen (CG FR-052, prerequisite P4, ticket IR-1501) gates every normalizing-profile criterion on this requirement, and without it those profiles are `unsupported`.
+When the Kani text carrier ([FR-404](./FR-404-kani-tractable-native-text-carrier.md)) needs the retained sequence of a payload under `nfc`, `nfd`, `nfkc` or `nfkd`, the kernel SHALL provide a normalization over fixed-capacity buffers whose scalars, order and count equal those of the shipped `NormalizationForm::apply`. The shipped `apply` streams through `unicode-normalization` iterators and `prepare` collects into `String`s, which the IR-1436 design review (D4) bans from a Kani carrier. Contract Codegen (CG FR-052, prerequisite P4, ticket IR-1501) gates every normalizing-profile criterion on this requirement, and without it those profiles are `unsupported`.
 
 **Reading of "loop-free".** The code lead ruled (ticket IR-1501) that "loop-free" means no iterator adapter, no `chars()`, no allocation, no recursion and no data-dependent loop bound. Indexed loops with a constant bound are permitted, because Kani unwinds them to a stated finite bound. This is an interpretation of the wording of IR-1501 and CG FR-052, not a narrowing of it.
 
-**Relation to IR-1445.** The function is generic over its capacities (below), so its host criteria stand without the carrier. Instantiating the capacities with the carrier's C, and the Kani run and its memory evidence, belong to IR-1445 and are conditional on it; a table that does not fit the K-DR budget is IR-1445's measurement and leaves the normalizing profiles `unsupported` in CG FR-052, with this requirement still met on the host.
+**Relation to [FR-404](./FR-404-kani-tractable-native-text-carrier.md).** The function is generic over its capacities (below), so its host criteria stand without the carrier. Instantiating the capacities with the carrier's C, and the Kani run and its memory evidence, belong to [FR-404](./FR-404-kani-tractable-native-text-carrier.md) and are conditional on it; a table that does not fit the 16 GiB per-request ceiling of CG FR-028 is [FR-404](./FR-404-kani-tractable-native-text-carrier.md)'s measurement and leaves the normalizing profiles `unsupported` in CG FR-052, with this requirement still met on the host.
 
 ## Inputs
 
@@ -58,11 +60,11 @@ The retained scalars in the output buffer as UTF-8, their scalar count and byte 
 
 Planned (IR-1501). No Rust or test exists. The reading of "loop-free" above is the code lead's ruling on IR-1501, recorded here as an interpretation of the IR-1501 and CG FR-052 wording, not a narrowing.
 
-Open premise, not claimed: that Kani verifies the table lookups and the composition within the carrier's memory budget is not established here; the memory evidence is IR-1445's.
+Open premise, not claimed: that Kani verifies the table lookups and the composition within the carrier's memory budget is not established here; the memory evidence is [FR-404](./FR-404-kani-tractable-native-text-carrier.md)'s.
 
 ## Dependencies
 
 - [FR-400](./FR-400-text-payload-byte-bound-per-profile.md) states the capacity argument; [FR-399](./FR-399-non-metered-text-constructor-from-admitted-parts.md) uses this normalization in the proof-path constructor.
 - [FR-367](./FR-367-text-profile-mismatch-before-charging.md) owns the shipped `compare_text` that the AC-5 and AC-6 differential reads.
-- IR-1445 owns the carrier, C and the `cfg(kani)` replacement of `compare_text`, which CG FR-052-AC-12 ties to the shipped function. This requirement's capacities are generic so that it is testable before the carrier exists.
+- [FR-404](./FR-404-kani-tractable-native-text-carrier.md) (ticket IR-1445) owns the carrier, C and the proof-path replacement of `compare_text`, which CG FR-052-AC-12 ties to the shipped function (substituted for the Kani build by the consumer, not by a `cfg(kani)` body; FR-404 Behavior 7). This requirement's capacities are generic so that it is testable before the carrier exists.
 - [TC-949](../test-cases/TC-949-loop-free-proof-path-text-normalization.md) is the verification home.
