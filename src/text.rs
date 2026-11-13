@@ -202,6 +202,16 @@ impl Iterator for Normalized<'_> {
     }
 }
 
+/// Why parts were not admitted: the closed causes of the constructors that
+/// take an already-admitted payload and retained sequence.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TextNotAdmittedCause {
+    /// The retained sequence is not the retained sequence of the payload.
+    RetainedNotNormalForm,
+    /// The profile length of the retained sequence is outside the type.
+    LengthOutOfDomain,
+}
+
 /// Declared `Text[min,max; profile]` bounds are empty.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, thiserror::Error)]
 #[error("text bounds [{min}, {max}] are empty")]

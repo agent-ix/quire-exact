@@ -72,6 +72,10 @@ mod key;
 mod location;
 mod native_decimal;
 mod native_integer;
+mod native_text;
+#[cfg(kani)]
+#[path = "native_text/kani_proofs.rs"]
+mod native_text_kani_proofs;
 mod node;
 mod numeric;
 mod numeric_membership;
@@ -157,6 +161,7 @@ pub use native_integer::{
     NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
     NativeIntegerSchedule,
 };
+pub use native_text::{compare_native_text, NativeText, NativeTextRefusal, NATIVE_TEXT_CAPACITY};
 pub use node::{
     is_identifier, Identifier, InvalidIdentifier, InvalidNodeKey, NodeKey,
     NodeKeyConstructionError, NodeKeyView, NodePathIter, PathSegment, PathSegmentView,
@@ -180,8 +185,9 @@ pub use rational::{NonPositiveDenominatorBound, Rational, RationalDomain, ZeroDe
 pub use reference::ObjectReference;
 pub use reservation::{Reservation, ReservationDenied};
 pub use text::{
-    admit_text, compare_text, EmptyTextBounds, InvalidUtf8, NormalizationForm, Text, TextPayload,
-    TextProfile, TextProvenance, TextType, UNICODE_TEXT_DEFINITION, UNICODE_VERSION,
+    admit_text, compare_text, EmptyTextBounds, InvalidUtf8, NormalizationForm, Text,
+    TextNotAdmittedCause, TextPayload, TextProfile, TextProvenance, TextType,
+    UNICODE_TEXT_DEFINITION, UNICODE_VERSION,
 };
 pub use value::{
     evaluate_record, evaluate_tuple, evaluate_union, fill_slots, from_admitted_slots, record,
