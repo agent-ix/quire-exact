@@ -296,3 +296,42 @@ fn coprime_agrees_with_the_reference_gcd_on_worst_cases() {
     }
     assert!(super::coprime(fibonacci[92], fibonacci[91]));
 }
+
+/// The whole domain of the bounded Kani companions, enumerated.
+#[test]
+fn the_small_proof_domains_agree_with_the_reference_exhaustively() {
+    let native = NativeDecimalType::new(-1000, 1000, 1, 4, RoundingMode::Exact).unwrap();
+    let shape = Shape::Decimal(native);
+    for coefficient in -(1_i64 << 15)..=(1 << 15) {
+        for scale in 0..=8_i64 {
+            assert_eq!(
+                run(&shape, QuantityBindings::Decimal { coefficient, scale }),
+                reference::decimal((-1000, 1000), (1, 4), coefficient, scale)
+            );
+        }
+    }
+    let shape = Shape::Rational {
+        numerator: NativeRange {
+            lower: -100,
+            upper: 100,
+        },
+        denominator: NativeRange {
+            lower: 1,
+            upper: 100,
+        },
+    };
+    for numerator in -128_i64..=128 {
+        for denominator in -128_i64..=128 {
+            assert_eq!(
+                run(
+                    &shape,
+                    QuantityBindings::Rational {
+                        numerator,
+                        denominator
+                    }
+                ),
+                reference::rational((-100, 100), (1, 100), numerator, denominator)
+            );
+        }
+    }
+}

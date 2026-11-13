@@ -95,3 +95,66 @@ fn native_quantity_rational_matches_reference() {
         )
     );
 }
+
+/// Bounded-domain companion of the Decimal proof: the same constructor and
+/// reference over a small domain that a generated quantity row draws from.
+#[kani::proof]
+fn native_quantity_decimal_matches_reference_small() {
+    let coefficient: i64 = kani::any();
+    let scale: i64 = kani::any();
+    kani::assume(-(1 << 15) <= coefficient && coefficient <= (1 << 15));
+    kani::assume(0 <= scale && scale <= 8);
+    let (lower, upper, min_scale, max_scale) = (-1000_i128, 1000_i128, 1_u32, 4_u32);
+    let native = NativeDecimalType::new(
+        lower,
+        upper,
+        u64::from(min_scale),
+        u64::from(max_scale),
+        RoundingMode::Exact,
+    )
+    .unwrap();
+    let actual = as_pair(construct(
+        &Shape::Decimal(native),
+        QuantityBindings::Decimal { coefficient, scale },
+    ));
+    kani::cover!(actual.is_ok(), "success witness");
+    kani::cover!(actual.is_err(), "refusal witness");
+    assert_eq!(
+        actual,
+        reference::decimal((lower, upper), (min_scale, max_scale), coefficient, scale)
+    );
+}
+
+/// Bounded-domain companion of the Rational proof: 8-bit parts against a
+/// fixed small domain.
+#[kani::proof]
+fn native_quantity_rational_matches_reference_small() {
+    let numerator: i64 = kani::any();
+    let denominator: i64 = kani::any();
+    kani::assume(-(1 << 7) <= numerator && numerator <= (1 << 7));
+    kani::assume(-(1 << 7) <= denominator && denominator <= (1 << 7));
+    let (n_range, d_range) = ((-100_i128, 100_i128), (1_i128, 100_i128));
+    let shape = Shape::Rational {
+        numerator: NativeRange {
+            lower: n_range.0,
+            upper: n_range.1,
+        },
+        denominator: NativeRange {
+            lower: d_range.0,
+            upper: d_range.1,
+        },
+    };
+    let actual = as_pair(construct(
+        &shape,
+        QuantityBindings::Rational {
+            numerator,
+            denominator,
+        },
+    ));
+    kani::cover!(actual.is_ok(), "success witness");
+    kani::cover!(actual.is_err(), "refusal witness");
+    assert_eq!(
+        actual,
+        reference::rational(n_range, d_range, numerator, denominator)
+    );
+}
