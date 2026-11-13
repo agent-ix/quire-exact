@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The Kani harnesses of FR-407 Behavior 9: `compare_native_enum` over
-//! symbolic ranks, counts, ordered flag, declaration tags and meter limits,
-//! for all six operators, against an expected side written separately from
-//! the comparison body. Written only: not compiled or run, and no verdict is
-//! recorded (FR-407-AC-9 is planned).
-use crate::accounting::{Meter, ScalarLimits};
+//! symbolic ranks, counts, ordered flag, declaration tags and operator, against
+//! an expected side written separately from the comparison body. Meter limits
+//! are concrete per harness (sufficient, one-less occurrence, one-less result):
+//! a symbolic limit left the outcome variant undecided and CBMC unwound the
+//! drop glue of the refusal and incomplete variants without end. The harnesses
+//! compile under `cargo kani --only-codegen`; no verdict is recorded
+//! (FR-407-AC-9 is planned).
+use crate::accounting::{ChargePoint, LimitKind, Meter, ScalarLimits};
 use crate::comparison::{ComparisonOperator, IllTypedCause};
 use crate::native_enum::{compare_native_enum, NativeEnum};
 use crate::outcome::Outcome;
@@ -33,6 +36,18 @@ fn symbolic_carrier(declaration: u64, ordered: bool, count: u32) -> NativeEnum {
     }
 }
 
+/// A symbolic operator without a loop: each of the six is reachable.
+fn symbolic_operator() -> ComparisonOperator {
+    match kani::any::<u8>() % 6 {
+        0 => ComparisonOperator::Equal,
+        1 => ComparisonOperator::NotEqual,
+        2 => ComparisonOperator::Less,
+        3 => ComparisonOperator::LessOrEqual,
+        4 => ComparisonOperator::Greater,
+        _ => ComparisonOperator::GreaterOrEqual,
+    }
+}
+
 fn expected(operator: ComparisonOperator, left: u32, right: u32) -> bool {
     match operator {
         ComparisonOperator::Equal => left == right,
@@ -44,62 +59,79 @@ fn expected(operator: ComparisonOperator, left: u32, right: u32) -> bool {
     }
 }
 
-/// One shared declaration, symbolic meter limits: the Completed path and the
-/// incomplete path of each charge, with the admission count.
-#[kani::proof]
-fn native_enum_compare_same_declaration() {
+/// Two operands of one symbolic declaration, comparable under the operator:
+/// an ordering is drawn only for an ordered declaration.
+fn comparable_pair() -> (ComparisonOperator, NativeEnum, NativeEnum) {
     let tag: u64 = kani::any();
     let ordered: bool = kani::any();
     let count: u32 = kani::any();
     kani::assume(count > 0);
-    let left = symbolic_carrier(tag, ordered, count);
-    let right = symbolic_carrier(tag, ordered, count);
-    let occurrences: u64 = kani::any();
-    let results: u64 = kani::any();
-    for operator in ComparisonOperator::ALL {
-        let mut meter = Meter::new(limits(occurrences, results));
-        let outcome = compare_native_enum(operator, &left, &right, &mut meter);
-        if operator.is_ordering() && !ordered {
-            kani::cover!(true, "unordered ordering refusal");
-            match outcome {
-                Err(error) => {
-                    assert_eq!(error.cause, IllTypedCause::UnorderedEnumOrdering)
-                }
-                Ok(_) => panic!("an unordered ordering is refused"),
-            }
-            assert_eq!(meter.admission_count(), 0);
-            continue;
-        }
-        let sufficient = occurrences >= 2 && results >= 1;
-        match outcome {
-            Ok(Outcome::Completed(value)) => {
-                kani::cover!(true, "completed path");
-                assert!(sufficient);
-                assert_eq!(value, expected(operator, left.index(), right.index()));
-                assert_eq!(meter.admission_count(), 3);
-            }
-            Ok(Outcome::Incomplete(_)) => {
-                kani::cover!(true, "incomplete path");
-                assert!(!sufficient);
-                let admitted = if occurrences < 1 {
-                    0
-                } else if occurrences < 2 {
-                    1
-                } else {
-                    2
-                };
-                assert_eq!(meter.admission_count(), admitted);
-            }
-            _ => panic!("only Completed or Incomplete follows admission"),
-        }
-    }
+    let operator = symbolic_operator();
+    kani::assume(ordered || !operator.is_ordering());
+    (
+        operator,
+        symbolic_carrier(tag, ordered, count),
+        symbolic_carrier(tag, ordered, count),
+    )
 }
 
-/// Two symbolic declarations: refused as distinct exactly when any of tag,
-/// count or ordered flag differs, before the unordered check, consuming
-/// nothing.
+/// A sufficient (exact) meter: every charge is admitted. The meter limits are
+/// concrete so the outcome variant is decided by the charges, not by a
+/// symbolic limit.
 #[kani::proof]
-fn native_enum_compare_distinct_declarations() {
+fn native_enum_compare_completes() {
+    let (operator, left, right) = comparable_pair();
+    let mut meter = Meter::new(limits(2, 1));
+    let outcome = compare_native_enum(operator, &left, &right, &mut meter);
+    match outcome {
+        Ok(Outcome::Completed(value)) => {
+            kani::cover!(value, "true witness");
+            kani::cover!(!value, "false witness");
+            assert_eq!(value, expected(operator, left.index(), right.index()));
+        }
+        _ => panic!("a sufficient meter completes"),
+    }
+    assert_eq!(meter.admission_count(), 3);
+    assert_eq!(meter.consumed(LimitKind::ValueOccurrences), 2);
+    assert_eq!(meter.consumed(LimitKind::ResultUnits), 1);
+}
+
+/// One less occurrence: the second identity read is denied after one admission.
+#[kani::proof]
+fn native_enum_compare_denies_second_read() {
+    let (operator, left, right) = comparable_pair();
+    let mut meter = Meter::new(limits(1, 1));
+    match compare_native_enum(operator, &left, &right, &mut meter) {
+        Ok(Outcome::Incomplete(record)) => {
+            kani::cover!(true, "incomplete path");
+            assert_eq!(record.charge_point, ChargePoint::EnumIdentityRead);
+            assert_eq!(record.limit_kind, LimitKind::ValueOccurrences);
+        }
+        _ => panic!("one less occurrence is incomplete"),
+    }
+    assert_eq!(meter.admission_count(), 1);
+}
+
+/// One less result: the retain is denied after both reads.
+#[kani::proof]
+fn native_enum_compare_denies_retain() {
+    let (operator, left, right) = comparable_pair();
+    let mut meter = Meter::new(limits(2, 0));
+    match compare_native_enum(operator, &left, &right, &mut meter) {
+        Ok(Outcome::Incomplete(record)) => {
+            kani::cover!(true, "incomplete path");
+            assert_eq!(record.charge_point, ChargePoint::EnumResultRetain);
+            assert_eq!(record.limit_kind, LimitKind::ResultUnits);
+        }
+        _ => panic!("one less result is incomplete"),
+    }
+    assert_eq!(meter.admission_count(), 2);
+}
+
+/// Distinct declarations (any of tag, count or ordered flag differs) are
+/// refused first, for every operator, and consume nothing.
+#[kani::proof]
+fn native_enum_refuses_distinct_declarations() {
     let left_tag: u64 = kani::any();
     let right_tag: u64 = kani::any();
     let left_ordered: bool = kani::any();
@@ -107,29 +139,39 @@ fn native_enum_compare_distinct_declarations() {
     let left_count: u32 = kani::any();
     let right_count: u32 = kani::any();
     kani::assume(left_count > 0 && right_count > 0);
+    kani::assume(
+        left_tag != right_tag || left_count != right_count || left_ordered != right_ordered,
+    );
     let left = symbolic_carrier(left_tag, left_ordered, left_count);
     let right = symbolic_carrier(right_tag, right_ordered, right_count);
-    let distinct =
-        left_tag != right_tag || left_count != right_count || left_ordered != right_ordered;
-    let operator: ComparisonOperator = match kani::any::<u8>() % 6 {
-        0 => ComparisonOperator::Equal,
-        1 => ComparisonOperator::NotEqual,
-        2 => ComparisonOperator::Less,
-        3 => ComparisonOperator::LessOrEqual,
-        4 => ComparisonOperator::Greater,
-        _ => ComparisonOperator::GreaterOrEqual,
-    };
-    let mut meter = Meter::new(limits(u64::MAX, u64::MAX));
-    let outcome = compare_native_enum(operator, &left, &right, &mut meter);
-    if distinct {
-        kani::cover!(true, "distinct declaration refusal");
-        match outcome {
-            Err(error) => assert_eq!(error.cause, IllTypedCause::DistinctEnumDeclarations),
-            Ok(_) => panic!("distinct declarations are refused"),
+    let mut meter = Meter::new(limits(2, 1));
+    match compare_native_enum(symbolic_operator(), &left, &right, &mut meter) {
+        Err(error) => {
+            kani::cover!(true, "distinct declaration refusal");
+            assert_eq!(error.cause, IllTypedCause::DistinctEnumDeclarations);
         }
-        assert_eq!(meter.admission_count(), 0);
-    } else {
-        kani::cover!(true, "same declaration reaches the comparison");
-        assert!(outcome.is_ok() || (operator.is_ordering() && !left_ordered));
+        Ok(_) => panic!("distinct declarations are refused"),
     }
+    assert_eq!(meter.admission_count(), 0);
+}
+
+/// An ordering over one unordered declaration is refused and consumes nothing.
+#[kani::proof]
+fn native_enum_refuses_unordered_ordering() {
+    let tag: u64 = kani::any();
+    let count: u32 = kani::any();
+    kani::assume(count > 0);
+    let operator = symbolic_operator();
+    kani::assume(operator.is_ordering());
+    let left = symbolic_carrier(tag, false, count);
+    let right = symbolic_carrier(tag, false, count);
+    let mut meter = Meter::new(limits(2, 1));
+    match compare_native_enum(operator, &left, &right, &mut meter) {
+        Err(error) => {
+            kani::cover!(true, "unordered refusal");
+            assert_eq!(error.cause, IllTypedCause::UnorderedEnumOrdering);
+        }
+        Ok(_) => panic!("an unordered ordering is refused"),
+    }
+    assert_eq!(meter.admission_count(), 0);
 }

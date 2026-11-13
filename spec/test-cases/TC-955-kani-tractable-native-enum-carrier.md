@@ -43,10 +43,11 @@ Verify FR-407-AC-1 through FR-407-AC-9 through the public kernel API, a literal-
 
 ## Evidence record
 
-No measurement exists. Columns: operation, outcome, wall time, peak memory, Kani version, harness id.
+One measurement exists, a superseded harness that did not finish. Columns: operation, outcome, wall time, peak memory, Kani version, harness id.
 
 | Operation | Outcome | Wall time | Peak memory | Kani version | Harness id |
 | --- | --- | --- | --- | --- | --- |
+| Same-declaration compare over symbolic meter limits (superseded) | did not finish (exit 124) | 1800 s limit | not recorded | not recorded | `native_enum_compare_same_declaration` |
 
 ## Expected Results
 
@@ -54,4 +55,4 @@ Every step passes, each mutant fails at the step it names, and the evidence reco
 
 ## Status
 
-Steps 1 to 4 and the quire-exact half of step 5 (AC-6) are implemented in `tests/ir262_native_enum.rs`; the E0451 check of step 1 is a `compile_fail,E0451` doctest on `NativeEnum` in `src/native_enum.rs`. Step 6 is a code-review inspection with no automated step. The differential half of step 5 (AC-7) is not run here. Step 7 is not executed: the harnesses are written, not compiled or run, and no Kani verdict exists. Step 8 (mutants) has not been run.
+Steps 1 to 4 and the quire-exact half of step 5 (AC-6) are implemented in `tests/ir262_native_enum.rs`; the E0451 check of step 1 is a `compile_fail,E0451` doctest on `NativeEnum` in `src/native_enum.rs`. Step 6 is a code-review inspection with no automated step. The differential half of step 5 (AC-7) is not run here. Step 7 is not executed: the harnesses `native_enum_compare_completes`, `native_enum_compare_denies_second_read`, `native_enum_compare_denies_retain`, `native_enum_refuses_distinct_declarations` and `native_enum_refuses_unordered_ordering` compile under `cargo kani --only-codegen` but have not been run, and no Kani verdict exists. Step 8 (mutants) has not been run.
