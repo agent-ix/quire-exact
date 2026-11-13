@@ -47,3 +47,13 @@ Generally conformant. B8 uses a correct unwanted-behaviour form, and B14 uses a 
 | FR-405-B12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:60 | 12. The peak memory of every harness of Behavior 11 SHALL be within the K-DR memory budget. No fit is claimed from a prediction or a configured ceiling; the claim is the recorded peak. |
 | FR-405-B13 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:61 | 13. When CG's float row (CG FR-053) draws its operands through the carrier, the peak memory, time, tool version and terminal outcome of its composed harness SHALL be recorded; the harness consumes the carrier through the public constructors of Behavior 1 and the operations of Behavior 3 and 4, an... |
 | FR-405-B14 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:62 | 14. Until Behavior 11 holds for a width, the kernel SHALL claim no proof for that width. |
+
+## Dispositions
+
+Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |

@@ -54,3 +54,21 @@ AC-1..AC-7 and AC-13 can each fail on a concrete input or inspection. AC-1: `1 <
 | FR-405-B11 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:59 | 11. A Kani harness SHALL prove the native `Binary32` operations and comparisons over all operand bit patterns, rounding modes and meter limits against an expected side that does not share a body with the native operation (a separately written reference, or the property statements of IEEE 754 for ... |
 | FR-405-B12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:60 | 12. The peak memory of every harness of Behavior 11 SHALL be within the K-DR memory budget. No fit is claimed from a prediction or a configured ceiling; the claim is the recorded peak. |
 | TC-953-Mutants | examined | spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md:33 | / Mutant (site) / Distinguishing input / Fails at / / --- / --- / --- / / The tie rule of nearest-even is nearest-away / a tie operand pair whose even neighbour is the lower value / step 3 / / Nearest-away rounds ties to even / a tie whose larger-magnitude neighbour is odd / step 3 / / Toward-pos... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | The charge-point mutants cover the operand points, the result charge and ordering, but not the owner's `ieee.exact-intermediate` and `ieee.round` charges (src/ieee.rs:1083, 1147). They also do not cover those charges being made on a classification-decided input (NaN, infinity, division by zero), or an arity amount wrong for SquareRoot (1) or FusedMultiplyAdd (3). CG FR-053-AC-10 (b) and (c) name exactly these. Behavior 18 now defers to 'one mutant per site of TC-953's table', so nothing outside the table checks whether it is complete. Add the rows. | spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md:60-62 |
+
+## Dispositions
+
+Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |

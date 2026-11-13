@@ -24,7 +24,7 @@ The boundary set is fixed before the implementation, from independent literals a
 5. For AC-7 and AC-9, inspect the proof-path source for `num_bigint`, `Integer`, `Rational`, `Vec`, `cfg(kani)`, iterator adapters, loops (each loop has a stated constant bound and no operand-dependent `break`, `return` or `?`) and calls from a native body to an owner function; inspect each harness for the functions its expected side shares with the native body (only the decode may be shared) and for its docstring of covered outputs.
 6. For AC-8, run a counting global allocator around the native operations over the boundary set, asserting zero allocations, and call each operation and comparison from a host test.
 7. For AC-10, run each mutant through the differential and assert it fails at the step the table names.
-8. For AC-11, AC-12 and AC-13, run each Kani harness of each operation, comparison and width under the authorized runner with a 10-minute wall-clock limit and record verdict, time, peak memory with its provenance and tool version. The Binary64 add and multiply harnesses are the probe: they are the AC-11 harnesses, not separate ones, and each combination is judged alone. For a non-VERIFIED outcome, record the row in the Kani tractability table. Confirm each VERIFIED harness's cover is reached and its harness mutant fails, and compare each peak with 16 GiB.
+8. For AC-11, AC-12 and AC-13, run each Kani harness of each operation, comparison and width under the authorized runner with a 10-minute wall-clock limit and record verdict, time, peak memory with its provenance and tool version. The Binary64 add and multiply harnesses are the probe: they are the AC-11 harnesses, not separate ones, and each combination is judged alone. For a non-VERIFIED outcome, record the row in the evidence record below and in the Kani tractability table that IR-1526's seam loads. Confirm each VERIFIED harness's cover is reached and its harness mutant fails, and compare each peak with 16 GiB.
 9. For AC-14, search the kernel source for a refusal variant, refusal path or `Meter` behaviour defined for the table-row state; none may exist, and the seam referenced is IR-1526's.
 10. For AC-15, inspect the Status for a per-operation, per-width verdict or table row, including SquareRoot and FusedMultiplyAdd.
 
@@ -57,6 +57,9 @@ A Kani harness checks, per operation: it draws the operands (two, one for Negate
 | BitIdentical compares numeric value | two NaNs with different payloads, and the two zeros | step 3 |
 | Negate raises a flag or quiets a NaN | the negation of a signalling NaN | step 3 |
 | The provenance of a result is not the owner's | any completed case, the provenance compared | step 3 |
+| `ieee.exact-intermediate` is not charged on a finite plan, or is charged on a classification-decided input | a finite add at its exact limit, and Add with a NaN operand, Add of infinity and minus infinity, and Divide by zero, each with a recording `Meter` expecting no `ieee.exact-intermediate` charge | step 4 |
+| `ieee.round` is not charged on a finite plan, or is charged on a classification-decided input | the same inputs, expecting `ieee.round` only on the finite plan | step 4 |
+| The operand-count amount of the operand charge is wrong for SquareRoot (1) or FusedMultiplyAdd (3) | SquareRoot of four and FusedMultiplyAdd of one, one and one, expecting operand amounts for 1 and 3 operands (CG FR-053-AC-10 b, c) | step 4 |
 | The charge of the operand points is dropped, reordered or charged twice | any completed case at its exact limit | step 4 |
 | The result charge is dropped or charged at the wrong amount | any completed case at its exact limit and one less | step 4 |
 | The first charge is made after the width check, or the denied charge is followed by a later charge | a cross-width add, and a completed case at one less than its first charge | step 4 |
@@ -66,6 +69,14 @@ A Kani harness checks, per operation: it draws the operands (two, one for Negate
 | A native body calls the owner | the source inspection | step 5 |
 | A Kani harness checks the native body against itself | the expected-side inspection and a harness mutant that the harness must fail | step 8 |
 | A refusal variant for the table-row state is defined in the kernel | the source search | step 9 |
+
+## Evidence record
+
+The versioned record of every executed harness. The proofs-gen tractability table is the source IR-1526 loads; this section is the copy that can be inspected from this repository, and no criterion depends on the table's path. Each row gives operation, width, outcome (VERIFIED, or timeout, memory exhaustion or unreliable; a FAILED verdict is a defect, not a row), wall time, peak memory with provenance, Kani version and harness id.
+
+| Operation | Width | Outcome | Time | Peak memory | Kani version | Harness id |
+| --- | --- | --- | --- | --- | --- | --- |
+| (none run) | - | - | - | - | - | - |
 
 ## Expected Results
 

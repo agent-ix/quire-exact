@@ -46,3 +46,20 @@ Structurally sound. FR-405 and TC-953 are free ids. The gap left for FR-404/TC-9
 | FR-405-AC-12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:79 | CG's float row (CG FR-053) draws its operands through the carrier and its host differential (CG FR-053-AC-13) runs the native operations against the shipped owner with the boundary coverage and the mutants of AC-8; the composed harness's peak memory, time, tool version and terminal outcome are re... |
 | FR-405-AC-13 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:80 | No proof is claimed for a width, operation or comparison whose AC-10 harness has no executed VERIFIED verdict, and the status records, per operation and width, the verdict or the absence of one. |
 | TC-953 | examined | spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md:14 | Verify FR-405-AC-1 through FR-405-AC-13 by running the native float operations beside the shipped `evaluate_ieee` and `compare_ieee`, by inspecting the proof-path source, and by recording the Kani probe, verdicts and peaks. Each mutant below is a buildable variant of the named site in a scratch c... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | Behavior 21 says 'within a 10-minute wall-clock limit for its probe'. The rewrite removed the separate probe (TC-953 step 8: the Binary64 add and multiply harnesses are the AC-11 harnesses), so 'its probe' no longer names anything, and it reads as if the limit applies only to probe harnesses. Say that each harness runs under a 10-minute wall-clock limit, as TC-953 step 8 does. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:70 |
+
+## Dispositions
+
+Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |

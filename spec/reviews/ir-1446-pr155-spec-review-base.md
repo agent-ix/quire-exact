@@ -66,3 +66,22 @@ Not mergeable: two high findings. The core of the FR is sound and answers the br
 | FR-405-AC-12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:79 | CG's float row (CG FR-053) draws its operands through the carrier and its host differential (CG FR-053-AC-13) runs the native operations against the shipped owner with the boundary coverage and the mutants of AC-8; the composed harness's peak memory, time, tool version and terminal outcome are re... |
 | FR-405-AC-13 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:80 | No proof is claimed for a width, operation or comparison whose AC-10 harness has no executed VERIFIED verdict, and the status records, per operation and width, the verdict or the absence of one. |
 | TC-953 | examined | spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md:14 | Verify FR-405-AC-1 through FR-405-AC-13 by running the native float operations beside the shipped `evaluate_ieee` and `compare_ieee`, by inspecting the proof-path source, and by recording the Kani probe, verdicts and peaks. Each mutant below is a buildable variant of the named site in a scratch c... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | AC-11 accepts 'a measured row recording a non-VERIFIED outcome'. That includes a FAILED verdict (a counterexample, which here means a native-body defect). Behavior 15 admits only timeout, memory exhaustion or unreliable as a table-row end state. As written, a harness that falsifies the native operation can be filed as a table row and the combination counts as closed under AC-11 and AC-15. Restrict AC-11 to Behavior 15's outcomes, and say that a FAILED verdict fails AC-11. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:87 |
+| FND-006 | medium | The Kani tractability table is named as `proofs-gen/evidence/table/` with no repository. It is not in quire-exact, CG, Contract IR or quire-verification. On this host it exists only as an untracked local directory (`worktrees/proofs-gen/evidence/table/kani-tractability.jsonl`, not a git checkout). IR-1526 calls it 'titan:IR:proofs evidence/table' and says CG will load it as data, with no settled home. The evidence that satisfies AC-11 and AC-15 can therefore not be inspected from any repo, and can vanish. Name the versioned location (the one IR-1526 loads), or also record each table row (verdict, time, peak, versions) in FR-405 Status or TC-953 Status, as FR-402 records under its ticket. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:61 |
+| FND-007 | low | Linear IR-1446's own AC still reads 'Memory stays within the K-DR budget' and 'CG's row harness consumes the carrier'. These are the two items FR-405 now replaces (16 GiB of CG FR-028; CG consumption is CG's credit), and the IR-1443 precedent applies (FND-004 there). The fix is a ticket-text edit, not a PR change, so it does not block merge, but the ticket should not be closed against the stale AC. | Linear IR-1446 description:- |
+
+## Dispositions
+
+Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
