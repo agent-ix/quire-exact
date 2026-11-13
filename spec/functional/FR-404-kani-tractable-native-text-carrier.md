@@ -39,7 +39,7 @@ A Kani proof over `std` `chars()` or UTF-8 validation is not tractable (measured
 
 1. The carrier `NativeText` SHALL have a single capacity C in bytes, a named constant of the carrier module, with C a candidate of 32 or 64. It SHALL hold the owner's `TextProfile`, the payload bytes with their length and the retained-sequence bytes with their length (`usize` lengths, each at most C), SHALL be `Copy`, SHALL have no drop glue and SHALL own no heap type.
 2. The carrier SHALL hold every byte at an index at or after its length as zero. Construction SHALL zero-fill, so that two carriers of one text are equal bytewise, and the replacement of Behavior 6 SHALL read no index at or after a length.
-3. The proof-path constructor SHALL have the signature `NativeText::from_admitted(text_type: TextType, payload: &[u8], retained: &[u8]) -> Result<NativeText, NativeTextRefusal>`, where `NativeTextRefusal` is a closed enum with the variants `PayloadExceedsCapacity` and `NotAdmitted(TextNotAdmittedCause)`. The accept or refuse decision and the cause `NotAdmitted` carries are FR-399's. Its host-callable form is Behavior 7.
+3. The proof-path constructor SHALL have the signature `NativeText::from_admitted(text_type: TextType, payload: &[u8], retained: &[u8]) -> Result<NativeText, NativeTextRefusal>`, where `NativeTextRefusal` is a closed enum with the variants `PayloadExceedsCapacity` and `NotAdmitted(TextNotAdmittedCause)`. The accept or refuse decision and the cause `NotAdmitted` carries are FR-399's. Its host-callable form is Behavior 7. The payload and the retained sequence SHALL already be admitted by the owner's admission, so valid UTF-8 for `unicode-scalars` and `binary-utf8`; the constructor SHALL NOT re-validate UTF-8 for those two proof-path profiles (not Kani-tractable), and the host-only decision for the four normalizing profiles refuses parts that are not UTF-8 with `RetainedNotNormalForm`.
 
 ### Capacity and refusal
 
@@ -73,7 +73,7 @@ A Kani proof over `std` `chars()` or UTF-8 validation is not tractable (measured
 
 ## Status
 
-Planned (IR-1445). No Rust, test, probe or proof exists. C is not yet fixed. FR-399 (Description, Behaviors 4 and 5, AC-6, AC-7) and FR-401 (Description, Relation, Dependencies) now point to this requirement as the owner of the carrier and carry a `depends_on` edge to it; their criteria are unchanged. The substitution wording of CG FR-052 is CG's to align.
+Implemented except AC-7 and AC-9 (open, owner pending planner ruling): C = 64, the largest candidate VERIFIED by the local probe (TC-952 evidence record). Not Done: no Behavior 10 record exists because the FR-401 normalization is not in the kernel, so the four normalizing profiles are unsupported on the proof path meanwhile. FR-399-AC-6 and FR-399-AC-7 are active now that the carrier exists and are untagged (owner pending planner ruling). The constructor's parts must already be admitted by the owner, so valid UTF-8: the proof-path profiles do not re-validate it, and the host-only normalizing profiles refuse non-UTF-8 parts with `RetainedNotNormalForm`. The host-only constructor decision for the normalizing profiles in `src/native_text/normal_form.rs` is outside the AC-5 clean scan and covered by an exact listed-violations assertion (TC-952). FR-399 (Description, Behaviors 4 and 5, AC-6, AC-7) and FR-401 (Description, Relation, Dependencies) now point to this requirement as the owner of the carrier and carry a `depends_on` edge to it; their criteria are unchanged. The substitution wording of CG FR-052 is CG's to align.
 
 ## Dependencies
 

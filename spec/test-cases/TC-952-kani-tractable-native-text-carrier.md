@@ -47,7 +47,7 @@ Verify FR-404-AC-1 through FR-404-AC-9 through the public kernel API, the host d
 
 ## Evidence record
 
-This section is the versioned home of the Kani measurement rows that FR-404-AC-7, AC-8 and AC-9 consume; it is copied from a local, unversioned tractability table. Columns: operation, outcome, wall time, peak memory, Kani version, harness id. A dash means the peak was not recorded. Rows marked PENDING are to be filled by the executed runs of steps 5 and 6 and are not evidence until filled.
+This section is the versioned home of the Kani measurement rows that FR-404-AC-7, AC-8 and AC-9 consume; it is copied from a local, unversioned tractability table. Columns: operation, outcome, wall time, peak memory, Kani version, harness id. A dash means the peak was not recorded. The probe rows are executed runs: Kani 0.68.0, CBMC 6.11.0, `cargo kani --harness <id> --exact --unwind 129 --jobs 1 --solver cadical`, one job under `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`; wall time is Kani's reported verification time (total wall including the build was 107.2 s and 51.4 s); peak memory is the scope's cgroup `memory.peak`; each run satisfied 3 of 3 cover properties and fits the 16 GiB ceiling. Both probe rows were measured at source revision cf32ace5 (the `compare_native_text` path and the harness are unchanged since; only the constructor's UTF-8 refusal changed, which the harness does not call). The scope held the whole `cargo kani` invocation, so `memory.peak` includes the compile step as well as CBMC and is an upper bound on the solver's peak; a reviewer rerun with a cached build read 3850371072 bytes at C = 64. C = 64 is the largest VERIFIED candidate. The FR-401 row is NOT RUN, so the normalizing profiles are unsupported on the proof path (FR-404 Behavior 10).
 
 | Operation | Outcome | Wall time | Peak memory | Kani version | Harness id |
 | --- | --- | --- | --- | --- | --- |
@@ -58,9 +58,9 @@ This section is the versioned home of the Kani measurement rows that FR-404-AC-7
 | Byte-loop ordering, at most 32 bytes | VERIFIED | 1.6 s | - | 0.68.0 | p-text-order_loop_vs_slice_32 |
 | `std` UTF-8 validation of ASCII, at most 32 bytes | TIMEOUT | 600.9 s | 5891395584 bytes | 0.68.0 | p-text-utf8_std_accepts_ascii_32 |
 | `std` scalar count, at most 8 bytes | TIMEOUT | 600.6 s | 4044283904 bytes | 0.68.0 | p-text-char_count_bounds_8 |
-| Probe harness of FR-404 Behavior 9, C = 64 | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Probe harness of FR-404 Behavior 9, C = 32 | PENDING | PENDING | PENDING | PENDING | PENDING |
-| FR-401 normalization at the chosen C | PENDING | PENDING | PENDING | PENDING | PENDING |
+| Probe harness of FR-404 Behavior 9, C = 64 | VERIFIED | 103.0 s | 3796357120 bytes | 0.68.0 | native_text_kani_proofs::native_text_compare_matches_slice_order |
+| Probe harness of FR-404 Behavior 9, C = 32 | VERIFIED | 49.2 s | 2419408896 bytes | 0.68.0 | native_text_kani_proofs::native_text_compare_matches_slice_order |
+| FR-401 normalization at the chosen C | NOT RUN | - | - | 0.68.0 | none: the FR-401 proof-path normalization is not implemented in the kernel; owner pending planner ruling |
 
 ## Expected Results
 
@@ -68,4 +68,8 @@ The carrier holds up to C bytes with a zero tail and refuses every longer payloa
 
 ## Status
 
-Not run. No carrier, probe or harness exists.
+Executed for AC-1 through AC-6 and AC-8 (host tests `tests/ir1445_native_text.rs` and the two probe rows). AC-7 and AC-9 are open: no Behavior 10 record exists because the FR-401 normalization is not in the kernel, and no test claims either criterion. The four normalizing profiles are unsupported on the proof path meanwhile. Owner of AC-7 and AC-9: pending planner ruling.
+
+FR-399-AC-6 and FR-399-AC-7 become active now that the carrier exists. They are untagged: their owner IR-1499 is Done with a spec-only change, and the host `Text::from_admitted` they compare against does not exist, so no test here honestly claims them. Owner: pending planner ruling.
+
+Scan exemption (AC-5): `src/native_text/normal_form.rs` holds the host-only constructor decision that uses `std` UTF-8 validation and the owner's normalization, for the four normalizing profiles only (the profiles the proof path does not support). It is scanned in `host_only_gate_has_exactly_the_declared_violations`, which asserts its exact violations; `src/native_text.rs` scans clean. The constructor's precondition is that its parts were already admitted by the owner (valid UTF-8): the two proof-path profiles do not re-validate UTF-8 (not Kani-tractable), and the four normalizing profiles, host-only, refuse non-UTF-8 parts with `RetainedNotNormalForm`. `compare_native_text` maps its decided ordering to the operator's truth value with the owner's `ComparisonOperator::holds`, which decides neither equality nor order; the independent reference of the differential and the harness's slice `==` and `cmp` are separate.
