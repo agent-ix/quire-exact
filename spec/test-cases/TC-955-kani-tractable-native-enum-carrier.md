@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-407-AC-1 through FR-407-AC-9 through the public kernel API, a host differential beside the owner's `compare_enum` and the recorded Kani measurement. The differential runs where both the owner and the kernel are visible. Each mutant names the input or inspection that fails it.
+Verify FR-407-AC-1 through FR-407-AC-9 through the public kernel API, a literal-charge test, the owner differential and the recorded Kani measurement. The differential lives in quire-semantic-value's `tests/` under its own QSV ticket; quire-exact cannot depend on it. Each mutant names the input or inspection that fails it.
 
 ## Test Procedure
 
@@ -19,8 +19,8 @@ Verify FR-407-AC-1 through FR-407-AC-9 through the public kernel API, a host dif
 2. For AC-2, call `from_index` with `(count - 1, count)`, `(count, count)`, `(count + 1, count)`, `(u32::MAX, 3)` and `(0, 0)` and assert the refusal or the carrier as stated, with a `Meter`-free signature (coerce to a function pointer).
 3. For AC-3, for an ordered and an unordered `EnumShape` of three members assert `from_member` equals `from_index` for each member; assert `MemberNotInShape` for a wrong rank and for a foreign variant of the same rank.
 4. For AC-4 and AC-5, evaluate the six operators over every ordered pair of three members for an ordered and an unordered declaration with literals written independently of the carrier; then operands with different tags, with the same tag and a different count, and with the same tag and a different ordered flag, and an ordering over an unordered declaration paired with distinct declarations (cause precedence), each against a recording `Meter` that stays unchanged.
-5. For AC-6 and AC-7, run the differential of FR-407 Behavior 10 beside the owner's `compare_enum` (an ordered and an unordered declaration of 1, 2, 3 and 16 members, tags assigned one per owner declaration node), comparing outcome, cause, charge points with limit kinds and amounts, the denied charge, counters and the incomplete record at a sufficient, an exact and a one-less limit.
-6. For AC-8, scan the comparison source for the banned tokens and callees of FR-407 Behavior 8; run the scan over one seeded violating copy per banned construct.
+5. For AC-6, inside quire-exact, run every operator over a three-member ordered declaration under a recording `Meter` at a sufficient, an exact and a one-less limit for each limit kind used, and compare the charge points, limit kinds, amounts, denied charge and incomplete record with literals written independently of the carrier. For AC-7, in quire-semantic-value `tests/` (own QSV ticket, after the carrier is on quire-exact main), run the differential of FR-407 Behavior 10 beside the owner's `compare_enum`: an ordered and an unordered declaration of 1, 2, 3 and 16 members, one tag per distinct (declaration key, ordered flag, member list), two owner values with one key and different same-length member lists, and a `Meter` at the three limits, comparing outcome, cause, charges, denied charge, counters and incomplete record.
+6. For AC-8, scan the comparison source for the banned tokens of FR-407 Behavior 8; run the scan over one seeded violating copy per banned construct.
 7. For AC-9, once the code lead authorizes the run, execute the harness of FR-407 Behavior 9 under the authorized Kani runner and record time, peak memory with provenance, tool version and outcome in the evidence record below; confirm every cover is reached and the mutant fails it. Until then this step is not executable.
 8. Run each mutant through the step it names.
 
@@ -28,18 +28,17 @@ Verify FR-407-AC-1 through FR-407-AC-9 through the public kernel API, a host dif
 
 | Mutant | Fails at |
 | --- | --- |
-| `Less` is evaluated as `LessOrEqual` | the equal-rank pair of step 4 |
+| `Less` is evaluated as `LessOrEqual` | the equal-rank pair of step 4 and the differential of step 5 |
 | `Equal` compares the declaration tag instead of the rank | the unequal-rank pair of step 4 |
 | An ordering over an unordered declaration returns a Boolean | the unordered case of step 4 |
 | The distinct-declaration check runs after the unordered check | the cause-precedence case of step 4 |
-| The distinct-declaration check ignores the member count or the ordered flag | the differing-count and differing-flag operands of step 4 |
-| The first `EnumIdentityRead` charges size 2 | the charge comparison of step 5 |
-| `EnumResultRetain` is charged before the comparison or not at all | the charge comparison of step 5 |
+| The distinct-declaration check ignores the member count or the ordered flag | the differing-count and differing-flag operands of step 4 and the differential |
+| The first `EnumIdentityRead` charges size 2 | the literal charge test of step 5 (AC-6) and the differential |
+| `EnumResultRetain` is charged before the comparison or not at all | the literal charge test of step 5 (AC-6) and the differential |
 | A refused call charges the `Meter` | the unchanged-`Meter` check of step 4 |
 | `from_index` accepts `index == member_count` | step 2 |
 | `from_index` wraps a large index modulo the count | the `(u32::MAX, 3)` case of step 2 |
 | `from_member` does not check the rank | the wrong-rank member of step 3 |
-| The comparison delegates to `compare_enum` | the call scan of step 6 |
 | The comparison body is selected by `cfg(kani)` | the token scan of step 6 |
 | The carrier owns a `Box<str>` | step 1 |
 
