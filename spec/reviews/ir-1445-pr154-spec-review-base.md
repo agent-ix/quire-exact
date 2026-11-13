@@ -68,6 +68,12 @@ CHANGES REQUIRED: three high findings (undefined K-DR budget decides C; replacem
 | FND-009 | low | B9 asserts that the returned boolean equals slice == and cmp, but compare_native_text returns Outcome<bool> under a Meter (B6), and an exhausted budget yields no boolean. The probe does not state the meter it passes. Fix: state a meter large enough that every point C bytes can reach is affordable (or assert over the Outcome's value variant). | spec/functional/FR-404-kani-tractable-native-text-carrier.md:57 |
 | FND-010 | low | With zero tails (B2), a replacement that compares all C bytes and ignores the lengths differs from the shipped function only on pairs like "a" against "a\u{0}". The host differential's pairs (last byte, proper prefix, distinct profiles) do not include one, so B2's read rule is checked only by the binary-utf8 Kani probe. Add a proper-prefix pair whose longer operand ends in U+0000 to AC-4 and a TC-952 mutant. | spec/functional/FR-404-kani-tractable-native-text-carrier.md:67 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-011 | low | FR-404-AC-4 and TC-952's new mutant row ('The replacement reads or ignores bytes at or after a length' fails at 'the pair x and x followed by one U+0000 byte (step 3)') name a pair that TC-952 Test Procedure step 3 does not list (it lists last-byte, proper-prefix and distinct-profile pairs only), so the procedure does not build the input its mutant table relies on. Add the pair to step 3. (Also a double space in AC-4 before 'and operands'.) | spec/test-cases/TC-952-kani-tractable-native-text-carrier.md:20 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -79,3 +85,6 @@ CHANGES REQUIRED: three high findings (undefined K-DR budget decides C; replacem
 | FND-005 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
 | FND-006 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
 | FND-007 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-008 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
+| FND-009 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
+| FND-010 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |

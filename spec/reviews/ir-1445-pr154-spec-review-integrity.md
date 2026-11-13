@@ -72,3 +72,5 @@ CHANGES REQUIRED: two medium, one low. On the dispatching lead's question: yes, 
 | FND-001 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
 | FND-002 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
 | FND-003 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-004 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
+| FND-005 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
