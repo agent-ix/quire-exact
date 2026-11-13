@@ -1,0 +1,77 @@
+---
+id: SR-17940486709564847047755
+title: "IR-1446 PR #155 FR-405 criterion-strength analysis (manual)"
+type: SpecReview
+analysis: criterion-strength
+date: 2026-11-13
+scope: "agent-ix/quire-exact PR #155 at 236b0ff0; IR-1446; spec/functional/FR-405-kani-tractable-native-float-carrier.md, spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md"
+review_set: subset
+relationships:
+  - target: ix://agent-ix/quire-exact/FR-405
+    type: reviews
+  - target: ix://agent-ix/quire-exact/TC-953
+    type: reviews
+---
+
+## Summary
+
+Ticket: IR-1446. Manual criterion-strength pass over FR-405-AC-1..AC-13 and the TC-953 mutant table. Jev (typesafe.ai System One) was not available in this environment (no `jev` client on PATH), so no calibrated semantic judgment was used. Each AC was judged by hand on whether some delivered implementation could fail it.
+
+## Verdict
+
+AC-1..AC-7 and AC-13 can each fail on a concrete input or inspection. AC-1: `1 << 32` must be refused, not masked. AC-2: a cross-width call must leave the Meter unchanged. AC-3..AC-5: owner equality at sufficient, exact and one-less limits. AC-6: counting allocator. AC-7: call-graph inspection. AC-13: a per-operation status record. Each needs an executed verdict: AC-10 and AC-13 say outright that a harness with no executed VERIFIED verdict is inconclusive and never a pass. AC-11 cannot fail because its threshold is undefined (high). AC-10's expected side may be weaker than the owner. AC-9's probe is undefined and its gate does not match the scope it opens. AC-8's mutant list is short of Behavior 10.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | high | AC-11 (and Behavior 12, TC-953 step 8 and Expected Results) gate on 'the K-DR memory budget', which no artifact in this repo or in CG defines as a figure. The only other use is a label in FR-401:22, and the IR-1444 review (FND-003) already flagged it as undefined. 'Within the K-DR budget' has no threshold, so no recorded peak can fail it. Name the figure: the 16 GiB per-request ceiling of CG FR-028, which FR-405 already lists in Dependencies, as FR-402-AC-11 does. Or drop the fit claim and record peaks only ('states no memory budget and claims no fit', as FR-402 Behavior 10 does). | spec/functional/FR-405-kani-tractable-native-float-carrier.md:78 |
+| FND-002 | medium | AC-10/Behavior 11 allow the expected side to be 'the property statements of IEEE 754 for the operation'. A property set (sign rule, monotonicity, error bound) does not determine every result bit, the NaN payload the owner defines, the flags, the outcome kind or the charge sequence. A native body with a wrong tie rule or a wrong charge order can therefore pass a property harness, and the AC-10 VERIFIED verdict would not refine the owner. Require the expected side to determine the full outcome (bits, flags, outcome kind and charges), as a separately written reference does, or list exactly which outputs a property harness covers and leave the rest to AC-8. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:77 |
+| FND-003 | medium | The Binary64 probe does not define its harness: what is checked, against which expected side, under which rounding spellings and meter limits. A trivial harness would 'reach VERIFIED' and put Binary64 in scope. The gate also tests only add and mul, but the result brings the whole width into scope ('Binary64 is in scope only if both returned VERIFIED'). Binary64 subtract, divide (53+-step restoring division) and the comparisons then fall under AC-10, which requires VERIFIED with no fallback. A Binary64 divide harness that times out then fails AC-10 permanently, even though the probe 'passed'. Make the probe harnesses the AC-10 harnesses for Binary64 add and mul. Then state either that every Binary64 operation is gated on its own probe, or that an in-scope operation whose AC-10 harness is inconclusive is refused like an out-of-scope width. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:76 |
+| FND-004 | medium | Behavior 10 requires mutants for 'the rounding increment of each mode, ... the overflow result of each mode, ... each flag, ... each charge point'. AC-8 accepts 'the mutants of Behavior 10', but TC-953's table is short of that list. The overflow result has one mutant (toward-zero only). There is no mutant for the `overflow` flag, none for the toward-zero increment, and only one generic row for all charge points. It also has no mutant for any comparison (NumericEqual -0 == +0, NaN unordered, TotalOrder NaN sign and payload order, BitIdentical), for Negate, or for provenance. A table short of the Behavior lets AC-8 pass while those sites go unchecked. Complete the table, one row per site, each with its distinguishing input. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:75 |
+| FND-005 | low | Behavior 5 says native results equal the owner's 'for every operand pair and mode', but no criterion checks that. The host differential covers a boundary grid (AC-3/AC-4/AC-8), and the Kani proof compares against an independent expected side, not the owner (AC-10). Universal equality with the owner follows only if the expected side is itself proved or tested equal to the owner. State the limit, as CG FR-053-AC-13 does ('covers these inputs and not every operand pair'), or say how the expected side is tied to the owner. | spec/functional/FR-405-kani-tractable-native-float-carrier.md:47 |
+
+## Scope
+
+| Unit | Role | Location | Excerpt |
+| --- | --- | --- | --- |
+| FR-405-AC-1 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:68 | The carrier is `Copy`, has no drop glue and holds no owner or heap type; the constructor refuses a `Binary32` pattern above `u32::MAX` (for example `1 << 32`) and never masks it to `0`; `0.0` and `-0.0`, and two NaN payloads, are unequal under structural equality; the conversions to and from `Iee... |
+| FR-405-AC-2 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:69 | The native evaluation supports exactly Negate, Add, Subtract, Multiply and Divide and the native comparison exactly NumericEqual, TotalOrder and BitIdentical; a cross-width call is `ill_typed` and a `Meter` presented to it is unchanged; there is no native entry for square root, fused multiply-add... |
+| FR-405-AC-3 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:70 | For each of the five rounding modes and `Exact`, the native result bits equal the owner's on the tie and one-ulp-off-tie operands of each mode, including the overflow result of each mode (infinity or the largest finite), the exact-zero sum sign, and subnormal results; the `Exact` refusal carries ... |
+| FR-405-AC-4 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:71 | The flag set equals the owner's on the whole boundary grid, including `invalid` from a NaN-producing operation, `divide_by_zero` from a finite nonzero over zero, `overflow`, `underflow` and `inexact`; and the NaN result equals the owner's in sign, quietness and payload. |
+| FR-405-AC-5 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:72 | The charge points, their order, limit kinds and amounts, the denied charge and the incomplete record equal the owner's at a sufficient, an exact and a one-less limit for every boundary case; an ill-typed call charges nothing. |
+| FR-405-AC-6 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:73 | The proof-path bodies contain no `num_bigint` item, no owner `Integer`, `Rational` or `Vec`, no `cfg(kani)` token, no data-dependent loop and no iterator adapter, and any fixed-count step sequence is stated by its count; a counting allocator around the native operations over the boundary grid obs... |
+| FR-405-AC-7 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:74 | The native operations are callable in a host build (a host test calls each), are one source for the host and `cfg(kani)` builds, and are a separate implementation from the owner: no native body calls `evaluate_ieee`, `compare_ieee` or any `Rational`-based owner helper, and the expected side of ev... |
+| FR-405-AC-8 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:75 | The host differential of Behavior 9 passes on the full boundary grid, each of the six rounding spellings and each operation, and the mutants of Behavior 10 each fail the differential at the step TC-953 names; a mutant with no distinguishing input is rejected. |
+| FR-405-AC-9 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:76 | The width set is explicit and evidenced: the 10-minute probe of `Binary64` addition and multiplication under Kani is executed and its terminal verdict, wall time, peak memory and tool version are recorded. `Binary64` is in scope only if both returned VERIFIED within the limit; otherwise `Binary64... |
+| FR-405-AC-10 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:77 | For each in-scope width, a Kani harness per operation and per comparison proves the native operations over all operand bit patterns, all six rounding spellings and all meter limits against an independent expected side, each with an executed terminal VERIFIED verdict, a vacuity cover and a failing... |
+| FR-405-AC-11 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:78 | The peak memory of every harness of AC-10 is recorded with its provenance and is within the K-DR memory budget; a configured ceiling or a prediction is not accepted as the record. |
+| FR-405-AC-12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:79 | CG's float row (CG FR-053) draws its operands through the carrier and its host differential (CG FR-053-AC-13) runs the native operations against the shipped owner with the boundary coverage and the mutants of AC-8; the composed harness's peak memory, time, tool version and terminal outcome are re... |
+| FR-405-AC-13 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:80 | No proof is claimed for a width, operation or comparison whose AC-10 harness has no executed VERIFIED verdict, and the status records, per operation and width, the verdict or the absence of one. |
+| FR-405-B5 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:47 | 5. For every operand pair and mode, the completed result bits, including the sign of zero, the overflow result of each mode, the subnormal results and the NaN produced (payload and quietness as the owner defines them), the flag set (`invalid`, `divide_by_zero`, `overflow`, `underflow`, `inexact`)... |
+| FR-405-B8 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:53 | 8. The required width is `Binary32`. `Binary64` addition and multiplication SHALL be in scope for this requirement only if a probe of them under Kani, with a 10-minute wall-clock limit per harness, reaches a terminal verdict of VERIFIED within that limit, recorded with its peak memory and tool ve... |
+| FR-405-B10 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:58 | 10. The differential SHALL be able to fail. The tests SHALL include buildable mutants of the native bodies, each paired with the input that fails it, over at least: the rounding increment of each mode, the tie rule, the sticky bit, the subnormal boundary, the overflow result of each mode, the sig... |
+| FR-405-B11 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:59 | 11. A Kani harness SHALL prove the native `Binary32` operations and comparisons over all operand bit patterns, rounding modes and meter limits against an expected side that does not share a body with the native operation (a separately written reference, or the property statements of IEEE 754 for ... |
+| FR-405-B12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:60 | 12. The peak memory of every harness of Behavior 11 SHALL be within the K-DR memory budget. No fit is claimed from a prediction or a configured ceiling; the claim is the recorded peak. |
+| TC-953-Mutants | examined | spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md:33 | / Mutant (site) / Distinguishing input / Fails at / / --- / --- / --- / / The tie rule of nearest-even is nearest-away / a tie operand pair whose even neighbour is the lower value / step 3 / / Nearest-away rounds ties to even / a tie whose larger-magnitude neighbour is odd / step 3 / / Toward-pos... |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | The charge-point mutants cover the operand points, the result charge and ordering, but not the owner's `ieee.exact-intermediate` and `ieee.round` charges (src/ieee.rs:1083, 1147). They also do not cover those charges being made on a classification-decided input (NaN, infinity, division by zero), or an arity amount wrong for SquareRoot (1) or FusedMultiplyAdd (3). CG FR-053-AC-10 (b) and (c) name exactly these. Behavior 18 now defers to 'one mutant per site of TC-953's table', so nothing outside the table checks whether it is complete. Add the rows. | spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md:60-62 |
+
+## Dispositions
+
+Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
+
+Rows for the disposition-pass-1 new findings are round 2, against PR #155 head 48a9f0b5 (fix commit 48a9f0b).
