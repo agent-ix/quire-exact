@@ -76,7 +76,7 @@ A generated harness for `a + b`, each operand a `quire.op.quantity.convert` of a
 
 ## Status
 
-Planned (IR-1443). No implementation, proof result or measurement exists; this specification claims none.
+Implemented (IR-1443) for the constructor, the read-out and the host tests of AC-1 to AC-9: `NativeQuantity::from_bindings`, `QuantityBindings`, `NativeQuantityRefusal`, `tests/ir1443_native_quantity.rs` and the in-crate grid in `src/native_quantity/tests.rs`. AC-10: the three Kani proofs (`native_quantity_int_matches_reference`, `native_quantity_decimal_matches_reference`, `native_quantity_rational_matches_reference`) are written and compile under `cargo kani --only-codegen`; proof written, not executed, and no verdict is recorded. The host binding of the reference to the owner route is tested. AC-11 waits for CG's composed harness (IR-263); no measurement exists and no fit is claimed.
 
 ## Dependencies
 

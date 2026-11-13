@@ -77,4 +77,4 @@ Every boundary binding yields the independently written magnitude or the named r
 
 ## Status
 
-Planned. No implementation, test, proof or measurement has run.
+Steps 1 to 4 have run on the host: `tests/ir1443_native_quantity.rs`, the module doctests (AC-9 `compile_fail,E0308`) and `src/native_quantity/tests.rs`. The mutants of step 6 were not built and run one by one. Step 5: the host binding of each reference to the owner route has run; the three Kani proofs are written, not executed. Step 7 (AC-11) is not executable until CG's IR-263 delivers its harness; no measurement has run.
