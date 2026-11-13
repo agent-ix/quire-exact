@@ -1,5 +1,5 @@
 ---
-id: SR-17940486709564847047754
+id: SR-17940486709564847047760
 title: "IR-1445 PR #154 FR-404 base spec review"
 type: SpecReview
 analysis: base
@@ -88,3 +88,4 @@ CHANGES REQUIRED: three high findings (undefined K-DR budget decides C; replacem
 | FND-008 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
 | FND-009 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
 | FND-010 | fixed | Round 2 (head c3cf81e8): verified in fix commits fb89fa6 and c3cf81e. |
+| FND-011 | fixed | Round 3 (head a6c4e4d3): step 3 lists the pair; AC-4 double space removed. |

@@ -1,5 +1,5 @@
 ---
-id: SR-17940486709564847047755
+id: SR-17940486709564847047761
 title: "IR-1445 PR #154 FR-404 criterion-strength analysis (manual)"
 type: SpecReview
 analysis: criterion-strength
