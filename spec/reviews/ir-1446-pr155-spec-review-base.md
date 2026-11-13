@@ -85,3 +85,8 @@ Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
 | FND-002 | fixed | - |
 | FND-003 | fixed | - |
 | FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
+| FND-007 | deferred | Ticket-text edit, not a PR change: the lead owns editing the Linear IR-1446 AC (K-DR budget, CG consumption) and has committed to do it; at head 48a9f0b5 the ticket still reads 'Memory stays within the K-DR budget' and 'CG's row harness consumes the carrier'. Does not block merge; the ticket must not be closed against the stale AC. |
+
+Rows for the disposition-pass-1 new findings are round 2, against PR #155 head 48a9f0b5 (fix commit 48a9f0b).

@@ -63,3 +63,6 @@ Round 1, against PR #155 head c4424e48 (fix commit c4424e4 over 236b0ff0).
 | FND-002 | fixed | - |
 | FND-003 | fixed | - |
 | FND-004 | fixed | - |
+| FND-005 | fixed | - |
+
+Rows for the disposition-pass-1 new findings are round 2, against PR #155 head 48a9f0b5 (fix commit 48a9f0b).
