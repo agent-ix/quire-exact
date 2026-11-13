@@ -421,8 +421,13 @@ fn replacement_matches_shipped_compare_over_the_ac14_family() {
 
 #[test]
 #[trace("TC-952", "FR-404-AC-3")]
-fn parts_that_are_not_utf8_refuse_under_every_profile() {
-    for profile in TextProfile::ALL {
+fn normalizing_profiles_refuse_parts_that_are_not_utf8() {
+    for profile in [
+        TextProfile::Nfc,
+        TextProfile::Nfd,
+        TextProfile::Nfkc,
+        TextProfile::Nfkd,
+    ] {
         let text_type = TextType::new(0, 8, profile).unwrap();
         for (payload, retained) in [
             (&b"\xff"[..], &b"\xff"[..]),
@@ -550,7 +555,7 @@ fn without_strings(text: &str) -> String {
     out
 }
 
-const ALLOWED_CALLEES: [&str; 20] = [
+const ALLOWED_CALLEES: [&str; 19] = [
     "Ok",
     "Err",
     "Some",
@@ -570,7 +575,6 @@ const ALLOWED_CALLEES: [&str; 20] = [
     "text_type",
     "is_some",
     "NotAdmitted",
-    "are_utf8",
 ];
 const KEYWORDS: [&str; 8] = ["if", "match", "for", "in", "return", "let", "else", "fn"];
 const BANNED_WORDS: [&str; 14] = [
@@ -669,6 +673,123 @@ fn calls_in(body: &str) -> Vec<String> {
 
 /// Names declared with a slice or array type, so a bare comparison of them is
 /// a memcmp or lexicographic comparison and not an indexed loop.
+/// Names of functions declared to return a byte slice or array reference.
+fn slice_returning_functions(code: &str) -> Vec<String> {
+    defined_functions_with_signature(code)
+        .into_iter()
+        .filter(|(_, signature)| {
+            signature
+                .split("->")
+                .nth(1)
+                .is_some_and(|ret| ret.trim_start().starts_with("&[u8"))
+        })
+        .map(|(name, _)| name)
+        .collect()
+}
+
+fn defined_functions_with_signature(code: &str) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    let mut search = 0;
+    while let Some(at) = code[search..].find("fn ") {
+        let start = search + at;
+        search = start + 3;
+        let name: String = code[start + 3..]
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let end = code[start..]
+            .find('{')
+            .map_or(code.len(), |open| start + open);
+        found.push((name, code[start..end].to_owned()));
+    }
+    found
+}
+
+/// Whether the comparison operand on either side is a call of a
+/// slice-returning function or a `[..]` sub-slice.
+fn through_accessor_or_subslice(
+    chars: &[char],
+    left_end: usize,
+    right_start: usize,
+    slice_fns: &[String],
+) -> bool {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let matching_back = |close: usize, open_ch: char, close_ch: char| {
+        let mut depth = 0;
+        for index in (0..=close).rev() {
+            if chars[index] == close_ch {
+                depth += 1;
+            } else if chars[index] == open_ch {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+        }
+        None
+    };
+    let matching_forward = |open: usize, open_ch: char, close_ch: char| {
+        let mut depth = 0;
+        for (offset, c) in chars[open..].iter().enumerate() {
+            if *c == open_ch {
+                depth += 1;
+            } else if *c == close_ch {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + offset);
+                }
+            }
+        }
+        None
+    };
+    let has_range = |from: usize, to: usize| chars[from..to].windows(2).any(|w| w == ['.', '.']);
+    if left_end > 0 {
+        match chars[left_end - 1] {
+            ')' => {
+                if let Some(open) = matching_back(left_end - 1, '(', ')') {
+                    let mut start = open;
+                    while start > 0 && ident(chars[start - 1]) {
+                        start -= 1;
+                    }
+                    let name: String = chars[start..open].iter().collect();
+                    if slice_fns.contains(&name) {
+                        return true;
+                    }
+                }
+            }
+            ']' => {
+                if let Some(open) = matching_back(left_end - 1, '[', ']') {
+                    if has_range(open, left_end) {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut stop = right_start;
+    while chars
+        .get(stop)
+        .is_some_and(|c| ident(*c) || *c == '.' || *c == ':')
+    {
+        stop += 1;
+    }
+    match chars.get(stop) {
+        Some('(') => {
+            let segment: String = chars[right_start..stop]
+                .iter()
+                .collect::<String>()
+                .rsplit(['.', ':'])
+                .next()
+                .unwrap_or_default()
+                .to_owned();
+            slice_fns.contains(&segment)
+        }
+        Some('[') => matching_forward(stop, '[', ']').is_some_and(|close| has_range(stop, close)),
+        _ => false,
+    }
+}
+
 fn slice_comparisons(code: &str) -> Vec<Violation> {
     let chars: Vec<char> = code.chars().collect();
     let ident = |c: char| c.is_alphanumeric() || c == '_';
@@ -685,6 +806,7 @@ fn slice_comparisons(code: &str) -> Vec<Violation> {
             }
         }
     }
+    let slice_fns = slice_returning_functions(code);
     let mut found = Vec::new();
     for (at, ch) in chars.iter().enumerate() {
         if !matches!(ch, '<' | '>' | '=' | '!') {
@@ -722,7 +844,10 @@ fn slice_comparisons(code: &str) -> Vec<Violation> {
         let bare = |name: &String, next: Option<&char>| {
             slices.contains(name) && !matches!(next, Some('[' | '.' | '('))
         };
-        if bare(&left_name, chars.get(left)) && start < left || bare(&right_name, chars.get(stop)) {
+        if bare(&left_name, chars.get(left)) && start < left
+            || bare(&right_name, chars.get(stop))
+            || through_accessor_or_subslice(&chars, left, right, &slice_fns)
+        {
             found.push(Violation::SliceComparison);
         }
     }
@@ -863,7 +988,6 @@ fn host_only_gate_has_exactly_the_declared_violations() {
         "Callee(\"from_utf8\")",
         "Callee(\"apply\")",
         "Callee(\"chars\")",
-        "Callee(\"is_ok\")",
     ]
     .map(String::from)
     .to_vec();
@@ -952,6 +1076,33 @@ fn scanner_rejects_each_seeded_violation() {
             &Violation::SliceComparison,
         );
     }
+    // Comparisons through accessors and sub-slices.
+    for operator in ["==", "!=", "<", ">", "<=", ">="] {
+        seeded(
+            &base,
+            &format!(
+                "fn seeded(l: &NativeText, r: &NativeText) -> bool {{ l.retained() {operator} r.retained() }}"
+            ),
+            &Violation::SliceComparison,
+        );
+        seeded(
+            &base,
+            &format!(
+                "fn seeded(l: &NativeText, r: &NativeText) -> bool {{ l.payload() {operator} r.payload() }}"
+            ),
+            &Violation::SliceComparison,
+        );
+        seeded(
+            &base,
+            &format!("fn seeded(a: &[u8], b: &[u8]) -> bool {{ a[..] {operator} b[..] }}"),
+            &Violation::SliceComparison,
+        );
+    }
+    seeded(
+        &base,
+        "fn seeded(a: &[u8], b: &[u8]) -> bool { a[1..] == b[..2] }",
+        &Violation::SliceComparison,
+    );
     // The shipped function and the expected-side helpers of the differential.
     for helper in ["compare_text", "admit_text", "reference_holds"] {
         seeded(

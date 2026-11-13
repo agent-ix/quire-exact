@@ -82,3 +82,21 @@ seeded violations through, and FND-003 leaves part of the carrier module out of 
 saying so. FND-004 is a constructor-domain gap. Fix FND-001 to FND-004 in this PR. FND-005 and
 FND-006 are low. The spec-status findings that block merge are in the spec-review-base and
 gap-analysis artifacts.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-007 | high | The FND-004 fix puts `std` UTF-8 validation on the constructor path of the two profiles the proof path supports. `from_admitted` for `binary-utf8` and `unicode-scalars` now calls `normal_form::are_utf8`, which is `core::str::from_utf8` on both parts. TC-952's own row "`std` UTF-8 validation of ASCII, at most 32 bytes" is TIMEOUT at 600.9 s, and FR-404-B7 says CG's Kani harness builds its operands with this constructor, so the supported-profile constructor is no longer Kani-tractable (FR-399-B4: indexed byte loops bounded by C). The TC-952 exemption text ("for the profiles the proof path does not support") and the `host_only_gate_has_exactly_the_declared_violations` doc are now false for `are_utf8`. The probe harness does not catch this because it uses `zero_padded`. Fix: decide UTF-8 validity with an indexed loop over `0..NATIVE_TEXT_CAPACITY` in `src/native_text.rs` (scan-clean), with a host differential against `core::str::from_utf8` (every 1- to 4-byte sequence plus the AC-3 payloads). Alternatively, drop the check and state the UTF-8 precondition on B3 / in the doc, the other option FND-004 named. | src/native_text.rs:73, src/native_text/normal_form.rs:23-26, spec/test-cases/TC-952-kani-tractable-native-text-carrier.md:75 |
+| FND-008 | low | `slice_comparisons` recognises only bare names declared `&[u8]` or `[u8;`. Method-returned and sub-sliced operands still scan clean (probed at 24c41ac2): `l.retained() == r.retained()`, `l.payload() < r.payload()`, `a[..] == b[..]`. These are the carrier's own accessors, so they are the likeliest regression form. Treat a comparison operator with a `)` or `]` operand whose callee is a slice accessor (`payload`, `retained`, `payload_storage`, `retained_storage`) or a range index as a slice comparison, and seed both forms. | tests/ir1445_native_text.rs:672-730 |
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | `calls.pop()` on `!(` removed. The unlisted-callee-then-macro seed is in the test and rejected (probed: `[Callee("unlisted_helper")]`). |
+| FND-002 | fixed | A multiply-and-mask (word-sized hex mask) detection and `slice_comparisons` were added. Seeds now exist for every listed adapter, `from_le/be/ne_bytes`, `read_unaligned`, the `as u64` cast, multiply-and-mask, all six slice operators, `compare_text`, `admit_text`, `reference_holds` and `order`. Probes for mul-mask, `a == b` and `a < b` are now rejected. Residual form: new FND-008. |
+| FND-003 | fixed | `normal_form.rs` is scanned and its exact violation set asserted (`host_only_gate_has_exactly_the_declared_violations`), and the exemption is recorded in FR-404 Status and TC-952 Status. Its rationale is now partly wrong: new FND-007. |
+| FND-004 | fixed | All six profiles refuse non-UTF-8 parts with `RetainedNotNormalForm` (probed; test `parts_that_are_not_utf8_refuse_under_every_profile`). The means chosen introduces new FND-007. |
+| FND-005 | fixed | A comment at the call and a TC-952 Status note record that `holds` maps an already-decided ordering, and that the reference and the harness are separate. |
+| FND-006 | fixed | TC-952 now records that both probe rows were measured at cf32ace5 and that the compare path and the harness are unchanged since. Confirmed: `git diff cf32ace5..24c41ac2` leaves `kani_proofs.rs` and `lib.rs` untouched and changes `compare` only by a comment, so the C = 64 verdict stands. |

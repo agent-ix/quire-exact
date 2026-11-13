@@ -50,9 +50,11 @@ pub struct NativeText {
 impl NativeText {
     /// Build a carrier from parts that were already admitted.
     ///
-    /// The parts must be UTF-8: a payload or retained sequence that is not
-    /// valid UTF-8 was never produced by admission and refuses with
-    /// `RetainedNotNormalForm` under every profile.
+    /// Precondition: the parts were already admitted by the owner's
+    /// admission, so they are valid UTF-8. The two proof-path profiles
+    /// (`unicode-scalars`, `binary-utf8`) do not re-validate UTF-8, which is
+    /// not Kani-tractable; the four normalizing profiles are host-only and
+    /// refuse parts that are not UTF-8 with `RetainedNotNormalForm`.
     ///
     /// A payload or retained sequence longer than the capacity refuses with
     /// [`NativeTextRefusal::PayloadExceedsCapacity`] before any other
@@ -70,7 +72,7 @@ impl NativeText {
         let profile = text_type.profile();
         let normal = match profile.normalization() {
             Some(form) => normal_form::is_retained_of(form, payload, retained),
-            None => normal_form::are_utf8(payload, retained) && same_bytes(payload, retained),
+            None => same_bytes(payload, retained),
         };
         if !normal {
             return Err(NativeTextRefusal::NotAdmitted(

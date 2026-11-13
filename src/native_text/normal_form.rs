@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Host-only decisions of the constructor that use `std`-level UTF-8 and the
-//! owner's normalization: whether both parts are UTF-8, and for the four
-//! normalizing profiles whether `retained` is exactly the owner's
-//! normalization of `payload`. The proof path does not use them; those
+//! Host-only decision of the constructor for the four normalizing profiles:
+//! whether `retained` is exactly the owner's normalization of `payload`, with
+//! `std` UTF-8 validation. The proof path does not use them; those
 //! profiles are unsupported there (FR-404 Behavior 10). The carrier-module
 //! scan of FR-404-AC-5 lists this file's violations as an exemption.
 
@@ -18,9 +17,4 @@ pub(super) fn is_retained_of(form: NormalizationForm, payload: &[u8], retained: 
         return false;
     };
     form.apply(payload).eq(retained.chars())
-}
-
-/// Whether the payload and the retained sequence are both valid UTF-8.
-pub(super) fn are_utf8(payload: &[u8], retained: &[u8]) -> bool {
-    core::str::from_utf8(payload).is_ok() && core::str::from_utf8(retained).is_ok()
 }

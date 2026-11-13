@@ -59,3 +59,11 @@ follows B5 and AC-8. But the Status text claims AC-9, and so Done, while AC-7 ha
 live owner. FND-001 and FND-002 must be fixed in this PR, together with gap-analysis FND-001 (the
 AC-7/AC-9 tags). The fix is text and tracker work only: no new Kani run is required, because AC-7
 cannot be measured until FR-401 exists. FND-003 is low.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | TC-952 Status reads "Executed for AC-1 through AC-6 and AC-8 … AC-7 and AC-9 are open"; FR-404 Status reads "Implemented except AC-7 and AC-9 (open, owner pending planner ruling) … Not Done". |
+| FND-002 | deferred: the owner ruling belongs to the lead and the planner (the relay is down). Merge is acceptable only while IR-1445 stays open as the holding ticket for this AC; the lead must record the ruling on IR-1445 and replace 'owner pending planner ruling' with the ticket id before IR-1445 closes. The row and the Status no longer cite the closed IR-1501 as owner. The unowned state is stated, not hidden, which is acceptable for merge under that condition. |
+| FND-003 | fixed | TC-952 now states that the scope held the whole `cargo kani` invocation, so `memory.peak` includes the compile step and is an upper bound, and it cites the reviewer's 3850371072-byte rerun. |

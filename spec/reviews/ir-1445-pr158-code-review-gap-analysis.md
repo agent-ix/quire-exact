@@ -52,3 +52,12 @@ Not mergeable. AC-1 to AC-6 and AC-8 are bound by real, passing tests. AC-6 and 
 by executed probe rows that reproduce. AC-7 and AC-9 are claimed by binders that cannot fail on the
 current `NOT RUN` record (FND-001, FND-004); that tag inflation must be removed in this PR. FND-002 needs an
 owning-ticket statement. FND-003 is low.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | The AC-7 tag was removed from `normalizing_profiles_are_supported_only_on_a_verified_record`, whose doc now says it is a Behavior 10 consistency check that binds no AC. |
+| FND-002 | deferred: the owner ruling belongs to the lead and the planner (the relay is down). Merge is acceptable only while IR-1445 stays open as the holding ticket for this AC; the lead must record the ruling on IR-1445 and replace 'owner pending planner ruling' with the ticket id before IR-1445 closes. FR-404 and TC-952 Status now state that FR-399-AC-6 and AC-7 are active and untagged and that IR-1499 is spec-only. |
+| FND-003 | fixed | `ac14_family` builds the CG FR-052-AC-14 family at the operand `max` over `Text[0, max]`: L = C, L_b = C - 1, and final-byte, length and first-byte pairs for `binary-utf8` (max C) and `unicode-scalars` (max C/4, a U+1F980 unit, a U+1F981 final-byte variant, a U+5F980 lead variant, a U+20AC L_b unit). Differential test `replacement_matches_shipped_compare_over_the_ac14_family` passes. |
+| FND-004 | fixed | `probe_records_are_executed_and_choose_the_capacity` is now tagged AC-6 and AC-8 only; AC-9 is unclaimed. |
