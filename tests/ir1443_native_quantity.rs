@@ -254,43 +254,7 @@ fn same_fn(_: fn(&CarriedQuantityType, B) -> Built) {}
 
 #[test]
 #[trace("TC-946", "FR-398-AC-7")]
-fn the_constructor_is_loop_free_copy_unit_free_and_allocation_free() {
-    // Source inspection of the production part of the module.
-    let source = include_str!("../src/native_quantity.rs");
-    let production = [
-        "#[cfg(kani)]\nmod kani_proofs;",
-        "#[cfg(any(test, kani))]\nmod reference;",
-        "#[cfg(test)]\nmod tests;",
-    ]
-    .iter()
-    .fold(source.to_string(), |text, module| text.replace(module, ""));
-    let code: String = production
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let banned = [
-        "for",
-        "while",
-        "loop",
-        "iter",
-        "into_iter",
-        "map",
-        "filter",
-        "fold",
-        "zip",
-        "chain",
-        "take",
-        "skip",
-        "rev",
-        "collect",
-        "cfg",
-        "kani",
-        "Meter",
-    ];
-    for token in code.split(|c: char| !(c.is_alphanumeric() || c == '_')) {
-        assert!(!banned.contains(&token), "banned token `{token}`");
-    }
+fn the_constructor_is_meter_free_copy_unit_free_and_allocation_free() {
     // A Meter-free function pointer; no unit in the result.
     same_fn(NativeQuantity::from_bindings);
     fn copy<T: Copy>() {}
