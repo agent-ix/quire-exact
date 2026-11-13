@@ -64,3 +64,13 @@ Checked and found correct:
 | FR-406-AC-5 | examined | bump accompanies outcome/charge change; never lowered |
 | src/accounting.rs | context_only | `AdmittedCharge` fields, `LimitKind`, `ChargeEvent`, work/result unit handling |
 | src/division.rs, src/numeric.rs | context_only | mutation sites |
+
+## Dispositions
+
+Round 1, head 2dc8da75. Verified against `git diff c50883c7..2dc8da75` (commit "IR-1532: record work and result units in the golden grid"). Reviewer runs: `--test ir1532_kernel_version --features test-support -- --include-ignored` passed 4 of 4; `print_observed_grid` output is identical to every `recorded(...)` line; clippy `-D warnings` on the test and `make fmt-check` pass. Mutant R1 (`IntegerArithmeticResultRetain` `.results(1)` to `.results(2)`, src/numeric.rs:289), re-applied in a throwaway detached worktree at 2dc8da75, is now KILLED (`integer.add/subtract/multiply/negate charges ... ResultUnits=2`). A work-units mutant (default `work_units: 1` to `2`, src/accounting.rs:557) is also KILLED. Residual, not a finding: work and result units are compared as per-case consumed totals, so moving units between two charges of one case with the total unchanged would not be seen; amount and limit-kind changes are.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `charges()` now appends `consumed` for every `LimitKind::ALL` member, including `WorkUnits` and `ResultUnits`, to each case's charge string; the grid was re-recorded and the R1 mutant is killed. |
+| FND-002 | fixed | `let _ = LimitKind::ALL;` removed; `LimitKind::ALL` is now used by `charges()`. |
+| FND-003 | fixed | `render_charge` destructures `AdmittedCharge` exhaustively with no `..`, so a new field fails to compile. |

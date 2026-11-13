@@ -49,3 +49,11 @@ Reverse gap: the diff adds one public item, `KERNEL_VERSION`, owned by FR-406. N
 | FR-406-AC-4 | examined | The doc comment names the change classes of Behavior 3 that do and do not require a bump, including the verification-cost class. |
 | FR-406-AC-5 | examined | In the history of a change that alters an operation outcome or charge, a bump of `KERNEL_VERSION` accompanies it, and no change lowers the value. |
 | TC-954 | context_only | Test procedure steps 1-5 and the mutant table |
+
+## Dispositions
+
+Round 1, head 2dc8da75. Verified against `git diff c50883c7..2dc8da75`; see code-review SR-17940486709564847047768 round 1 for the runs and mutants.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The AC-2 test's charge strings now include consumed work and result units for every case; the result-retain mutant at src/numeric.rs:289 is killed. Matrix tagging unchanged (AC-1..3 tagged, AC-4..5 inspection). |
