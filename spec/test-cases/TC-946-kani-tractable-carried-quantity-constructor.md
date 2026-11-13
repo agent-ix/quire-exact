@@ -11,7 +11,7 @@ relationships:
 
 ## Description
 
-Verify FR-398-AC-1 through FR-398-AC-11 through the public kernel API, the host differential, the Kani proofs and the recorded fit measurement. Every mutant below is a real buildable variant of the constructor in a scratch copy of the shared body. Each names the input, or the inspection, that fails it; a mutant that no input and no inspection distinguishes from the unmutated constructor is not admitted. This case is planned; no part of it has run.
+Verify FR-398-AC-1 through FR-398-AC-11 through the public kernel API, the host differential, the Kani proofs and the recorded fit measurement. Every mutant below is a real buildable variant of the constructor in a scratch copy of the shared body. Each names the input, or the inspection, that fails it; a mutant that no input and no inspection distinguishes from the unmutated constructor is not admitted. What has and has not run is stated under Status.
 
 ## Test Procedure
 

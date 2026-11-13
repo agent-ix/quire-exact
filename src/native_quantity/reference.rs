@@ -81,7 +81,7 @@ const TWO_POWERS: [u128; 64] = [
     9_223_372_036_854_775_808,
 ];
 
-/// `5^0` through `5^54`, written out; `5^55` exceeds `u128`.
+/// `5^0` through `5^54`, written out; `5^55` exceeds signed 128 bits.
 const FIVE_POWERS: [u128; 55] = [
     1,
     5,

@@ -15,7 +15,13 @@ use crate::rational::{Rational, RationalDomain};
 
 type Outcome = reference::Outcome;
 
-const COEFFICIENTS: [i64; 20] = [
+const COEFFICIENTS: [i64; 26] = [
+    -5,
+    1000,
+    100_000,
+    1001,
+    -1001,
+    3,
     0,
     1,
     -1,
@@ -38,8 +44,27 @@ const COEFFICIENTS: [i64; 20] = [
     i64::MIN,
 ];
 /// Scales at which the owner route can still build the power of ten.
-const SCALES: [i64; 14] = [-1, 0, 1, 2, 3, 5, 18, 19, 20, 37, 38, 39, 40, 64];
-const BOUNDS: [(i128, i128); 7] = [
+const SCALES: [i64; 16] = [
+    -1,
+    0,
+    1,
+    2,
+    3,
+    5,
+    7,
+    18,
+    19,
+    20,
+    37,
+    38,
+    39,
+    40,
+    64,
+    4_294_967_296,
+];
+const BOUNDS: [(i128, i128); 9] = [
+    (0, 549_755_813_888),
+    (-100, 0),
     (0, 100),
     (-1000, 1000),
     (0, 1),
@@ -48,7 +73,7 @@ const BOUNDS: [(i128, i128); 7] = [
     (i128::MIN, i128::MAX),
     (0, 0),
 ];
-const SCALE_RANGES: [(u32, u32); 7] = [
+const SCALE_RANGES: [(u32, u32); 9] = [
     (0, 0),
     (0, 2),
     (2, 3),
@@ -56,6 +81,8 @@ const SCALE_RANGES: [(u32, u32); 7] = [
     (60, 70),
     (0, 64),
     (64, 64),
+    (128, 130),
+    (0, u32::MAX),
 ];
 
 fn owner_int(lower: i128, upper: i128, value: i64) -> Outcome {
@@ -125,7 +152,7 @@ fn run(shape: &Shape, bindings: QuantityBindings) -> Outcome {
 }
 
 #[test]
-#[trace("TC-946", "FR-398-AC-8", "FR-398-AC-10")]
+#[trace("TC-946", "FR-398-AC-8")]
 fn decimal_reference_and_constructor_agree_with_the_owner_route() {
     for bounds in BOUNDS {
         for scales in SCALE_RANGES {
@@ -153,7 +180,7 @@ fn decimal_reference_and_constructor_agree_with_the_owner_route() {
 }
 
 #[test]
-#[trace("TC-946", "FR-398-AC-8", "FR-398-AC-10")]
+#[trace("TC-946", "FR-398-AC-8")]
 fn int_reference_and_constructor_agree_with_the_owner_route() {
     for (lower, upper) in BOUNDS {
         let shape = Shape::Int(NativeRange { lower, upper });
@@ -165,7 +192,13 @@ fn int_reference_and_constructor_agree_with_the_owner_route() {
     }
 }
 
-const PAIRS: [(i64, i64); 22] = [
+const PAIRS: [(i64, i64); 28] = [
+    (2, 3),
+    (2, 7),
+    (5, 3),
+    (1, 4),
+    (3, 2),
+    (2, 9),
     (0, 1),
     (1, 1),
     (-1, 1),
@@ -191,7 +224,7 @@ const PAIRS: [(i64, i64); 22] = [
 ];
 
 #[test]
-#[trace("TC-946", "FR-398-AC-8", "FR-398-AC-10")]
+#[trace("TC-946", "FR-398-AC-8")]
 fn rational_reference_and_constructor_agree_with_the_owner_route() {
     let ranges = [
         (

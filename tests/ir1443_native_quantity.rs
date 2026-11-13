@@ -305,10 +305,10 @@ fn the_constructor_is_loop_free_copy_unit_free_and_allocation_free() {
     assert_eq!(q.to_quantity(&ty).unit(), ty.unit());
 }
 
+/// Positive control for the `compile_fail,E0308` doctests of the module,
+/// which are the evidence of FR-398-AC-9.
 #[test]
-#[trace("TC-946", "FR-398-AC-9")]
 fn the_constructor_takes_a_carried_quantity_type() {
-    // The compile_fail,E0308 controls are the doctests of the module.
     let ty = int_ty(int(0), int(100));
     assert!(NativeQuantity::from_bindings(&ty, B::Int(1)).is_ok());
 }
