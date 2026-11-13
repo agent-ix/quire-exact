@@ -84,27 +84,47 @@ mod golden {
         }
     }
 
+    /// The ordered admitted charges, then the consumed total of every limit
+    /// kind, so work and result units (which `AdmittedCharge` does not record)
+    /// are part of the record.
     fn charges(meter: &Meter) -> String {
-        meter
+        let admitted = meter
             .admitted_charges()
             .iter()
             .map(render_charge)
             .collect::<Vec<_>>()
-            .join(" ; ")
+            .join(" ; ");
+        let consumed = LimitKind::ALL
+            .iter()
+            .map(|kind| format!("{kind:?}={}", meter.consumed(*kind)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("{admitted} | consumed {consumed}")
     }
 
     fn render_charge(charge: &AdmittedCharge) -> String {
+        let AdmittedCharge {
+            point,
+            integer_bits,
+            decimal_digits,
+            scale_expansion,
+            text_input_bytes,
+            text_scalars,
+            normalized_scalars,
+            unit_edges,
+            value_occurrences,
+        } = *charge;
         let sizes = [
-            ("integer_bits", charge.integer_bits),
-            ("decimal_digits", charge.decimal_digits),
-            ("scale_expansion", charge.scale_expansion),
-            ("text_input_bytes", charge.text_input_bytes),
-            ("text_scalars", charge.text_scalars),
-            ("normalized_scalars", charge.normalized_scalars),
-            ("unit_edges", charge.unit_edges),
-            ("value_occurrences", charge.value_occurrences),
+            ("integer_bits", integer_bits),
+            ("decimal_digits", decimal_digits),
+            ("scale_expansion", scale_expansion),
+            ("text_input_bytes", text_input_bytes),
+            ("text_scalars", text_scalars),
+            ("normalized_scalars", normalized_scalars),
+            ("unit_edges", unit_edges),
+            ("value_occurrences", value_occurrences),
         ];
-        let mut rendered = format!("{:?}", charge.point);
+        let mut rendered = format!("{point:?}");
         for (kind, amount) in sizes {
             if let Some(amount) = amount {
                 rendered.push_str(&format!(" {kind}={amount}"));
@@ -359,7 +379,7 @@ mod golden {
                 EffectiveId::new(None, OriginalDeclarationKey::new("acme/orders", "Order")),
                 ObjectId::new("o1").unwrap()
             ),
-            charges: String::new(),
+            charges: charges(&meter()),
         });
 
         // Operand bits equal the limit, so the operands charge is admitted at
@@ -367,7 +387,6 @@ mod golden {
         grid.push(case("meter.denied-at-exact-limit", limits(4), |m| {
             evaluate_integer_arithmetic(IntegerArithmetic::Add(&n(15), &n(1)), None, m)
         }));
-        let _ = LimitKind::ALL;
         grid
     }
 
@@ -401,39 +420,39 @@ mod golden {
 
     fn golden() -> Vec<Case> {
         vec![
-recorded("integer.add", "Completed(Integer(9))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=4 ; IntegerArithmeticResultRetain"),
-recorded("integer.subtract", "Completed(Integer(5))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=4 ; IntegerArithmeticResultRetain"),
-recorded("integer.multiply", "Completed(Integer(14))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=5 ; IntegerArithmeticResultRetain"),
-recorded("integer.negate", "Completed(Integer(-7))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=1 ; IntegerArithmeticArithmetic integer_bits=3 ; IntegerArithmeticResultRetain"),
-recorded("integer.divide.truncating", "Completed(Integer(-3))", "IntegerDivisionOperands integer_bits=3 value_occurrences=2 ; IntegerDivisionArithmetic integer_bits=3 ; IntegerDivisionDomain value_occurrences=1 ; IntegerDivisionResultRetain"),
-recorded("integer.divide.floor.remainder", "Completed(Integer(1))", "IntegerDivisionOperands integer_bits=3 value_occurrences=2 ; IntegerDivisionArithmetic integer_bits=3 ; IntegerDivisionDomain value_occurrences=1 ; IntegerDivisionResultRetain"),
-recorded("integer.modulo", "Completed(Integer(1))", "IntegerModulusOperands integer_bits=3 value_occurrences=2 ; IntegerModulusArithmetic integer_bits=3 ; IntegerModulusDomain value_occurrences=1 ; IntegerModulusResultRetain"),
-recorded("integer.divide.by-zero", "Undefined(DivisionByZero)", "IntegerDivisionOperands integer_bits=3 value_occurrences=2"),
-recorded("integer.modulo.by-zero", "Undefined(DivisionByZero)", "IntegerModulusOperands integer_bits=3 value_occurrences=2"),
-recorded("compare.Equal", "Ok(Completed(false))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("compare.NotEqual", "Ok(Completed(true))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("compare.Less", "Ok(Completed(false))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("compare.LessOrEqual", "Ok(Completed(false))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("compare.Greater", "Ok(Completed(true))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("compare.GreaterOrEqual", "Ok(Completed(true))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("quantity.unit-mismatch", "Err(IllTyped { cause: DistinctUnits })", ""),
-recorded("ordering.integers", "Completed(true)", "OrderingOperands integer_bits=3 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain"),
-recorded("decimal.multiply", "Completed(DecimalResult { value: Decimal { representation: DecimalRepresentation { coefficient: Integer(375), scale: 2 }, normalized: DecimalRepresentation { coefficient: Integer(375), scale: 2 } }, loss: None })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=2 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=9 decimal_digits=4 ; DecimalResultRetain integer_bits=9 decimal_digits=3 scale_expansion=0 value_occurrences=1"),
-recorded("decimal.round-at-tie", "Completed(DecimalResult { value: Decimal { representation: DecimalRepresentation { coefficient: Integer(2), scale: 0 }, normalized: DecimalRepresentation { coefficient: Integer(2), scale: 0 } }, loss: Some(DecimalLoss { exact: ExactLossValue { numerator: Integer(5), cofactor: Integer(1), twos: 1, fives: 0 }, rounded: DecimalRepresentation { coefficient: Integer(2), scale: 0 }, mode: NearestEven }) })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=1 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=5 decimal_digits=2 ; DecimalRounding integer_bits=5 decimal_digits=2 ; DecimalResultRetain integer_bits=2 decimal_digits=1 scale_expansion=0 value_occurrences=1"),
-recorded("native-integer.add", "Completed(NativeInteger(13))", "IntegerArithmeticOperands integer_bits=4 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=5 ; IntegerArithmeticResultRetain"),
-recorded("native-integer.divide", "Completed(NativeInteger(-3))", "IntegerDivisionOperands integer_bits=4 value_occurrences=2 ; IntegerDivisionArithmetic integer_bits=4 ; IntegerDivisionDomain value_occurrences=1 ; IntegerDivisionResultRetain"),
-recorded("native-integer.order", "Completed(true)", "OrderingOperands integer_bits=4 value_occurrences=2 ; OrderingArithmetic integer_bits=4 ; OrderingResultRetain"),
-recorded("native-decimal.add", "Completed(NativeDecimalResult { value: NativeDecimal { coefficient: 400, scale: 2 }, loss: None })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=2 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=6 decimal_digits=3 ; DecimalResultRetain integer_bits=10 decimal_digits=3 scale_expansion=1 value_occurrences=1"),
-recorded("native-decimal.round-at-tie", "Completed(NativeDecimalResult { value: NativeDecimal { coefficient: 2, scale: 0 }, loss: Some(NativeDecimalLoss { numerator: 5, cofactor: 1, twos: 1, fives: 0, rounded: NativeDecimal { coefficient: 2, scale: 0 }, mode: NearestEven }) })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=1 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=5 decimal_digits=2 ; DecimalRounding integer_bits=5 decimal_digits=2 ; DecimalResultRetain integer_bits=2 decimal_digits=1 scale_expansion=0 value_occurrences=1"),
-recorded("rational.reduction", "Completed(Rational { numerator: Integer(1), denominator: Integer(2) })", "RationalArithmeticOperands integer_bits=3 value_occurrences=2 ; RationalArithmeticArithmetic integer_bits=5 ; RationalArithmeticNormalize integer_bits=5 ; RationalArithmeticResultRetain"),
-recorded("ieee.add.inexact-overflow", "Ok(Completed(IeeeResult { value: IeeeValue { width: Binary32, bits: 2139095040 }, flags: IeeeFlags(20), provenance: IeeeProvenance { width: Binary32, rounding: NearestEven } }))", "IeeeOperands integer_bits=32 value_occurrences=2 ; IeeeExactIntermediate integer_bits=32 ; IeeeRound integer_bits=32 ; IeeeResultRetain"),
-recorded("ieee.add.tie-to-even", "Ok(Completed(IeeeResult { value: IeeeValue { width: Binary32, bits: 1065353216 }, flags: IeeeFlags(16), provenance: IeeeProvenance { width: Binary32, rounding: NearestEven } }))", "IeeeOperands integer_bits=32 value_occurrences=2 ; IeeeExactIntermediate integer_bits=32 ; IeeeRound integer_bits=32 ; IeeeResultRetain"),
-recorded("text.compare.prefix", "Ok(Completed(true))", "TextInputBytes text_input_bytes=5 value_occurrences=2 ; TextDecodeScalars text_scalars=5 ; TextNormalizeInput ; TextNormalizeOutput normalized_scalars=1 ; TextNormalizeOutput normalized_scalars=2 ; TextNormalizeOutput normalized_scalars=3 ; TextNormalizeOutput normalized_scalars=4 ; TextNormalizeOutput normalized_scalars=5 ; TextResultRetain"),
-recorded("collection.insert-past-bound", "Ok(Refused(CardinalityOutOfBound { violation: AboveMaximum, kind: Sequence, bound: CardinalityBound { minimum: 1, maximum: 2 }, count: 3 }))", "CollectionBound value_occurrences=3"),
-recorded("collection.typed-prestate", "Ok(Completed(Collection(CollectionValue { collection_type: CollectionType { kind: Sequence, element: Integer, bound: Some(CardinalityBound { minimum: 1, maximum: 2 }) }, elements: [Integer(Integer(1)), Integer(Integer(2))], occ: Integer(3) })))", "CollectionBound value_occurrences=2 ; CollectionResultRetain value_occurrences=3"),
-recorded("identity.construction", "EffectiveId([OriginalDeclarationKey { package: \"acme/orders\", node: \"Order\" }]) ObjectId(\"o1\")", ""),
-recorded("meter.denied-at-exact-limit", "Incomplete(Incomplete { limit_kind: IntegerBits, limit: 4, consumed: 4, next_charge: Integer(5), charge_point: IntegerArithmeticArithmetic })", "IntegerArithmeticOperands integer_bits=4 value_occurrences=2"),
-                ]
+recorded("integer.add", "Completed(Integer(9))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=4 ; IntegerArithmeticResultRetain | consumed IntegerBits=4 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("integer.subtract", "Completed(Integer(5))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=4 ; IntegerArithmeticResultRetain | consumed IntegerBits=4 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("integer.multiply", "Completed(Integer(14))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=5 ; IntegerArithmeticResultRetain | consumed IntegerBits=5 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("integer.negate", "Completed(Integer(-7))", "IntegerArithmeticOperands integer_bits=3 value_occurrences=1 ; IntegerArithmeticArithmetic integer_bits=3 ; IntegerArithmeticResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=1 WorkUnits=3 ResultUnits=1"),
+recorded("integer.divide.truncating", "Completed(Integer(-3))", "IntegerDivisionOperands integer_bits=3 value_occurrences=2 ; IntegerDivisionArithmetic integer_bits=3 ; IntegerDivisionDomain value_occurrences=1 ; IntegerDivisionResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("integer.divide.floor.remainder", "Completed(Integer(1))", "IntegerDivisionOperands integer_bits=3 value_occurrences=2 ; IntegerDivisionArithmetic integer_bits=3 ; IntegerDivisionDomain value_occurrences=1 ; IntegerDivisionResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("integer.modulo", "Completed(Integer(1))", "IntegerModulusOperands integer_bits=3 value_occurrences=2 ; IntegerModulusArithmetic integer_bits=3 ; IntegerModulusDomain value_occurrences=1 ; IntegerModulusResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("integer.divide.by-zero", "Undefined(DivisionByZero)", "IntegerDivisionOperands integer_bits=3 value_occurrences=2 | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=1 ResultUnits=0"),
+recorded("integer.modulo.by-zero", "Undefined(DivisionByZero)", "IntegerModulusOperands integer_bits=3 value_occurrences=2 | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=1 ResultUnits=0"),
+recorded("compare.Equal", "Ok(Completed(false))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("compare.NotEqual", "Ok(Completed(true))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("compare.Less", "Ok(Completed(false))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("compare.LessOrEqual", "Ok(Completed(false))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("compare.Greater", "Ok(Completed(true))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("compare.GreaterOrEqual", "Ok(Completed(true))", "OrderingOperands integer_bits=2 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("quantity.unit-mismatch", "Err(IllTyped { cause: DistinctUnits })", " | consumed IntegerBits=0 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=0 WorkUnits=0 ResultUnits=0"),
+recorded("ordering.integers", "Completed(true)", "OrderingOperands integer_bits=3 value_occurrences=2 ; OrderingArithmetic integer_bits=3 ; OrderingResultRetain | consumed IntegerBits=3 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("decimal.multiply", "Completed(DecimalResult { value: Decimal { representation: DecimalRepresentation { coefficient: Integer(375), scale: 2 }, normalized: DecimalRepresentation { coefficient: Integer(375), scale: 2 } }, loss: None })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=2 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=9 decimal_digits=4 ; DecimalResultRetain integer_bits=9 decimal_digits=3 scale_expansion=0 value_occurrences=1 | consumed IntegerBits=9 DecimalDigits=4 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("decimal.round-at-tie", "Completed(DecimalResult { value: Decimal { representation: DecimalRepresentation { coefficient: Integer(2), scale: 0 }, normalized: DecimalRepresentation { coefficient: Integer(2), scale: 0 } }, loss: Some(DecimalLoss { exact: ExactLossValue { numerator: Integer(5), cofactor: Integer(1), twos: 1, fives: 0 }, rounded: DecimalRepresentation { coefficient: Integer(2), scale: 0 }, mode: NearestEven }) })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=1 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=5 decimal_digits=2 ; DecimalRounding integer_bits=5 decimal_digits=2 ; DecimalResultRetain integer_bits=2 decimal_digits=1 scale_expansion=0 value_occurrences=1 | consumed IntegerBits=5 DecimalDigits=2 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=1 WorkUnits=5 ResultUnits=1"),
+recorded("native-integer.add", "Completed(NativeInteger(13))", "IntegerArithmeticOperands integer_bits=4 value_occurrences=2 ; IntegerArithmeticArithmetic integer_bits=5 ; IntegerArithmeticResultRetain | consumed IntegerBits=5 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("native-integer.divide", "Completed(NativeInteger(-3))", "IntegerDivisionOperands integer_bits=4 value_occurrences=2 ; IntegerDivisionArithmetic integer_bits=4 ; IntegerDivisionDomain value_occurrences=1 ; IntegerDivisionResultRetain | consumed IntegerBits=4 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("native-integer.order", "Completed(true)", "OrderingOperands integer_bits=4 value_occurrences=2 ; OrderingArithmetic integer_bits=4 ; OrderingResultRetain | consumed IntegerBits=4 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=3 ResultUnits=1"),
+recorded("native-decimal.add", "Completed(NativeDecimalResult { value: NativeDecimal { coefficient: 400, scale: 2 }, loss: None })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=2 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=6 decimal_digits=3 ; DecimalResultRetain integer_bits=10 decimal_digits=3 scale_expansion=1 value_occurrences=1 | consumed IntegerBits=10 DecimalDigits=3 ScaleExpansion=1 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("native-decimal.round-at-tie", "Completed(NativeDecimalResult { value: NativeDecimal { coefficient: 2, scale: 0 }, loss: Some(NativeDecimalLoss { numerator: 5, cofactor: 1, twos: 1, fives: 0, rounded: NativeDecimal { coefficient: 2, scale: 0 }, mode: NearestEven }) })", "DecimalOperands integer_bits=5 decimal_digits=2 value_occurrences=1 ; DecimalScaleExpansion scale_expansion=0 ; DecimalArithmetic integer_bits=5 decimal_digits=2 ; DecimalRounding integer_bits=5 decimal_digits=2 ; DecimalResultRetain integer_bits=2 decimal_digits=1 scale_expansion=0 value_occurrences=1 | consumed IntegerBits=5 DecimalDigits=2 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=1 WorkUnits=5 ResultUnits=1"),
+recorded("rational.reduction", "Completed(Rational { numerator: Integer(1), denominator: Integer(2) })", "RationalArithmeticOperands integer_bits=3 value_occurrences=2 ; RationalArithmeticArithmetic integer_bits=5 ; RationalArithmeticNormalize integer_bits=5 ; RationalArithmeticResultRetain | consumed IntegerBits=5 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("ieee.add.inexact-overflow", "Ok(Completed(IeeeResult { value: IeeeValue { width: Binary32, bits: 2139095040 }, flags: IeeeFlags(20), provenance: IeeeProvenance { width: Binary32, rounding: NearestEven } }))", "IeeeOperands integer_bits=32 value_occurrences=2 ; IeeeExactIntermediate integer_bits=32 ; IeeeRound integer_bits=32 ; IeeeResultRetain | consumed IntegerBits=32 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("ieee.add.tie-to-even", "Ok(Completed(IeeeResult { value: IeeeValue { width: Binary32, bits: 1065353216 }, flags: IeeeFlags(16), provenance: IeeeProvenance { width: Binary32, rounding: NearestEven } }))", "IeeeOperands integer_bits=32 value_occurrences=2 ; IeeeExactIntermediate integer_bits=32 ; IeeeRound integer_bits=32 ; IeeeResultRetain | consumed IntegerBits=32 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=4 ResultUnits=1"),
+recorded("text.compare.prefix", "Ok(Completed(true))", "TextInputBytes text_input_bytes=5 value_occurrences=2 ; TextDecodeScalars text_scalars=5 ; TextNormalizeInput ; TextNormalizeOutput normalized_scalars=1 ; TextNormalizeOutput normalized_scalars=2 ; TextNormalizeOutput normalized_scalars=3 ; TextNormalizeOutput normalized_scalars=4 ; TextNormalizeOutput normalized_scalars=5 ; TextResultRetain | consumed IntegerBits=0 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=5 TextScalars=5 NormalizedScalars=5 UnitEdges=0 ValueOccurrences=2 WorkUnits=9 ResultUnits=1"),
+recorded("collection.insert-past-bound", "Ok(Refused(CardinalityOutOfBound { violation: AboveMaximum, kind: Sequence, bound: CardinalityBound { minimum: 1, maximum: 2 }, count: 3 }))", "CollectionBound value_occurrences=3 | consumed IntegerBits=0 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=3 WorkUnits=1 ResultUnits=0"),
+recorded("collection.typed-prestate", "Ok(Completed(Collection(CollectionValue { collection_type: CollectionType { kind: Sequence, element: Integer, bound: Some(CardinalityBound { minimum: 1, maximum: 2 }) }, elements: [Integer(Integer(1)), Integer(Integer(2))], occ: Integer(3) })))", "CollectionBound value_occurrences=2 ; CollectionResultRetain value_occurrences=3 | consumed IntegerBits=0 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=3 WorkUnits=2 ResultUnits=3"),
+recorded("identity.construction", "EffectiveId([OriginalDeclarationKey { package: \"acme/orders\", node: \"Order\" }]) ObjectId(\"o1\")", " | consumed IntegerBits=0 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=0 WorkUnits=0 ResultUnits=0"),
+recorded("meter.denied-at-exact-limit", "Incomplete(Incomplete { limit_kind: IntegerBits, limit: 4, consumed: 4, next_charge: Integer(5), charge_point: IntegerArithmeticArithmetic })", "IntegerArithmeticOperands integer_bits=4 value_occurrences=2 | consumed IntegerBits=4 DecimalDigits=0 ScaleExpansion=0 TextInputBytes=0 TextScalars=0 NormalizedScalars=0 UnitEdges=0 ValueOccurrences=2 WorkUnits=1 ResultUnits=0"),
+        ]
     }
 
     #[test]

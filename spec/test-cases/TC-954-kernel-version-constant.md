@@ -28,6 +28,7 @@ Verify FR-406-AC-1 through FR-406-AC-5 through the public API, a golden outcome 
 | An IEEE add rounds a tie away instead of to even | the IEEE case of step 2 |
 | A division charges one atom fewer | the charge comparison of step 2 |
 | Integer modulo returns the dividend's sign | the modulo case of step 2 |
+| `IntegerArithmeticResultRetain` charges two result units instead of one | the consumed work and result totals of the integer cases of step 2 |
 
 ## Expected Results
 
