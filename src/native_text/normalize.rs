@@ -108,13 +108,19 @@ pub fn normalize_text<const N: usize, const D: usize, const R: usize>(
     if len > N {
         return Err(NormalizeRefusal::LengthAboveCapacity);
     }
-    let compatibility = matches!(form, NormalizationForm::Nfkc | NormalizationForm::Nfkd);
+    let compatibility = match form {
+        NormalizationForm::Nfkc | NormalizationForm::Nfkd => true,
+        NormalizationForm::Nfc | NormalizationForm::Nfd => false,
+    };
     let mut scalars: [u32; D] = [0; D];
     let mut classes: [u8; D] = [0; D];
     let mut count = decompose(compatibility, payload, len, &mut scalars, &mut classes)?;
     reorder(count, &mut scalars, &mut classes);
-    if matches!(form, NormalizationForm::Nfc | NormalizationForm::Nfkc) {
-        count = recompose(count, &mut scalars, &mut classes);
+    match form {
+        NormalizationForm::Nfc | NormalizationForm::Nfkc => {
+            count = recompose(count, &mut scalars, &mut classes);
+        }
+        NormalizationForm::Nfd | NormalizationForm::Nfkd => {}
     }
     let bytes = encode(count, &scalars, output)?;
     Ok(NormalizedSize {
@@ -203,6 +209,7 @@ fn decode<const N: usize>(payload: &[u8; N], position: usize, len: usize) -> Opt
 /// Append `scalar` and its combining class at `count`.
 fn push_one<const D: usize>(
     scalar: u32,
+    class: u8,
     count: usize,
     scalars: &mut [u32; D],
     classes: &mut [u8; D],
@@ -211,7 +218,7 @@ fn push_one<const D: usize>(
         return Err(NormalizeRefusal::ExceedsCapacity);
     }
     scalars[count] = scalar;
-    classes[count] = class_of(scalar);
+    classes[count] = class;
     Ok(count + 1)
 }
 
@@ -228,16 +235,16 @@ fn push_decomposed<const D: usize>(
         let lead = HANGUL_LEAD_BASE + offset / HANGUL_VOWEL_TRAIL;
         let vowel = HANGUL_VOWEL_BASE + (offset % HANGUL_VOWEL_TRAIL) / HANGUL_TRAIL_COUNT;
         let trail = HANGUL_TRAIL_BASE + offset % HANGUL_TRAIL_COUNT;
-        let mut next = push_one(lead, count, scalars, classes)?;
-        next = push_one(vowel, next, scalars, classes)?;
+        let mut next = push_one(lead, 0, count, scalars, classes)?;
+        next = push_one(vowel, 0, next, scalars, classes)?;
         if trail != HANGUL_TRAIL_BASE {
-            next = push_one(trail, next, scalars, classes)?;
+            next = push_one(trail, 0, next, scalars, classes)?;
         }
         return Ok(next);
     }
     let (from_compatibility, start, width, found) = lookup(compatibility, scalar);
     if !found {
-        return push_one(scalar, count, scalars, classes);
+        return push_one(scalar, class_of(scalar), count, scalars, classes);
     }
     if width > D {
         return Err(NormalizeRefusal::ExceedsCapacity);
@@ -247,12 +254,18 @@ fn push_decomposed<const D: usize>(
     for k in 0..D {
         trip!(COPY);
         if k < width {
-            let member = if from_compatibility {
-                tables::COMPAT_POOL[start + k]
+            let (member, class) = if from_compatibility {
+                (
+                    tables::COMPAT_POOL[start + k],
+                    tables::COMPAT_POOL_CLASS[start + k],
+                )
             } else {
-                tables::CANON_POOL[start + k]
+                (
+                    tables::CANON_POOL[start + k],
+                    tables::CANON_POOL_CLASS[start + k],
+                )
             };
-            next = push_one(member, next, scalars, classes)?;
+            next = push_one(member, class, next, scalars, classes)?;
         }
     }
     Ok(next)

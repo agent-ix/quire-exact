@@ -302,24 +302,28 @@ fn limits() -> ScalarLimits {
     }
 }
 
+/// The AC-7 payloads: the 31-mark run and the 5-mark run.
+fn ac7_texts() -> [String; 2] {
+    [
+        run_of_marks(),
+        "a\u{301}\u{323}\u{334}\u{301}\u{323}".to_owned(),
+    ]
+}
+
 #[test]
 #[trace("TC-949", "FR-401-AC-3")]
 fn normalization_allocates_nothing() {
-    let mut prepared: Vec<([u8; 64], usize)> = Vec::new();
-    let mut buffer = [0u8; 4];
-    let texts: Vec<String> = inputs()
-        .into_iter()
-        .chain(
-            generator::scalars()
-                .step_by(97)
-                .map(|c| c.encode_utf8(&mut buffer).to_owned()),
-        )
+    let mut texts: Vec<String> = inputs();
+    texts.extend(ac7_texts());
+    texts.extend(generator::scalars().map(String::from));
+    let prepared: Vec<([u8; 64], usize)> = texts
+        .iter()
+        .map(|text| {
+            let mut payload = [0u8; 64];
+            payload[..text.len()].copy_from_slice(text.as_bytes());
+            (payload, text.len())
+        })
         .collect();
-    for text in &texts {
-        let mut payload = [0u8; 64];
-        payload[..text.len()].copy_from_slice(text.as_bytes());
-        prepared.push((payload, text.len()));
-    }
     let mut output = [0u8; 64];
     let info = allocation_counter::measure(|| {
         for (payload, len) in &prepared {
@@ -339,50 +343,68 @@ fn admitted(profile: TextProfile, text: &str) -> quire_exact::Text {
         .expect("admitted under Text[0,64]")
 }
 
+/// The `text.normalize-output` amounts that `compare_text` records.
+fn output_amounts(
+    operator: ComparisonOperator,
+    left: &quire_exact::Text,
+    right: &quire_exact::Text,
+) -> (bool, Vec<Integer>) {
+    let mut meter = Meter::new(limits());
+    meter.enable_charge_capture(4096, 4096);
+    let outcome = compare_text(operator, left, right, &mut meter)
+        .unwrap()
+        .completed()
+        .unwrap();
+    let capture = meter.disable_charge_capture().unwrap().unwrap();
+    let amounts = capture
+        .events()
+        .iter()
+        .filter(|event| event.point == ChargePoint::TextNormalizeOutput)
+        .map(|event| {
+            let (kind, amount) = &event.sizes[0];
+            assert_eq!(*kind, LimitKind::NormalizedScalars);
+            amount.clone()
+        })
+        .collect();
+    (outcome, amounts)
+}
+
+/// Every ordered pair of the AC-1 payloads whose buffers fit, for every
+/// operator and the amounts of the first operator's charges (the charges
+/// do not depend on the operator).
 #[test]
 #[trace("TC-949", "FR-401-AC-5", "FR-401-AC-6")]
 fn order_and_counts_match_the_shipped_compare() {
     let texts = inputs();
     for form in FORMS {
         let profile = profile_of(form);
-        for left in &texts {
-            for right in texts.iter().step_by(5) {
-                if !fits(form, left) || !fits(form, right) {
-                    continue;
-                }
-                let (left_out, left_count) = run::<64, 32, 64>(form, left.as_bytes()).unwrap();
-                let (right_out, right_count) = run::<64, 32, 64>(form, right.as_bytes()).unwrap();
+        let fitting: Vec<&String> = texts.iter().filter(|text| fits(form, text)).collect();
+        let prepared: Vec<(String, usize, quire_exact::Text)> = fitting
+            .iter()
+            .map(|text| {
+                let (out, count) = run::<64, 32, 64>(form, text.as_bytes()).unwrap();
+                (out, count, admitted(profile, text))
+            })
+            .collect();
+        for (left_out, left_count, owner_left) in &prepared {
+            for (right_out, right_count, owner_right) in &prepared {
                 let order = left_out.as_bytes().cmp(right_out.as_bytes());
-                let (owner_left, owner_right) = (admitted(profile, left), admitted(profile, right));
-                let mut capture_meter = Meter::new(limits());
-                capture_meter.enable_charge_capture(4096, 4096);
-                for operator in ComparisonOperator::ALL {
-                    let mut meter = Meter::new(limits());
-                    meter.enable_charge_capture(4096, 4096);
-                    let outcome = compare_text(operator, &owner_left, &owner_right, &mut meter)
-                        .unwrap()
-                        .completed()
-                        .unwrap();
-                    assert_eq!(
-                        outcome,
-                        operator.holds(order),
-                        "{form:?} {left:?} {right:?}"
-                    );
-                    let capture = meter.disable_charge_capture().unwrap().unwrap();
-                    let amounts: Vec<Integer> = capture
-                        .events()
-                        .iter()
-                        .filter(|event| event.point == ChargePoint::TextNormalizeOutput)
-                        .map(|event| {
-                            let (kind, amount) = &event.sizes[0];
-                            assert_eq!(*kind, LimitKind::NormalizedScalars);
-                            amount.clone()
-                        })
-                        .collect();
-                    let expected: Vec<Integer> = (1..=(left_count + right_count) as u64)
-                        .map(Integer::from)
-                        .collect();
-                    assert_eq!(amounts, expected, "{form:?} {left:?} {right:?}");
+                let expected: Vec<Integer> = (1..=(left_count + right_count) as u64)
+                    .map(Integer::from)
+                    .collect();
+                for (index, operator) in ComparisonOperator::ALL.into_iter().enumerate() {
+                    let (outcome, amounts) = if index == 0 {
+                        output_amounts(operator, owner_left, owner_right)
+                    } else {
+                        let mut meter = Meter::new(limits());
+                        let outcome = compare_text(operator, owner_left, owner_right, &mut meter)
+                            .unwrap()
+                            .completed()
+                            .unwrap();
+                        (outcome, expected.clone())
+                    };
+                    assert_eq!(outcome, operator.holds(order), "{form:?} {left_out:?}");
+                    assert_eq!(amounts, expected, "{form:?} {left_out:?} {right_out:?}");
                 }
             }
         }
@@ -491,7 +513,9 @@ fn every_table_entry_equals_the_public_api() {
 
 /// The pair sweep: for every scalar a and every right element b of a table
 /// triple, `compose(a, b)` is `Some` exactly when the table holds (a, b, c)
-/// or the pair is a Hangul composition. Run by `make test-exhaustive`.
+/// (no right element of a table triple is a Hangul jamo, so no Hangul pair
+/// composes here; Hangul composition is checked by the AC-1 sequences and
+/// every scalar alone). Run by `make test-exhaustive`.
 #[test]
 #[ignore = "exhaustive pair sweep; run with --release -- --ignored"]
 #[trace("TC-949", "FR-401-AC-8")]
@@ -504,14 +528,7 @@ fn every_composable_pair_is_in_the_table() {
         for b in &rights {
             let b = char::from_u32(*b).unwrap();
             let public = compose(a, b).is_some();
-            let hangul = ('\u{1100}'..'\u{1113}').contains(&a)
-                && ('\u{1161}'..'\u{1176}').contains(&b)
-                || ('\u{AC00}'..='\u{D7A3}').contains(&a) && ('\u{11A8}'..'\u{11C3}').contains(&b);
-            assert_eq!(
-                public,
-                pairs.contains(&(a as u32, b as u32)) || hangul,
-                "{a:?} {b:?}"
-            );
+            assert_eq!(public, pairs.contains(&(a as u32, b as u32)), "{a:?} {b:?}");
         }
     }
 }

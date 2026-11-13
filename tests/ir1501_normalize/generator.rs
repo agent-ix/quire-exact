@@ -160,6 +160,17 @@ fn decomposition_table(out: &mut String, prefix: &str, rows: &[(u32, Vec<u32>)])
         &format!("{prefix}_POOL_COUNT"),
         &pool,
     );
+    let classes: Vec<u8> = pool
+        .iter()
+        .map(|scalar| canonical_combining_class(char::from_u32(*scalar).unwrap()))
+        .collect();
+    array(
+        out,
+        &format!("{prefix}_POOL_CLASS"),
+        "u8",
+        &format!("{prefix}_POOL_COUNT"),
+        &classes,
+    );
 }
 
 pub fn render() -> String {

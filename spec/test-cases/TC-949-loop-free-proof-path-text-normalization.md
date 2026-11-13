@@ -17,7 +17,7 @@ Verify FR-401-AC-1 through FR-401-AC-9 by running the host-callable proof-path n
 
 1. At N = 64, D = 32, R = 64 and for each of the four forms, normalize every Unicode scalar alone (surrogates excluded), every ordered pair of the listed scalars, the six listed sequences and the empty payload with the function and with `apply`; compare scalars, order and count.
 2. Run the refusals of FR-401-AC-2: U+1F82 under `nfd` at R of 7, 8 and 9, U+FDFA under `nfkd` at D of 17 and 18, the empty payload at R and D of 0, `len` = N + 1, the invalid byte strings. For every scalar alone and `max` from 1 to 4, when `Text[0,max]` admits the `apply` output, assert success at R = `4 * max` and D = `payload_scalar_ratio * max`.
-3. Under a global allocator with a `thread_local!` `Cell` counter (const-initialized), assert zero allocations around the function for every input of steps 1 and 6.
+3. Under a per-thread allocation counter (`allocation-counter`; the crate forbids the `unsafe` a counting global allocator needs), assert zero allocations around the function for every input of steps 1 and 6.
 4. Read the module with `include_str!`, strip comments and string literals, and run the FR-401-AC-4 scan: the callee allow-list, the banned tokens and closure pattern, range-in-index and buffer-equality bans, the call-graph cycle check, and the loop-header and `trip!` site checks. Run the same scanner on copies of the text seeded with one violation each (every construct of FR-401-AC-4, including `binary_search`, `contains`, `copy_from_slice`, `fill`, `iter_mut`, `into_iter`, `zip`, `windows`, `payload == OTHER`, `&a == &b`, `*a == *b`, `self.buf == x.buf`, `a < b` on arrays, `a.min(b)` on arrays, `DECOMP[i] == DECOMP[j]`, `let row = DECOMP[i]; row == other`, `[a..b]`, a self-call, a two-function call cycle, `for x in slice`, `for i in 0..len`, and `for i in 0..TABLE_LEN` without `trip!`) and assert it rejects each.
 5. For each ordered pair and each form, derive the six operators from the lexicographic order of the two outputs and compare with `compare_text` over operands admitted under `Text[0,64]`; under `test-support` count the `text.normalize-output` entries and compare with the emitted counts, checking that the second operand continues the first's running count.
 6. Normalize the 31-mark run of FR-401-AC-7 under the four forms against `apply`, at D of 32 and 31, and the 5-mark run.
@@ -25,6 +25,8 @@ Verify FR-401-AC-1 through FR-401-AC-9 by running the host-callable proof-path n
 8. At (N, D, R) of (64, 32, 64) and (16, 8, 16), run the AC-2 boundary inputs with the `cfg(test)` trip counters; assert every module-constant bound is below 16, each site's maximum trips against its declared bound, equality for the N, D and R sites, and `unwind_bound::<N, D, R>()` = largest declared bound + 1 at each instantiation.
 
 ## Expected Results
+
+The mutant lines below are the rationale for the controls, not executed results: no buildable mutant was run (see Status).
 
 - Output, order and count equal `apply` for every input, including reordering, blocked composition, excluded composites, Hangul, singletons and compatibility mappings.
 - Refusals are exact at the byte and the scalar.

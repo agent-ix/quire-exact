@@ -4,8 +4,8 @@
 use ix_trace_rs::trace;
 use quire_exact::{
     admit_text, compare_native_text, compare_text, ComparisonOperator, IllTyped, IllTypedCause,
-    LimitKind, Meter, NativeText, NativeTextRefusal, Outcome, ScalarLimits, Text,
-    TextNotAdmittedCause, TextPayload, TextProfile, TextType, NATIVE_TEXT_CAPACITY as C,
+    LimitKind, Meter, NativeText, NativeTextRefusal, NormalizationForm, Outcome, ScalarLimits,
+    Text, TextNotAdmittedCause, TextPayload, TextProfile, TextType, NATIVE_TEXT_CAPACITY as C,
 };
 use std::cmp::Ordering;
 
@@ -193,6 +193,171 @@ fn constructor_decides_like_admission_within_capacity() {
         NativeText::from_admitted(nfc, "e\u{301}".as_bytes(), "e\u{301}".as_bytes()),
         refused(TextNotAdmittedCause::RetainedNotNormalForm)
     );
+}
+
+// ---- FR-399-AC-6, FR-399-AC-7 (IR-1445) ----
+
+/// The owner's decision on `text` under `text_type`, the host counterpart
+/// the proof-path constructor is checked against (`Text::from_admitted` does
+/// not exist; `admit_text` is the owner's admission).
+fn owner_admits(text_type: TextType, text: &str) -> Option<Text> {
+    let payload = TextPayload::from_utf8(text.as_bytes()).unwrap();
+    admit_text(&payload, &text_type, &mut Meter::new(limits(u64::MAX))).completed()
+}
+
+/// The three retained sequences of FR-399-AC-6: the correct one, the correct
+/// one with its last scalar replaced, and the empty one.
+fn retained_candidates(profile: TextProfile, text: &str) -> Vec<String> {
+    let correct: String = match profile.normalization() {
+        Some(form) => form.apply(text).collect(),
+        None => text.to_owned(),
+    };
+    let mut replaced = correct.clone();
+    if let Some(last) = replaced.pop() {
+        replaced.push(if last == 'z' { 'y' } else { 'z' });
+    }
+    vec![correct, replaced, String::new()]
+}
+
+/// The decision the owner implies for `retained`: not the normal form,
+/// else out of the type's domain, else admitted.
+fn expected_decision(
+    text_type: TextType,
+    text: &str,
+    retained: &str,
+) -> Result<(), NativeTextRefusal> {
+    let correct = &retained_candidates(text_type.profile(), text)[0];
+    if text.len() > C || retained.len() > C {
+        return Err(NativeTextRefusal::PayloadExceedsCapacity);
+    }
+    if retained != correct {
+        return Err(NativeTextRefusal::NotAdmitted(
+            TextNotAdmittedCause::RetainedNotNormalForm,
+        ));
+    }
+    match owner_admits(text_type, text) {
+        Some(owner) => {
+            assert_eq!(owner.retained(), retained);
+            Ok(())
+        }
+        None => Err(NativeTextRefusal::NotAdmitted(
+            TextNotAdmittedCause::LengthOutOfDomain,
+        )),
+    }
+}
+
+fn check_decision(text_type: TextType, text: &str, retained: &str) {
+    let actual = NativeText::from_admitted(text_type, text.as_bytes(), retained.as_bytes());
+    assert_eq!(
+        actual.map(|_| ()),
+        expected_decision(text_type, text, retained),
+        "{:?} {text:?} {retained:?}",
+        text_type.profile()
+    );
+}
+
+/// The enumerated inputs of FR-399-AC-6: every string of at most three
+/// scalars over a small alphabet, per profile and type, and the boundary
+/// payloads at C - 1 and C (ending in a one-byte scalar and in a
+/// continuation byte), each with the three retained sequences.
+fn ac6_inputs() -> Vec<(TextType, String)> {
+    let alphabet = ['a', '\u{E9}', '\u{301}', '\u{1F82}'];
+    let mut strings = vec![String::new()];
+    let mut layer = vec![String::new()];
+    for _ in 0..3 {
+        layer = layer
+            .iter()
+            .flat_map(|prefix| alphabet.iter().map(move |c| format!("{prefix}{c}")))
+            .collect();
+        strings.extend(layer.clone());
+    }
+    let mut inputs = Vec::new();
+    for profile in TextProfile::ALL {
+        for (min, max) in [(0, 8), (1, 1)] {
+            for text in &strings {
+                inputs.push((TextType::new(min, max, profile).unwrap(), text.clone()));
+            }
+        }
+        let wide = TextType::new(0, 8 * C as u64, profile).unwrap();
+        for length in [C - 1, C] {
+            inputs.push((wide, filler(length, "a")));
+            inputs.push((wide, filler(length, "\u{E9}")));
+        }
+        if matches!(profile, TextProfile::Nfc | TextProfile::Nfkc) {
+            // nfd of U+1F82 (8 bytes), repeated `max` times: retained length `max`.
+            let attained: String = profile
+                .normalization()
+                .map(|_| "\u{1F82}".to_owned())
+                .unwrap();
+            for max in 1..=5usize {
+                let nfd: String = NormalizationForm::Nfd.apply(&attained).collect();
+                inputs.push((
+                    TextType::new(0, max as u64, profile).unwrap(),
+                    nfd.repeat(max),
+                ));
+            }
+        }
+    }
+    inputs
+}
+
+#[test]
+#[trace("TC-947", "FR-399-AC-6")]
+fn proof_path_constructor_decides_like_the_owner_over_the_enumeration() {
+    for (text_type, text) in ac6_inputs() {
+        if text.len() > C {
+            continue;
+        }
+        for retained in retained_candidates(text_type.profile(), &text) {
+            check_decision(text_type, &text, &retained);
+        }
+    }
+    // A payload of C + 1 bytes returns the carrier's encoding refusal.
+    let wide = TextType::new(0, 8 * C as u64, TextProfile::BinaryUtf8).unwrap();
+    let long = filler(C + 1, "a");
+    assert_eq!(
+        NativeText::from_admitted(wide, long.as_bytes(), long.as_bytes()),
+        Err(NativeTextRefusal::PayloadExceedsCapacity)
+    );
+}
+
+#[test]
+#[trace("TC-947", "FR-399-AC-7")]
+fn proof_path_constructor_refuses_c_plus_one_and_allocates_nothing() {
+    for profile in [TextProfile::UnicodeScalars, TextProfile::BinaryUtf8] {
+        let wide = TextType::new(0, 8 * C as u64, profile).unwrap();
+        for length in [C + 1, 2 * C] {
+            let long = filler(length, "a");
+            assert_eq!(
+                NativeText::from_admitted(wide, long.as_bytes(), long.as_bytes()),
+                Err(NativeTextRefusal::PayloadExceedsCapacity)
+            );
+        }
+    }
+    let supported: Vec<(TextType, String, String)> = ac6_inputs()
+        .into_iter()
+        .filter(|(text_type, text)| {
+            NativeText::proof_path_supports(text_type.profile()) && text.len() <= C
+        })
+        .flat_map(|(text_type, text)| {
+            retained_candidates(text_type.profile(), &text)
+                .into_iter()
+                .map(move |retained| (text_type, text.clone(), retained))
+        })
+        .collect();
+    assert!(!supported.is_empty());
+    let info = allocation_counter::measure(|| {
+        for (text_type, text, retained) in &supported {
+            let _ = NativeText::from_admitted(*text_type, text.as_bytes(), retained.as_bytes());
+        }
+    });
+    assert_eq!(info.count_total, 0);
+}
+
+#[test]
+#[trace("TC-947", "FR-399-AC-7")]
+fn proof_path_constructor_module_scans_clean() {
+    assert_eq!(scan(&carrier_source()), vec![]);
 }
 
 // ---- AC-4 ----
@@ -1218,44 +1383,71 @@ fn probe_records_are_executed_and_choose_the_capacity() {
     );
 }
 
-/// FR-404-AC-7 and Behavior 10: the recorded Kani run of the FR-401
-/// normalization at the chosen C exists for every normalizing form it names,
-/// each row an executed outcome with a recorded peak and a harness id, and
-/// the normalizing profiles are reported supported only if every row is
+/// FR-404-AC-7 and Behavior 10: the recorded Kani runs of the FR-401
+/// normalization at the chosen C. Every shape of the record has one executed
+/// row for each of the four forms; a row names an outcome, a wall time, a
+/// peak (a measured one, or the configured cap marked as such for an OUT OF
+/// MEMORY kill) and a harness id that exists in the kernel. The normalizing
+/// profiles are reported supported only if every row of the current shape is
 /// VERIFIED within 16 GiB.
 #[test]
 #[trace("TC-952", "FR-404-AC-7", "FR-404-AC-9")]
 fn normalizing_profiles_are_supported_only_on_a_verified_record() {
+    const PREFIX: &str = "FR-401 normalization at the chosen C (";
+    let harnesses = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/native_text/kani_proofs.rs"
+    ))
+    .unwrap();
     let rows = evidence_rows();
-    let measured: Vec<&Row> = rows
-        .iter()
-        .filter(|row| {
-            row.operation
-                .starts_with("FR-401 normalization at the chosen C")
-        })
-        .collect();
-    assert_eq!(measured.len(), 4, "one row per normalizing form");
-    let sixteen_gib = 16u64 * 1024 * 1024 * 1024;
-    let mut verified = true;
-    for row in &measured {
-        assert!(
-            ["VERIFIED", "TIMEOUT", "OUT OF MEMORY"].contains(&row.cells[1].as_str()),
-            "an executed outcome, not NOT RUN: {:?}",
-            row.cells
-        );
-        assert!(row.cells[2].ends_with(" s"), "recorded wall time");
-        assert!(row.cells[3].ends_with(" bytes"), "recorded peak memory");
-        assert!(
-            row.cells[5].starts_with("native_text_kani_proofs::native_text_normalize_"),
-            "harness id"
-        );
-        let peak: u64 = row.cells[3].trim_end_matches(" bytes").parse().unwrap();
-        if row.cells[1] == "VERIFIED" {
-            assert!(peak < sixteen_gib);
-        } else {
-            verified = false;
+    let mut shapes: Vec<(String, Vec<(String, &Row)>)> = Vec::new();
+    for row in rows.iter().filter(|row| row.operation.starts_with(PREFIX)) {
+        let inside = row.operation[PREFIX.len()..].trim_end_matches(')');
+        let (form, shape) = inside.split_once(", ").expect("form, shape");
+        match shapes.iter_mut().find(|(name, _)| name == shape) {
+            Some((_, forms)) => forms.push((form.to_owned(), row)),
+            None => shapes.push((shape.to_owned(), vec![(form.to_owned(), row)])),
         }
     }
+    assert!(!shapes.is_empty());
+    let sixteen_gib = 16u64 * 1024 * 1024 * 1024;
+    for (shape, forms) in &shapes {
+        let mut names: Vec<&str> = forms.iter().map(|(form, _)| form.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            ["nfc", "nfd", "nfkc", "nfkd"],
+            "four distinct forms in {shape}"
+        );
+        for (form, row) in forms {
+            assert!(
+                ["VERIFIED", "TIMEOUT", "OUT OF MEMORY"].contains(&row.cells[1].as_str()),
+                "an executed outcome, not NOT RUN: {:?}",
+                row.cells
+            );
+            assert!(row.cells[2].ends_with(" s"), "recorded wall time");
+            let peak = row.cells[3].as_str();
+            if row.cells[1] == "VERIFIED" {
+                let bytes: u64 = peak
+                    .trim_end_matches(" bytes")
+                    .parse()
+                    .expect("measured peak");
+                assert!(bytes < sixteen_gib);
+            } else {
+                assert!(peak.starts_with("cap ") && peak.contains("not a measured peak"));
+            }
+            assert_eq!(
+                row.cells[5],
+                format!("native_text_kani_proofs::native_text_normalize_{form}")
+            );
+            assert!(
+                harnesses.contains(&format!("fn native_text_normalize_{form}()")),
+                "harness {form} exists"
+            );
+        }
+    }
+    let current = shapes.last().expect("a current shape");
+    let verified = current.1.iter().all(|(_, row)| row.cells[1] == "VERIFIED");
     for profile in [
         TextProfile::Nfc,
         TextProfile::Nfd,

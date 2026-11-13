@@ -19,7 +19,6 @@ const CALLEES: [&str; 14] = [
     "trip!",
     "entry!",
 ];
-const MACROS_OUTSIDE_THE_SCAN: [&str; 1] = ["matches!"];
 const BANNED_WORDS: [&str; 10] = [
     "String", "Vec", "Box", "alloc", "dyn", "Fn", "FnMut", "FnOnce", "while", "loop",
 ];
@@ -114,14 +113,53 @@ fn block_at(code: &str, open: usize) -> &str {
     &code[open + 1..]
 }
 
+/// Comments and strings removed but attributes kept.
+fn without_comments(source: &str) -> String {
+    let mut out = String::new();
+    for line in source.lines() {
+        let code = line.split("//").next().unwrap_or("");
+        out.push_str(code);
+        out.push('\n');
+    }
+    out
+}
+
+/// Findings on the macros and test-only modules of the source: each
+/// `macro_rules!` arm is exactly one statement that begins with
+/// `#[cfg(test)]`, and `mod trips;` and `mod trip_tests;` are `cfg(test)`.
+fn macro_findings(source: &str) -> Vec<String> {
+    let raw = without_comments(source);
+    let mut findings = Vec::new();
+    let mut rest = raw.as_str();
+    while let Some(at) = rest.find("macro_rules!") {
+        let open = at + rest[at..].find('{').unwrap();
+        let body = block_at(rest, open);
+        let mut arms = body;
+        while let Some(arrow) = arms.find("=> {") {
+            let inner = block_at(arms, arrow + 3);
+            if !inner.trim_start().starts_with("#[cfg(test)]") || inner.matches(';').count() != 1 {
+                findings.push("macro not test-only".to_owned());
+            }
+            arms = &arms[arrow + 4 + inner.len()..];
+        }
+        rest = &rest[open + body.len() + 2..];
+    }
+    for module in ["mod trips;", "mod trip_tests;"] {
+        for (at, _) in raw.match_indices(module) {
+            if !raw[..at].trim_end().ends_with("#[cfg(test)]") {
+                findings.push(format!("{module} not test-only"));
+            }
+        }
+    }
+    findings
+}
+
 /// The code without `macro_rules!` definitions and `::<..>` turbofish.
-fn prepare(source: &str) -> (String, bool) {
+fn prepare(source: &str) -> String {
     let mut code = strip(source);
-    let mut macros_are_test_only = true;
     while let Some(at) = code.find("macro_rules!") {
         let open = at + code[at..].find('{').unwrap();
         let body = block_at(&code, open).to_owned();
-        macros_are_test_only &= body.contains("cfg(test)") || source.contains("#[cfg(test)]");
         let end = open + body.len() + 2;
         code.replace_range(at..end, "");
     }
@@ -143,7 +181,7 @@ fn prepare(source: &str) -> (String, bool) {
         }
         code.replace_range(at..end, "");
     }
-    (code, macros_are_test_only)
+    code
 }
 
 fn is_ident(c: char) -> bool {
@@ -474,11 +512,8 @@ fn cycles(functions: &[Function], out: &mut Vec<String>) {
 }
 
 pub fn scan(source: &str) -> Vec<String> {
-    let (code, macros_ok) = prepare(source);
-    let mut out = Vec::new();
-    if !macros_ok {
-        out.push("macro not test-only".into());
-    }
+    let code = prepare(source);
+    let mut out = macro_findings(source);
     let word_list = words(&code);
     for banned in BANNED_WORDS {
         if word_list.contains(&banned) {
@@ -492,9 +527,7 @@ pub fn scan(source: &str) -> Vec<String> {
     let own: Vec<&str> = functions.iter().map(|f| f.name.as_str()).collect();
     for function in &functions {
         for call in calls_in(&function.body) {
-            let known = own.contains(&call.as_str())
-                || CALLEES.contains(&call.as_str())
-                || MACROS_OUTSIDE_THE_SCAN.contains(&call.as_str());
+            let known = own.contains(&call.as_str()) || CALLEES.contains(&call.as_str());
             if !known {
                 out.push(format!("callee {call}"));
             }
@@ -553,6 +586,15 @@ const SEEDS: &[(&str, &str)] = &[
     ("fn seeded(a: u32) -> u32 { let f = move |x| x; f(a) }", "closure"),
     ("fn seeded(f: &dyn Fn(u32) -> u32) -> u32 { f(1) }", "banned word dyn"),
     ("fn seeded(a: &[u32; 4]) -> usize { a.len() }", "callee len"),
+    ("fn seeded() { let _ = alloc::vec::Vec::new(); }", "banned word alloc"),
+    ("fn seeded(f: impl Fn(u32)) { }", "banned word Fn"),
+    ("fn seeded(f: impl FnMut(u32)) { }", "banned word FnMut"),
+    ("fn seeded(f: impl FnOnce(u32)) { }", "banned word FnOnce"),
+    ("fn seeded() { let _ = seeded_two(|x| x); }\nfn seeded_two(a: u32) {}", "closure"),
+    ("fn seeded() { let _ = seeded_two(1, |x| x); }\nfn seeded_two(a: u32) {}", "closure"),
+    ("macro_rules! evil { ($s:ident) => { while true { } trips::hit(trips::$s); }; }", "macro not test-only"),
+    ("macro_rules! evil { ($s:ident) => { #[cfg(test)] trips::hit(trips::$s); let _ = String::new(); }; }", "macro not test-only"),
+    ("mod trips;", "mod trips; not test-only"),
 ];
 
 pub fn each_seed_is_rejected() {

@@ -24,9 +24,7 @@ mod normal_form;
     clippy::needless_range_loop,
     clippy::manual_range_contains,
     clippy::manual_is_multiple_of,
-    clippy::manual_swap,
-    clippy::manual_div_ceil,
-    clippy::collapsible_if
+    clippy::manual_swap
 )]
 mod normalize;
 
