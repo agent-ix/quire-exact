@@ -102,6 +102,7 @@ mod key;
 mod location;
 mod native_decimal;
 mod native_integer;
+mod native_quantity;
 mod native_text;
 #[cfg(kani)]
 #[path = "native_text/kani_proofs.rs"]
@@ -191,6 +192,7 @@ pub use native_integer::{
     NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
     NativeIntegerSchedule,
 };
+pub use native_quantity::{NativeQuantity, NativeQuantityRefusal, QuantityBindings};
 pub use native_text::{
     compare_native_text, normalize_text, unwind_bound, NativeText, NativeTextRefusal,
     NormalizeRefusal, NormalizedSize, NATIVE_TEXT_CAPACITY,
