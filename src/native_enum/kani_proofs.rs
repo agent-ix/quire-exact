@@ -4,13 +4,15 @@
 //! an expected side written separately from the comparison body. Meter limits
 //! are concrete per harness (sufficient, one-less occurrence, one-less result):
 //! a symbolic limit left the outcome variant undecided and CBMC unwound the
-//! drop glue of the refusal and incomplete variants without end. The harnesses
-//! compile under `cargo kani --only-codegen`; no verdict is recorded
-//! (FR-407-AC-9 is planned).
+//! drop glue of the refusal and incomplete variants without end. Each outcome
+//! is held in `ManuallyDrop` and matched by reference: the owner's `Refusal`
+//! and `Undefined` variants reach `NodeKey` drop glue, which the proof never
+//! needs. No verdict is recorded here (FR-407-AC-9 is planned).
 use crate::accounting::{ChargePoint, LimitKind, Meter, ScalarLimits};
 use crate::comparison::{ComparisonOperator, IllTypedCause};
 use crate::native_enum::{compare_native_enum, NativeEnum};
 use crate::outcome::Outcome;
+use core::mem::ManuallyDrop;
 
 fn limits(value_occurrences: u64, result_units: u64) -> ScalarLimits {
     ScalarLimits {
@@ -82,9 +84,10 @@ fn comparable_pair() -> (ComparisonOperator, NativeEnum, NativeEnum) {
 fn native_enum_compare_completes() {
     let (operator, left, right) = comparable_pair();
     let mut meter = Meter::new(limits(2, 1));
-    let outcome = compare_native_enum(operator, &left, &right, &mut meter);
-    match outcome {
+    let outcome = ManuallyDrop::new(compare_native_enum(operator, &left, &right, &mut meter));
+    match &*outcome {
         Ok(Outcome::Completed(value)) => {
+            let value = *value;
             kani::cover!(value, "true witness");
             kani::cover!(!value, "false witness");
             assert_eq!(value, expected(operator, left.index(), right.index()));
@@ -101,7 +104,8 @@ fn native_enum_compare_completes() {
 fn native_enum_compare_denies_second_read() {
     let (operator, left, right) = comparable_pair();
     let mut meter = Meter::new(limits(1, 1));
-    match compare_native_enum(operator, &left, &right, &mut meter) {
+    let outcome = ManuallyDrop::new(compare_native_enum(operator, &left, &right, &mut meter));
+    match &*outcome {
         Ok(Outcome::Incomplete(record)) => {
             kani::cover!(true, "incomplete path");
             assert_eq!(record.charge_point, ChargePoint::EnumIdentityRead);
@@ -117,7 +121,8 @@ fn native_enum_compare_denies_second_read() {
 fn native_enum_compare_denies_retain() {
     let (operator, left, right) = comparable_pair();
     let mut meter = Meter::new(limits(2, 0));
-    match compare_native_enum(operator, &left, &right, &mut meter) {
+    let outcome = ManuallyDrop::new(compare_native_enum(operator, &left, &right, &mut meter));
+    match &*outcome {
         Ok(Outcome::Incomplete(record)) => {
             kani::cover!(true, "incomplete path");
             assert_eq!(record.charge_point, ChargePoint::EnumResultRetain);
@@ -145,7 +150,13 @@ fn native_enum_refuses_distinct_declarations() {
     let left = symbolic_carrier(left_tag, left_ordered, left_count);
     let right = symbolic_carrier(right_tag, right_ordered, right_count);
     let mut meter = Meter::new(limits(2, 1));
-    match compare_native_enum(symbolic_operator(), &left, &right, &mut meter) {
+    let outcome = ManuallyDrop::new(compare_native_enum(
+        symbolic_operator(),
+        &left,
+        &right,
+        &mut meter,
+    ));
+    match &*outcome {
         Err(error) => {
             kani::cover!(true, "distinct declaration refusal");
             assert_eq!(error.cause, IllTypedCause::DistinctEnumDeclarations);
@@ -166,7 +177,8 @@ fn native_enum_refuses_unordered_ordering() {
     let left = symbolic_carrier(tag, false, count);
     let right = symbolic_carrier(tag, false, count);
     let mut meter = Meter::new(limits(2, 1));
-    match compare_native_enum(operator, &left, &right, &mut meter) {
+    let outcome = ManuallyDrop::new(compare_native_enum(operator, &left, &right, &mut meter));
+    match &*outcome {
         Err(error) => {
             kani::cover!(true, "unordered refusal");
             assert_eq!(error.cause, IllTypedCause::UnorderedEnumOrdering);
