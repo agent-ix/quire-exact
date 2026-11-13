@@ -5,9 +5,11 @@
 //! language's `==` and `cmp`, and never panics or refuses.
 use crate::accounting::{Meter, ScalarLimits};
 use crate::comparison::ComparisonOperator;
-use crate::native_text::{compare_native_text, NativeText, NATIVE_TEXT_CAPACITY};
+use crate::native_text::{
+    compare_native_text, normalize_text, NativeText, NormalizeRefusal, NATIVE_TEXT_CAPACITY,
+};
 use crate::outcome::Outcome;
-use crate::text::TextProfile;
+use crate::text::{NormalizationForm, TextProfile};
 use core::cmp::Ordering;
 
 fn generous_meter() -> Meter {
@@ -67,4 +69,57 @@ fn native_text_compare_matches_slice_order() {
             _ => panic!("every call returns the value variant"),
         }
     }
+}
+
+/// The local probe of FR-404 Behavior 10: the FR-401 normalization instantiated
+/// at the carrier capacity (N = C = 64, D = 32, R = 64) over a symbolic
+/// payload of symbolic length. It asserts that the call never panics and,
+/// when it succeeds, that its size lies within the buffers.
+fn normalization_probe(form: NormalizationForm) {
+    let payload: [u8; NATIVE_TEXT_CAPACITY] = kani::any();
+    let len: usize = kani::any();
+    kani::assume(len <= NATIVE_TEXT_CAPACITY);
+    let mut output = [0u8; 64];
+    match normalize_text::<NATIVE_TEXT_CAPACITY, 32, 64>(form, &payload, len, &mut output) {
+        Ok(size) => {
+            kani::cover!(size.scalars > 0, "normalized a non-empty payload");
+            assert!(size.bytes <= 64);
+            assert!(size.scalars <= 32);
+            assert!(size.scalars <= size.bytes);
+        }
+        Err(refusal) => {
+            kani::cover!(
+                refusal == NormalizeRefusal::InvalidUtf8,
+                "invalid UTF-8 witness"
+            );
+            kani::cover!(
+                refusal == NormalizeRefusal::ExceedsCapacity,
+                "capacity witness"
+            );
+        }
+    }
+}
+
+#[kani::proof]
+#[kani::unwind(65)]
+fn native_text_normalize_nfd() {
+    normalization_probe(NormalizationForm::Nfd);
+}
+
+#[kani::proof]
+#[kani::unwind(65)]
+fn native_text_normalize_nfc() {
+    normalization_probe(NormalizationForm::Nfc);
+}
+
+#[kani::proof]
+#[kani::unwind(65)]
+fn native_text_normalize_nfkd() {
+    normalization_probe(NormalizationForm::Nfkd);
+}
+
+#[kani::proof]
+#[kani::unwind(65)]
+fn native_text_normalize_nfkc() {
+    normalization_probe(NormalizationForm::Nfkc);
 }

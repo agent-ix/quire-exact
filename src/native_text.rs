@@ -17,6 +17,18 @@ use crate::text::{TextNotAdmittedCause, TextProfile, TextType};
 use core::cmp::Ordering;
 
 mod normal_form;
+// The module's loops and comparisons are written in the form the FR-401-AC-4
+// scan admits (indexed loops over a constant bound, no iterator, range or
+// slice method), which these style lints would rewrite.
+#[allow(
+    clippy::needless_range_loop,
+    clippy::manual_range_contains,
+    clippy::manual_is_multiple_of,
+    clippy::manual_swap
+)]
+mod normalize;
+
+pub use normalize::{normalize_text, unwind_bound, NormalizeRefusal, NormalizedSize};
 
 /// The capacity C of a [`NativeText`] in bytes, for the payload and for the
 /// retained sequence each. Fixed by the Kani probe recorded in TC-952.
@@ -97,8 +109,9 @@ impl NativeText {
     }
 
     /// Whether the proof path supports `profile`: the four normalizing
-    /// profiles stay unsupported until a recorded Kani run of the FR-401
-    /// normalization at the capacity is VERIFIED (FR-404 Behavior 10).
+    /// profiles are unsupported: the recorded Kani runs of the FR-401
+    /// normalization at the capacity are OUT OF MEMORY, not VERIFIED (FR-404
+    /// Behavior 10, TC-952 evidence record).
     pub const fn proof_path_supports(profile: TextProfile) -> bool {
         matches!(
             profile,

@@ -32,4 +32,4 @@ Verify FR-399-AC-1 through FR-399-AC-7 through the public `quire_exact` API: `Te
 
 ## Status
 
-Planned (IR-1499).
+AC-1 to AC-5: Planned (IR-1499). AC-6 and AC-7: Executed (IR-1445, planner ruling) in `tests/ir1445_native_text.rs` by `proof_path_constructor_decides_like_the_owner_over_the_enumeration`, `proof_path_constructor_refuses_c_plus_one_and_allocates_nothing` and `proof_path_constructor_module_scans_clean`. Deviations: the host `Text::from_admitted` does not exist, so `admit_text` is the host counterpart of the decision; the zero-allocation measurement covers the supported profiles only (FR-399-AC-7 carries the same carve-out); the enumeration is every UTF-8 byte string of at most two bytes plus every string of at most three scalars over a four-scalar alphabet, with C - 1 and C boundary payloads, not the full enumeration of CG FR-052-AC-2.

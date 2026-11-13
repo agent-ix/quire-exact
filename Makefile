@@ -14,6 +14,7 @@ help:
 	@echo "  make fmt-check        - Verify formatting (CI gate)"
 	@echo "  make lint             - Clippy with -D warnings"
 	@echo "  make test             - cargo test"
+	@echo "  make test-exhaustive  - Exhaustive FR-401 composition pair sweep (release, ignored tests)"
 	@echo "  make kani-meter-gate  - Run the units Kani proofs (not part of make ci)"
 	@echo "  make build-no-std     - Build for $(NO_STD_TARGET)"
 	@echo "  make build            - Release build"
@@ -44,6 +45,11 @@ lint:
 test:
 	$(CARGO) test
 	$(CARGO) test --features test-support
+
+# The exhaustive pair sweep of FR-401-AC-8; not part of `make ci`.
+.PHONY: test-exhaustive
+test-exhaustive:
+	$(CARGO) test --release --test ir1501_normalize -- --ignored
 
 # `quire-exact` is `#![no_std]` + `alloc`, with every dependency's default
 # features off, so it builds for a bare-metal target.
