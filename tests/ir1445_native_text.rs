@@ -63,6 +63,11 @@ fn filler(length: usize, tail: &str) -> String {
 
 // ---- AC-1 ----
 
+type ConstructorFn = fn(TextType, &[u8], &[u8]) -> Result<NativeText, NativeTextRefusal>;
+type CompareFn =
+    fn(ComparisonOperator, &NativeText, &NativeText, &mut Meter) -> Result<Outcome<bool>, IllTyped>;
+type Expectation = Box<dyn Fn(&Violation) -> bool>;
+
 fn assert_copy<T: Copy>() {}
 
 #[test]
@@ -70,14 +75,8 @@ fn assert_copy<T: Copy>() {}
 fn carrier_is_copy_without_drop_glue_and_signatures_match() {
     assert_copy::<NativeText>();
     const { assert!(!std::mem::needs_drop::<NativeText>()) };
-    let _: fn(TextType, &[u8], &[u8]) -> Result<NativeText, NativeTextRefusal> =
-        NativeText::from_admitted;
-    let _: fn(
-        ComparisonOperator,
-        &NativeText,
-        &NativeText,
-        &mut Meter,
-    ) -> Result<Outcome<bool>, IllTyped> = compare_native_text;
+    let _: ConstructorFn = NativeText::from_admitted;
+    let _: CompareFn = compare_native_text;
 }
 
 #[test]
@@ -682,7 +681,7 @@ fn carrier_source_is_clean() {
 #[trace("TC-952", "FR-404-AC-5")]
 fn scanner_rejects_each_seeded_violation() {
     let base = carrier_source();
-    let seeds: [(&str, Box<dyn Fn(&Violation) -> bool>); 12] = [
+    let seeds: [(&str, Expectation); 12] = [
         (
             "#[cfg(kani)]\nfn seeded() {}",
             Box::new(|v| *v == Violation::CfgKani),
@@ -735,7 +734,7 @@ fn scanner_rejects_each_seeded_violation() {
     for (seed, expected) in seeds {
         let violations = scan(&format!("{base}\n{seed}"));
         assert!(
-            violations.iter().any(|v| expected(v)),
+            violations.iter().any(expected),
             "seed {seed:?} was not rejected: {violations:?}"
         );
     }

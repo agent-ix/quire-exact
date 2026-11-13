@@ -73,7 +73,7 @@ A Kani proof over `std` `chars()` or UTF-8 validation is not tractable (measured
 
 ## Status
 
-Planned (IR-1445). No Rust, test, probe or proof exists. C is not yet fixed. FR-399 (Description, Behaviors 4 and 5, AC-6, AC-7) and FR-401 (Description, Relation, Dependencies) now point to this requirement as the owner of the carrier and carry a `depends_on` edge to it; their criteria are unchanged. The substitution wording of CG FR-052 is CG's to align.
+Implemented (IR-1445): C = 64, the largest candidate VERIFIED by the local probe (TC-952 evidence record). FR-399 (Description, Behaviors 4 and 5, AC-6, AC-7) and FR-401 (Description, Relation, Dependencies) now point to this requirement as the owner of the carrier and carry a `depends_on` edge to it; their criteria are unchanged. The substitution wording of CG FR-052 is CG's to align.
 
 ## Dependencies
 
