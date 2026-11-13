@@ -55,3 +55,12 @@ Clippy was re-run with the module `#[allow]` removed, on a `git archive` copy. O
 ## Verdict
 
 Mergeable as code. The normalization is correct against `apply`. The checks are exhaustive per scalar (and per pair in `test-exhaustive`), the tables are generated and compared byte for byte, and the code allocates nothing. The OOM record is genuine and corroborated by the journal and the run logs. FND-001 is the substantive question for the lead. It does not block the AC verdict, but the support decision for CG FR-052's normalizing profiles currently rests on a design whose cost is dominated by an avoidable nested class search. FND-002 to FND-004 are cleanups.
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | c5d0681 adds the generated `CANON_POOL_CLASS` / `COMPAT_POOL_CLASS` columns, and the copy loop now reads them, so `class_of` runs only for a scalar with no table entry. All four forms were re-run at C = 64: symbolic execution now completes (Runtime Symex 186 to 217 s, 11.4M to 12.1M steps), and every run is killed in the SAT stage. The reviewer checked the journal scopes run-p3267457, -p3287496, -p3290570 and -p3335834 (214.4, 206.4, 218.1 and 239.4 s, oom-kill, 24G), and the v2 logs. `normalize.rs` and `tables.rs` are unchanged from c5d0681 to a6f60547. Per the planner's ruling (one try, then stop), the four new rows were added to the record. |
+| FND-002 | fixed | The allows are now `needless_range_loop`, `manual_range_contains`, `manual_is_multiple_of` and `manual_swap`, the four that fire. |
+| FND-003 | fixed | `macro_findings` checks each `macro_rules!` arm on raw source: it must start with `#[cfg(test)]` and hold exactly one statement. `mod trips;` and `mod trip_tests;` must be `#[cfg(test)]`. The seeds cover a `while` in an arm, a second statement in an arm, and `mod trips;` without the attribute. |
+| FND-004 | fixed | The Hangul clause was removed, and the doc comment says that no right element is a jamo and that Hangul is covered by the AC-1 sequences and by every scalar alone. |

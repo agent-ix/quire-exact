@@ -312,6 +312,25 @@ fn proof_path_constructor_decides_like_the_owner_over_the_enumeration() {
             check_decision(text_type, &text, &retained);
         }
     }
+    // Every UTF-8 byte string of at most two bytes, per profile and type.
+    let mut byte_strings = vec![String::new()];
+    for first in 0..=255u8 {
+        byte_strings.extend(String::from_utf8(vec![first]));
+        for second in 0..=255u8 {
+            byte_strings.extend(String::from_utf8(vec![first, second]));
+        }
+    }
+    assert_eq!(byte_strings.len(), 1 + 128 + 128 * 128 + 1920);
+    for profile in TextProfile::ALL {
+        for (min, max) in [(0, 8), (1, 1)] {
+            let text_type = TextType::new(min, max, profile).unwrap();
+            for text in &byte_strings {
+                for retained in retained_candidates(profile, text) {
+                    check_decision(text_type, text, &retained);
+                }
+            }
+        }
+    }
     // A payload of C + 1 bytes returns the carrier's encoding refusal.
     let wide = TextType::new(0, 8 * C as u64, TextProfile::BinaryUtf8).unwrap();
     let long = filler(C + 1, "a");

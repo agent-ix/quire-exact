@@ -41,3 +41,19 @@ On whether the journal row is an acceptable recorded peak: yes, as an OUT OF MEM
 ## Verdict
 
 The AC-7 and AC-9 verdict is honest and meets the spec as written; no smaller instantiation is required. Mergeable once FND-001 is fixed (the AC text must carry the refusal carve-out the tests implement) and FND-002 is fixed (an owning ticket for FR-399-AC-6 and AC-7, or an explicit statement that IR-1445 is held open). FND-003 to FND-005 are low.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-006 | medium | FR-399 and TC-947 are stale, and the AC-6/AC-7 deviations are recorded in the wrong spec. FR-399 Status still says "Planned (IR-1499). No Rust, test or proof exists", and TC-947 Status says "Planned (IR-1499)", yet three TC-947-tagged tests now bind FR-399-AC-6 and AC-7. The two deviations (`admit_text` plus a built oracle in place of the missing host `from_admitted`, and the AC-7 allocation check over supported profiles only) are written only in TC-952 Status, under FR-404. Update FR-399 and TC-947 Status (owner IR-1445, the bound tests, both deviations), or amend AC-6 and AC-7. | spec/functional/FR-399-non-metered-text-constructor-from-admitted-parts.md:58-60, spec/test-cases/TC-947-non-metered-text-constructor-from-admitted-parts.md |
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | The FR-401-AC-1 text now carries the carve-out: "Where the intermediate form of a pair exceeds D = 32 scalars ... or its output exceeds R = 64 bytes, the function returns `ExceedsCapacity` (Behavior 4) and the test asserts that refusal in place of equality." AC-5 adds "Pairs whose buffers do not fit (the refusal of AC-1) are not compared." The Status paragraph was removed. |
+| FND-002 | fixed | FR-404 and TC-952 Status now say FR-399-AC-6 and AC-7 are "owned by IR-1445 (planner ruling)" and bound in TC-947. The stale FR-399/TC-947 side is new FND-006. |
+| FND-003 | fixed | Each FR-401 row's peak cell reads "cap 25769803776 bytes (OOM kill; not a measured peak)". The record states where each shape stopped: shape 1 in symbolic execution at decode slot 59 (58) of 64; shape 2 after symex and post-processing, in the SAT stage. The journal and logs corroborate both. |
+| FND-004 | fixed | Behaviors 1 and 2 now say "immutable `static` arrays". AC-4(b) still says "table const", which a reader takes to mean the table, so that is accepted as is. |
+| FND-005 | fixed | TC-949 Expected Results now opens with "The mutant lines below are the rationale for the controls, not executed results". |

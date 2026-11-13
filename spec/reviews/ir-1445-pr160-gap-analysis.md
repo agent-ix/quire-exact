@@ -58,3 +58,21 @@ The bindings were checked against the AC text:
 ## Verdict
 
 Mergeable once FND-001 and FND-002 are fixed. They are cheap to fix and are real gaps between what AC-3 and AC-5 say ("every") and what is measured (a sample). Under the repo's "findings in the same PR" rule they belong here, not in a follow-up. FND-003 to FND-006 are low. FR-404-AC-7 and AC-9 are now honestly bound to executed rows.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+|---|---|---|---|
+| FND-007 | medium | The new FR-399-AC-6 binder `proof_path_constructor_decides_like_the_owner_over_the_enumeration` enumerates strings of at most three scalars over a four-scalar alphabet (a, U+00E9, U+0301, U+1F82). AC-6 asks for "every string that the correspondence enumeration of CG FR-052-AC-2 covers", and CG FR-052-AC-2 is "every byte string up to a stated small length, filtered by `std::str::from_utf8`". The alphabet is a sample, not every string. The comparator is also an oracle the test builds (`expected_decision` from `admit_text` and the normal form), because the host `from_admitted` that AC-6 names does not exist. That deviation is stated only in TC-952 Status. Add every UTF-8 byte string up to a stated small length (2 bytes is cheap; it also covers U+00E9 under `Text[0,1]`) beside the alphabet. Record the host-counterpart substitution in FR-399 (see spec-review FND-006). | tests/ir1445_native_text.rs:263-322, spec/functional/FR-399-non-metered-text-constructor-from-admitted-parts.md:55 |
+| FND-008 | low | The zero-allocation check for FR-399-AC-7 runs over the supported profiles only. The four normalizing profiles take the host-only `std` path and allocate. AC-7 says "over the AC-6 inputs" with no carve-out, and the carve-out is stated only in TC-952 Status. Put it in FR-399-AC-7 or in FR-399 Status. | tests/ir1445_native_text.rs:326-356 |
+
+## Dispositions
+
+| FND | outcome | reason |
+|---|---|---|
+| FND-001 | fixed | `normalization_allocates_nothing` now measures `inputs()`, both AC-7 payloads (`ac7_texts`) and every scalar from `generator::scalars()`. |
+| FND-002 | fixed | `order_and_counts_match_the_shipped_compare` iterates every ordered pair of the fitting AC-1 payloads, for all six operators. The charge amounts are captured on the first operator of each pair, which AC-6 ("for each operand pair") allows. |
+| FND-003 | fixed | Seeds were added for `alloc`, `impl Fn`, `impl FnMut`, `impl FnOnce`, a closure after `(` and a closure after `,`. |
+| FND-004 | fixed | FR-401-AC-3 and TC-949 step 3 now name the per-thread `allocation-counter` dev-dependency, with the reason: the crate sets `unsafe_code = "forbid"` (Cargo.toml lints) and a counting global allocator needs `unsafe`. The AC and the test agree. |
+| FND-005 | fixed | The binder groups the rows by shape and requires each shape's forms to equal {nfc, nfd, nfkc, nfkd}. Each harness id must be `native_text_normalize_<form>` and `fn native_text_normalize_<form>()` must exist in `kani_proofs.rs`. An OOM peak must be marked "cap ... not a measured peak". |
+| FND-006 | fixed | `MACROS_OUTSIDE_THE_SCAN` was removed, and the two `matches!` uses are now `match`. |
