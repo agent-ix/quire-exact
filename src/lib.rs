@@ -191,7 +191,10 @@ pub use native_integer::{
     NativeIntegerOperands, NativeIntegerOperation, NativeIntegerOperationKind, NativeIntegerPlan,
     NativeIntegerSchedule,
 };
-pub use native_text::{compare_native_text, NativeText, NativeTextRefusal, NATIVE_TEXT_CAPACITY};
+pub use native_text::{
+    compare_native_text, normalize_text, unwind_bound, NativeText, NativeTextRefusal,
+    NormalizeRefusal, NormalizedSize, NATIVE_TEXT_CAPACITY,
+};
 pub use node::{
     is_identifier, Identifier, InvalidIdentifier, InvalidNodeKey, NodeKey,
     NodeKeyConstructionError, NodeKeyView, NodePathIter, PathSegment, PathSegmentView,

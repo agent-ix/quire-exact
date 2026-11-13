@@ -33,4 +33,4 @@ Verify FR-401-AC-1 through FR-401-AC-9 by running the host-callable proof-path n
 
 ## Status
 
-Planned (IR-1501).
+Executed (IR-1445) in `tests/ir1501_normalize` (steps 1 to 7) and in the `cfg(test)` unit tests `src/native_text/normalize/trip_tests.rs` (step 8). The mutant list above is not run as buildable scratch variants; the equality over every scalar, the named sequences, the exact refusals, the scanner's seeded violations and the trip counters are the controls that stand in for them.

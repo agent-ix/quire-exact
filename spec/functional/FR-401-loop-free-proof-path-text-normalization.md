@@ -58,9 +58,11 @@ The retained scalars in the output buffer as UTF-8, their scalar count and byte 
 
 ## Status
 
-Planned (IR-1501). No Rust or test exists. The reading of "loop-free" above is the code lead's ruling on IR-1501, recorded here as an interpretation of the IR-1501 and CG FR-052 wording, not a narrowing.
+Implemented (IR-1445): `normalize_text`, `NormalizeRefusal`, `NormalizedSize` and `unwind_bound` in `src/native_text/normalize.rs`, with generated tables in `src/native_text/normalize/tables.rs` and the generator in `tests/ir1501_normalize/generator.rs`. AC-1 through AC-8 run as host tests (`tests/ir1501_normalize`, TC-949) and AC-9 as the `cfg(test)` unit tests of the module (`src/native_text/normalize/trip_tests.rs`). The pair sweep of AC-8 is the `#[ignore]`d test run by `make test-exhaustive`. The reading of "loop-free" above is the code lead's ruling on IR-1501, recorded here as an interpretation of the IR-1501 and CG FR-052 wording, not a narrowing.
 
-Open premise, not claimed: that Kani verifies the table lookups and the composition within the carrier's memory budget is not established here; the memory evidence is [FR-404](./FR-404-kani-tractable-native-text-carrier.md)'s.
+The carrier's constructor does not call this function: its host-only decision for the four normalizing profiles still uses `std` UTF-8 validation and the owner's normalization (FR-404 Behavior 10), because the normalizing profiles are reported supported on the proof path only on a VERIFIED Kani record at the chosen C. That measurement is [FR-404](./FR-404-kani-tractable-native-text-carrier.md)'s; its recorded outcome is in the evidence record of [TC-952](../test-cases/TC-952-kani-tractable-native-text-carrier.md).
+
+AC-1 and AC-5 take every ordered pair of the listed scalars at (N, D, R) of (64, 32, 64). Where the intermediate form of a pair exceeds 32 scalars (for example U+FDFA twice under `nfkd`) or its output exceeds 64 bytes, the function returns `ExceedsCapacity` (Behavior 4), and the tests assert that refusal instead of equality; AC-5 and AC-6 compare only the pairs whose buffers fit, as Behavior 3 states ("when the output fits").
 
 ## Dependencies
 

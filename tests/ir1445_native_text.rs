@@ -1218,25 +1218,50 @@ fn probe_records_are_executed_and_choose_the_capacity() {
     );
 }
 
-/// Behavior 10's consistency only. It passes on a `NOT RUN` record by design
-/// and is not an AC-7 or AC-9 binder: those criteria need an executed
-/// FR-401 record that does not exist, so no test claims them.
+/// FR-404-AC-7 and Behavior 10: the recorded Kani run of the FR-401
+/// normalization at the chosen C exists for every normalizing form it names,
+/// each row an executed outcome with a recorded peak and a harness id, and
+/// the normalizing profiles are reported supported only if every row is
+/// VERIFIED within 16 GiB.
 #[test]
+#[trace("TC-952", "FR-404-AC-7", "FR-404-AC-9")]
 fn normalizing_profiles_are_supported_only_on_a_verified_record() {
     let rows = evidence_rows();
-    let row = rows
+    let measured: Vec<&Row> = rows
         .iter()
-        .find(|row| row.operation == "FR-401 normalization at the chosen C")
-        .expect("normalization row");
-    assert_ne!(row.cells[1], "PENDING");
-    assert!(row.cells[5].contains("owner pending planner ruling") || row.cells[1] == "VERIFIED");
-    let supported = row.cells[1] == "VERIFIED";
+        .filter(|row| {
+            row.operation
+                .starts_with("FR-401 normalization at the chosen C")
+        })
+        .collect();
+    assert_eq!(measured.len(), 4, "one row per normalizing form");
+    let sixteen_gib = 16u64 * 1024 * 1024 * 1024;
+    let mut verified = true;
+    for row in &measured {
+        assert!(
+            ["VERIFIED", "TIMEOUT", "OUT OF MEMORY"].contains(&row.cells[1].as_str()),
+            "an executed outcome, not NOT RUN: {:?}",
+            row.cells
+        );
+        assert!(row.cells[2].ends_with(" s"), "recorded wall time");
+        assert!(row.cells[3].ends_with(" bytes"), "recorded peak memory");
+        assert!(
+            row.cells[5].starts_with("native_text_kani_proofs::native_text_normalize_"),
+            "harness id"
+        );
+        let peak: u64 = row.cells[3].trim_end_matches(" bytes").parse().unwrap();
+        if row.cells[1] == "VERIFIED" {
+            assert!(peak < sixteen_gib);
+        } else {
+            verified = false;
+        }
+    }
     for profile in [
         TextProfile::Nfc,
         TextProfile::Nfd,
         TextProfile::Nfkc,
         TextProfile::Nfkd,
     ] {
-        assert_eq!(NativeText::proof_path_supports(profile), supported);
+        assert_eq!(NativeText::proof_path_supports(profile), verified);
     }
 }
