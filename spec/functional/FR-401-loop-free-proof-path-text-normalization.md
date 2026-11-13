@@ -66,5 +66,5 @@ Open premise, not claimed: that Kani verifies the table lookups and the composit
 
 - [FR-400](./FR-400-text-payload-byte-bound-per-profile.md) states the capacity argument; [FR-399](./FR-399-non-metered-text-constructor-from-admitted-parts.md) uses this normalization in the proof-path constructor.
 - [FR-367](./FR-367-text-profile-mismatch-before-charging.md) owns the shipped `compare_text` that the AC-5 and AC-6 differential reads.
-- [FR-404](./FR-404-kani-tractable-native-text-carrier.md) (ticket IR-1445) owns the carrier, C and the proof-path replacement of `compare_text`, which CG FR-052-AC-12 ties to the shipped function (substituted for the Kani build by the consumer, not by a `cfg(kani)` body; FR-404 Behavior 5). This requirement's capacities are generic so that it is testable before the carrier exists.
+- [FR-404](./FR-404-kani-tractable-native-text-carrier.md) (ticket IR-1445) owns the carrier, C and the proof-path replacement of `compare_text`, which CG FR-052-AC-12 ties to the shipped function (substituted for the Kani build by the consumer, not by a `cfg(kani)` body; FR-404 Behavior 7). This requirement's capacities are generic so that it is testable before the carrier exists.
 - [TC-949](../test-cases/TC-949-loop-free-proof-path-text-normalization.md) is the verification home.

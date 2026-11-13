@@ -53,3 +53,16 @@ CHANGES REQUIRED: one high, one medium. Clean: all seven FR-404 relationship tar
 | TC-952 | examined | spec/test-cases/TC-952-kani-tractable-native-text-carrier.md:14 | Verify FR-404-AC-1 through FR-404-AC-8 through the public kernel API, the host differential, a source scan and the recorded Kani measurements. Each mutant below is a buildable variant in a scratch copy and names the input or inspection that fails it. |
 | FR-399 | context_only | spec/functional/FR-399-non-metered-text-constructor-from-admitted-parts.md:22 | The representation of `Text` on the Kani proof path is the text carrier of ticket IR-1445, which owns its capacity C and its memory evidence. This requirement states the behaviour that every representation has, and the proof-path counterpart (FR-399-AC-6) is conditional on the carrier. |
 | FR-401 | context_only | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:22 | **Relation to IR-1445.** The function is generic over its capacities (below), so its host criteria stand without the carrier. Instantiating the capacities with the carrier's C, and the Kani run and its memory evidence, belong to IR-1445 and are conditional on it; a table that does not fit the K-DR budget is IR-1445's measurement and leaves the normalizing profiles `unsupported` in CG FR-052, with this requirement still met on the host. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | low | The Consumer paragraph now leaves CG's consumption to CG, but B7 states 'The Kani build SHALL substitute the replacement for compare_text at the consumer', a SHALL whose subject is CG's generation. State it as context ('CG's generated harness calls compare_native_text in place of compare_text') rather than an obligation of this requirement, consistent with the Consumer paragraph. | spec/functional/FR-404-kani-tractable-native-text-carrier.md:52 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-002 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |

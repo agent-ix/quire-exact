@@ -59,3 +59,23 @@ CHANGES REQUIRED: three high findings (undefined K-DR budget decides C; replacem
 | FR-399-B5 | context_only | spec/functional/FR-399-non-metered-text-constructor-from-admitted-parts.md:42 | 5. **Host-callable replacement.** The proof-path counterpart is callable from a host build, so that the host differential of AC-6 can run. This is a prerequisite on IR-1445: it is requested in a comment on IR-1445, is not yet in its acceptance criteria, and is added there by the code lead. The carrier's refusal of a payload of C + 1 bytes (AC-6) is likewise this requirement's prerequisite on IR-1445. |
 | FR-401-B3 | context_only | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:38 | 3. **Same result.** For every payload within N, form and capacities, the emitted scalars and count equal those of `NormalizationForm::apply` when the output fits. The count is the running emitted count of `text.normalize-output`, so the carrier's `compare_text` replacement charges the same points as the shipped `compare_text`. |
 | FR-402-AC-11 | context_only | spec/functional/FR-402-kani-tractable-native-decimal-carrier.md:76 | \| FR-402-AC-11 \| When CG's decimal row (CG FR-051, IR-259) consumes the delivered carrier, the peak memory, time, tool version and terminal outcome of the proof harness that draws its operands through the carrier are recorded under IR-1444 with the harness run and the peak provenance. A fit or a non-fit at 16 GiB is stated as measured; a non-fit is followed by a filed finite-grid ticket rather than a narrowed domain. No memory budget other than the 16 GiB ceiling of CG FR-028 is stated or assumed. \| Inspection (TC-950) \| |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | medium | The fix for FND-006 sets C to 32 and makes the measured rows the end state when neither candidate verifies (B5), and AC-9 then declares the requirement Done. But AC-6 still requires the local probe at the chosen C to return VERIFIED and says a TIMEOUT or out-of-memory 'fails this criterion', so in that branch the requirement is Done with a failing AC. The branch also leaves the carrier's own support state at C = 32 unstated, delegating it to 'the refusal seam of IR-1526', a ticket rather than a spec artifact. Fix: make AC-6 conditional on a VERIFIED candidate (or name AC-6 as not applicable in the neither branch), and state what the carrier reports in that branch or link the IR-1526 requirement by id. | spec/functional/FR-404-kani-tractable-native-text-carrier.md:72 |
+| FND-009 | low | B9 asserts that the returned boolean equals slice == and cmp, but compare_native_text returns Outcome<bool> under a Meter (B6), and an exhausted budget yields no boolean. The probe does not state the meter it passes. Fix: state a meter large enough that every point C bytes can reach is affordable (or assert over the Outcome's value variant). | spec/functional/FR-404-kani-tractable-native-text-carrier.md:57 |
+| FND-010 | low | With zero tails (B2), a replacement that compares all C bytes and ignores the lengths differs from the shipped function only on pairs like "a" against "a\u{0}". The host differential's pairs (last byte, proper prefix, distinct profiles) do not include one, so B2's read rule is checked only by the binary-utf8 Kani probe. Add a proper-prefix pair whose longer operand ends in U+0000 to AC-4 and a TC-952 mutant. | spec/functional/FR-404-kani-tractable-native-text-carrier.md:67 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-002 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-003 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-004 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-005 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-006 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-007 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |

@@ -57,3 +57,18 @@ CHANGES REQUIRED: two medium, one low. On the dispatching lead's question: yes, 
 | FR-401-Deps | context_only | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:67 | - IR-1445 owns the carrier, C and the `cfg(kani)` replacement of `compare_text`, which CG FR-052-AC-12 ties to the shipped function. This requirement's capacities are generic so that it is testable before the carrier exists. |
 | FR-399 | context_only | spec/functional/FR-399-non-metered-text-constructor-from-admitted-parts.md:22 | The representation of `Text` on the Kani proof path is the text carrier of ticket IR-1445, which owns its capacity C and its memory evidence. This requirement states the behaviour that every representation has, and the proof-path counterpart (FR-399-AC-6) is conditional on the carrier. |
 | FR-401 | context_only | spec/functional/FR-401-loop-free-proof-path-text-normalization.md:22 | **Relation to IR-1445.** The function is generic over its capacities (below), so its host criteria stand without the carrier. Instantiating the capacities with the carrier's C, and the Kani run and its memory evidence, belong to IR-1445 and are conditional on it; a table that does not fit the K-DR budget is IR-1445's measurement and leaves the normalizing profiles `unsupported` in CG FR-052, with this requirement still met on the host. |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | B5, AC-8, AC-9 and TC-952 step 5 make rows of 'the Kani tractability table' acceptance evidence, and the Description places it at evidence/table/kani-tractability.csv 'in the proofs-gen worktree'. That directory (/home/peter/dev/worktrees/proofs-gen) is not a git repository and the file is on no branch of any repo, so an inspector elsewhere cannot check AC-8 or AC-9 and the record can change unseen. (The cited text rows do exist there: byte-loop equality at 128 bytes VERIFIED in 3.8 s.) Fix: name a versioned home for the records (a committed path in quire-exact, or the IR-1445 ticket as FR-402 uses IR-1444), keeping the local table as a copy. | spec/functional/FR-404-kani-tractable-native-text-carrier.md:47 |
+| FND-005 | low | After the renumbering, FR-404-B5 says C is chosen by 'the local probe harness of Behavior 8', but the harness is Behavior 9 (Behavior 8 is the differential); FR-401 Dependencies says the substitution is 'FR-404 Behavior 5', but it is Behavior 7. Correct both cross-references. | spec/functional/FR-404-kani-tractable-native-text-carrier.md:47 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-002 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-003 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |

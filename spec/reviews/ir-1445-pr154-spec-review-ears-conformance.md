@@ -52,3 +52,11 @@ ACCEPTABLE WITH LOW FINDINGS: the statement and Behaviors 1, 4 and 5 are well-fo
 | FR-404-AC-8 | examined | spec/functional/FR-404-kani-tractable-native-text-carrier.md:67 | Executed verdict required: this requirement is not Done until AC-2, AC-6 and AC-7 each have an executed run with a recorded outcome. A configured limit, a prediction or an unexecuted harness does not satisfy them. |
 | FR-404-Status | examined | spec/functional/FR-404-kani-tractable-native-text-carrier.md:71 | Planned (IR-1445). No Rust, test, probe or proof exists. C is not yet fixed. FR-399-AC-6 and FR-399-AC-7 and the carrier-dependent parts of FR-401 are conditional on this requirement; their text already names the carrier of IR-1445 and needs no change. |
 | TC-952 | examined | spec/test-cases/TC-952-kani-tractable-native-text-carrier.md:14 | Verify FR-404-AC-1 through FR-404-AC-8 through the public kernel API, the host differential, a source scan and the recorded Kani measurements. Each mutant below is a buildable variant in a scratch copy and names the input or inspection that fails it. |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-002 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
+| FND-003 | fixed | Round 1 (head 9f84ee0b): verified in the fix commit. |
