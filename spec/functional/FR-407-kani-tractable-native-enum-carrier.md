@@ -66,7 +66,7 @@ A generated harness for `a < b` over an `ordered enum` of three members draws `a
 | FR-407-AC-5 | Operands with different tags, or the same tag but a different count or ordered flag, are refused with `DistinctEnumDeclarations`, which takes precedence over `UnorderedEnumOrdering`; an ordering over an unordered declaration is refused with `UnorderedEnumOrdering`; a refused call leaves the `Meter` unchanged. | Test (TC-955) |
 | FR-407-AC-6 | Inside quire-exact, against a literal expected charge sequence on a recording `Meter` (not the owner), the charge points, order, limit kinds and amounts of Behavior 7, the denied charge and the incomplete record are as stated at a sufficient, an exact and a one-less limit, and equality and ordered comparison are charged identically on one `Meter`. | Test (TC-955) |
 | FR-407-AC-7 | The differential of Behavior 10, in quire-semantic-value's `tests/` under its own QSV ticket, passes beside the owner's `compare_enum` (including the same-key, different-member-list case), and each Behavior 6 to 8 mutant of TC-955 fails it at step 5. | Test (TC-955) |
-| FR-407-AC-8 | The comparison source contains no `cfg(kani)`, loop, iterator adapter, allocation, `num_bigint` item, owner `Integer`, `NodeKey` or `EnumValue`. | Inspection (TC-955) |
+| FR-407-AC-8 | The comparison source contains no `cfg(kani)`, loop, iterator adapter, allocation, `num_bigint` item, owner `Integer`, `NodeKey` or `EnumValue`. | Inspection (code review) |
 | FR-407-AC-9 | PLANNED: the Kani harness of Behavior 9 returns an executed terminal VERIFIED verdict, its cover paths are reached and its mutant fails, with time, peak memory, tool version and harness id recorded in TC-955's evidence record. A FAILED verdict fails the criterion; a timeout, memory exhaustion or unreliable outcome is recorded as the measured row and claims no proof. | Test (TC-955) |
 
 ## Relationship to CG FR-049
@@ -75,7 +75,7 @@ CG FR-049 draws each operand as a symbolic `i64` index in `0..member_count` and 
 
 ## Status
 
-Implemented (IR-262) for FR-407-AC-1 through AC-6 and AC-8, backed by host tests in `tests/ir262_native_enum.rs`. FR-407-AC-7 is Planned: the differential lives in quire-semantic-value under its own QSV ticket. FR-407-AC-9 is Planned: the harnesses of Behavior 9 are written in `src/native_enum/kani_proofs.rs` and compile-checked under `cfg(kani)`, but no Kani run has executed and no verdict exists.
+Implemented (IR-262) for FR-407-AC-1 through AC-6, backed by host tests in `tests/ir262_native_enum.rs` and a `compile_fail,E0451` doctest on `NativeEnum`; AC-8 is an inspection by code review. FR-407-AC-7 is Planned: the differential lives in quire-semantic-value under its own QSV ticket. FR-407-AC-9 is Planned: the harnesses of Behavior 9 are written in `src/native_enum/kani_proofs.rs`, not compiled or run, and no Kani run has executed and no verdict exists.
 
 ## Dependencies
 

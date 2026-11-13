@@ -2,7 +2,7 @@
 //! The Kani harnesses of FR-407 Behavior 9: `compare_native_enum` over
 //! symbolic ranks, counts, ordered flag, declaration tags and meter limits,
 //! for all six operators, against an expected side written separately from
-//! the comparison body. Written and compile-checked only; no verdict is
+//! the comparison body. Written only: not compiled or run, and no verdict is
 //! recorded (FR-407-AC-9 is planned).
 use crate::accounting::{Meter, ScalarLimits};
 use crate::comparison::{ComparisonOperator, IllTypedCause};
@@ -45,7 +45,7 @@ fn expected(operator: ComparisonOperator, left: u32, right: u32) -> bool {
 }
 
 /// One shared declaration, symbolic meter limits: the Completed path and the
-/// incomplete path of each charge, with the consumed counters.
+/// incomplete path of each charge, with the admission count.
 #[kani::proof]
 fn native_enum_compare_same_declaration() {
     let tag: u64 = kani::any();
