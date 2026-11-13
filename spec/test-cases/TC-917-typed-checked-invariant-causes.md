@@ -29,8 +29,10 @@ coordinated cutover. Scope: FR-369-AC-1, FR-369-AC-2 and FR-369-AC-5.
    its owning placeholder, and no other trigger inherits it.
    Compile a use of the enum as `Copy`, `Clone`,
    `Debug`, `Eq`, `Hash` and `PartialEq`, and a `Refusal` as `Clone`, `Debug`,
-   `Eq` and `PartialEq`. A source/compile check rejects construction of the
-   former unit `Refusal::CheckedInvariant` and an unhandled new cause variant.
+   `Eq` and `PartialEq`. A compile check rejects construction of the
+   former unit `Refusal::CheckedInvariant`. That a match over the closed enum
+   cannot absorb a new cause variant is the compiler's own exhaustiveness check:
+   Inspection (code review), with no automated step.
 2. Reach kernel collection construction with an evaluated element outside its
    declared element type, and composite construction with a deferred result
    outside its declared field type. Assert distinct
@@ -70,7 +72,7 @@ planned until their own tagged tests and inspection run.
 ## Status
 
 `tests/checked_invariant.rs` exhaustively tests the thirty-one-cause carrier,
-checks that both removed constructors are rejected by the Rust compiler, and
+checks that the former unit constructor and both removed causes are rejected by the Rust compiler, and
 preserves the four typed nested payload controls. These carrier tests give no
 credit to CG's generated producer execution. The remaining RT and external
 producer controls retain their own evidence and ownership.

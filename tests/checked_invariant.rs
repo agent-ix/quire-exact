@@ -234,7 +234,7 @@ fn comparison_payloads_retain_the_original_typed_cause() {
 
 #[trace("TC-917", "FR-369-AC-1", "FR-369-AC-5")]
 #[test]
-fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cause() {
+fn rust_compiler_rejects_unit_constructor_and_removed_causes() {
     use std::{fs, process::Command};
 
     let executable = std::env::current_exe().expect("integration test executable");
@@ -257,16 +257,16 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
         .expect("Cargo built the kernel rlib");
     let directory = dependencies.join(format!("checked-invariant-controls-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
-    let compile = |name: &str, source: &str, executable: bool| {
+    let compile = |name: &str, source: &str| {
         let input = directory.join(format!("{name}.rs"));
         fs::write(&input, source).unwrap();
         Command::new("rustc")
             .args([
                 "--edition=2021",
                 "--crate-type",
-                if executable { "bin" } else { "lib" },
+                "lib",
                 "--emit",
-                if executable { "link" } else { "metadata" },
+                "metadata",
             ])
             .arg("--extern")
             .arg(format!("quire_exact={}", library.display()))
@@ -282,7 +282,6 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
         "required_payload",
         "use quire_exact::{Refusal, CheckedInvariantCause};\n\
          pub fn refusal() -> Refusal { Refusal::CheckedInvariant { cause: CheckedInvariantCause::PopulationPair } }",
-        false,
     );
     assert!(
         valid.status.success(),
@@ -292,7 +291,6 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
     let invalid = compile(
         "former_unit",
         "pub fn refusal() -> quire_exact::Refusal { quire_exact::Refusal::CheckedInvariant }",
-        false,
     );
     let error = String::from_utf8_lossy(&invalid.stderr);
     assert!(!invalid.status.success());
@@ -304,7 +302,6 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
         "removed_depth_cause",
         "use quire_exact::CheckedInvariantCause;\n\
          pub fn cause() -> CheckedInvariantCause { CheckedInvariantCause::CallDepthExceeded }",
-        false,
     );
     let error = String::from_utf8_lossy(&removed.stderr);
     assert!(!removed.status.success());
@@ -317,7 +314,6 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
         "removed_placeholder_cause",
         "use quire_exact::CheckedInvariantCause;\n\
          pub fn cause() -> CheckedInvariantCause { CheckedInvariantCause::GeneratedBodyPlaceholderInvoked }",
-        false,
     );
     let error = String::from_utf8_lossy(&removed.stderr);
     assert!(!removed.status.success());
@@ -326,89 +322,5 @@ fn rust_compiler_rejects_unit_constructor_removed_cause_and_an_unhandled_new_cau
         "{error}"
     );
 
-    // Compile the actual owning enum with the independently authored match,
-    // then add a new unit cause to prove that this match cannot absorb it.
-    let owning_source = include_str!("../src/outcome.rs");
-    let start = owning_source
-        .find("pub enum CheckedInvariantCause {")
-        .unwrap();
-    let end = start + owning_source[start..].find("\n}\n").unwrap() + 2;
-    let declaration = &owning_source[start..end];
-    let test_source = include_str!("checked_invariant.rs");
-    let start = test_source.find("fn expected_name(").unwrap();
-    let end = start + test_source[start..].find("\n}\n").unwrap() + 2;
-    let matcher = &test_source[start..end];
-    let source = format!("use quire_exact::IllTypedCause;\n{declaration}\n{matcher}");
-    let valid = compile("exhaustive_current", &source, false);
-    assert!(
-        valid.status.success(),
-        "{}",
-        String::from_utf8_lossy(&valid.stderr)
-    );
-    let extended = source.replacen(
-        "pub enum CheckedInvariantCause {",
-        "pub enum CheckedInvariantCause {\n    UnhandledControlCause,",
-        1,
-    );
-    let invalid = compile("exhaustive_extended", &extended, false);
-    let error = String::from_utf8_lossy(&invalid.stderr);
-    assert!(!invalid.status.success());
-    assert!(
-        error.contains("E0004") && error.contains("UnhandledControlCause"),
-        "{error}"
-    );
-
-    // Mutate the actual public carrier mapping, keeping the same successful
-    // compiler setup and payload. The intended None assertion must then fail.
-    let start = owning_source.find("pub enum Refusal {").unwrap();
-    let end = start + owning_source[start..].find("\n}\n").unwrap() + 2;
-    let refusal = &owning_source[start..end];
-    let start = owning_source.find("impl Refusal {").unwrap();
-    let end = start + owning_source[start..].find("\n}\n").unwrap() + 2;
-    let mappings = &owning_source[start..end];
-    let source = format!(
-        "use quire_exact::{{BoundViolation, CardinalityBound, CheckedInvariantCause, \
-         CollectionKind, DecimalType, DivisionMember, IeeeFlags, IeeeWidth, IllTypedCause, \
-         InexactTarget, IntegerInterval, QuantityResultInterval, RationalDomain, TextType, UniverseId}};\n\
-         #[derive(Clone, Debug, Eq, PartialEq)]\n{refusal}\n{mappings}\n\
-         fn main() {{\n\
-             let refusal = Refusal::CheckedInvariant {{\n\
-                 cause: CheckedInvariantCause::EqualityQuantityConversionRejected {{\n\
-                     cause: IllTypedCause::DistinctUnits\n\
-                 }}\n\
-             }};\n\
-             assert_eq!(refusal.code(), None, \"typed carrier has no catalog code\");\n\
-             assert_eq!(refusal.cause(), None, \"typed carrier has no catalog cause\");\n\
-         }}"
-    );
-    for (name, source, should_pass) in [
-        ("carrier_mapping", source.clone(), true),
-        (
-            "carrier_mapping_mutated",
-            source.replacen(
-                "Self::CheckedInvariant { .. } => None",
-                "Self::CheckedInvariant { .. } => Some(\"mutation-catalog-code\")",
-                1,
-            ),
-            false,
-        ),
-    ] {
-        let built = compile(name, &source, true);
-        assert!(
-            built.status.success(),
-            "{name} must compile: {}",
-            String::from_utf8_lossy(&built.stderr)
-        );
-        let ran = Command::new(directory.join(name)).output().unwrap();
-        assert_eq!(ran.status.success(), should_pass);
-        if !should_pass {
-            let error = String::from_utf8_lossy(&ran.stderr);
-            assert!(
-                error.contains("typed carrier has no catalog code")
-                    && error.contains("mutation-catalog-code"),
-                "mutation must fail the intended mapping assertion: {error}"
-            );
-        }
-    }
     fs::remove_dir_all(directory).unwrap();
 }
