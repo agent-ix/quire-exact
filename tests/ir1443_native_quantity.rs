@@ -257,7 +257,13 @@ fn same_fn(_: fn(&CarriedQuantityType, B) -> Built) {}
 fn the_constructor_is_loop_free_copy_unit_free_and_allocation_free() {
     // Source inspection of the production part of the module.
     let source = include_str!("../src/native_quantity.rs");
-    let production = source.split("\n#[cfg(").next().expect("production part");
+    let production = [
+        "#[cfg(kani)]\nmod kani_proofs;",
+        "#[cfg(any(test, kani))]\nmod reference;",
+        "#[cfg(test)]\nmod tests;",
+    ]
+    .iter()
+    .fold(source.to_string(), |text, module| text.replace(module, ""));
     let code: String = production
         .lines()
         .filter(|line| !line.trim_start().starts_with("//"))
