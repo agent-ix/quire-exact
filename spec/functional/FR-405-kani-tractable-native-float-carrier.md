@@ -92,7 +92,22 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 
 ## Status
 
-Specified (IR-1446). Not implemented; no Rust accompanies this requirement, no Kani harness has run and no measurement exists.
+Implemented (IR-1446): `src/native_float.rs` (carrier, `evaluate_native_float`, `compare_native_float`), harnesses in `src/native_float/kani_proofs.rs`, tests in `tests/ir1446_native_float.rs`, the host mutants in `scripts/ir1446_native_float_mutants.py`. The verdict or table row per operation and width (TC-953's evidence record has the time, peak memory, tool version and harness id of each):
+
+| Operation | Binary32 | Binary64 |
+| --- | --- | --- |
+| Negate | VERIFIED | VERIFIED |
+| NumericEqual | VERIFIED | VERIFIED |
+| TotalOrder | VERIFIED | VERIFIED |
+| BitIdentical | VERIFIED | VERIFIED |
+| Add | table row: timeout | table row: timeout |
+| Subtract | table row: timeout | table row: timeout |
+| Multiply | table row: timeout | table row: timeout |
+| Divide | table row: timeout | table row: timeout |
+| SquareRoot | table row: timeout | table row: timeout |
+| FusedMultiplyAdd | table row: timeout | table row: timeout |
+
+No proof is claimed for a table-row combination: its harness reached no verdict within 600 s and its peak memory (22.7 to 23.3 GB) is above the 16 GiB ceiling. The native operations for those combinations are host-callable and tested against the owner by the differential (AC-4 to AC-6, AC-10); that is a test, not a proof. The rows are for IR-1526's seam to load.
 
 ## Dependencies
 

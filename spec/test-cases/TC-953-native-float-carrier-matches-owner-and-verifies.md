@@ -76,7 +76,34 @@ The versioned record of every executed harness. The proofs-gen tractability tabl
 
 | Operation | Width | Outcome | Time | Peak memory | Kani version | Harness id |
 | --- | --- | --- | --- | --- | --- | --- |
-| (none run) | - | - | - | - | - | - |
+| Negate | Binary32 | VERIFIED | 1.8 s | 597381120 bytes | 0.68.0 | native_float_kani_proofs::float32_negate |
+| Add | Binary32 | timeout | 600 s (limit; killed, no verdict) | 22771355648 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float32_add |
+| Subtract | Binary32 | timeout | 600 s (limit; killed, no verdict) | 23011209216 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float32_subtract |
+| Multiply | Binary32 | timeout | 600 s (limit; killed, no verdict) | 22814351360 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float32_multiply |
+| Divide | Binary32 | timeout | 600 s (limit; killed, no verdict) | 22905405440 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float32_divide |
+| SquareRoot | Binary32 | timeout | 600 s (limit; killed, no verdict) | 23219585024 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float32_square_root |
+| FusedMultiplyAdd | Binary32 | timeout | 600 s (limit; killed, no verdict) | 22764011520 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float32_fused_multiply_add |
+| NumericEqual | Binary32 | VERIFIED | 1.8 s | 653529088 bytes | 0.68.0 | native_float_kani_proofs::float32_numeric_equal |
+| TotalOrder | Binary32 | VERIFIED | 1.6 s | 566456320 bytes | 0.68.0 | native_float_kani_proofs::float32_total_order |
+| BitIdentical | Binary32 | VERIFIED | 1.5 s | 567275520 bytes | 0.68.0 | native_float_kani_proofs::float32_bit_identical |
+| Negate | Binary64 | VERIFIED | 1.8 s | 597979136 bytes | 0.68.0 | native_float_kani_proofs::float64_negate |
+| Add | Binary64 | timeout | 600 s (limit; killed, no verdict) | 23179018240 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float64_add |
+| Subtract | Binary64 | timeout | 600 s (limit; killed, no verdict) | 23192272896 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float64_subtract |
+| Multiply | Binary64 | timeout | 600 s (limit; killed, no verdict) | 22704226304 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float64_multiply |
+| Divide | Binary64 | timeout | 600 s (limit; killed, no verdict) | 23269302272 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float64_divide |
+| SquareRoot | Binary64 | timeout | 600 s (limit; killed, no verdict) | 22983905280 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float64_square_root |
+| FusedMultiplyAdd | Binary64 | timeout | 600 s (limit; killed, no verdict) | 22954770432 bytes (above the 16 GiB ceiling) | 0.68.0 | native_float_kani_proofs::float64_fused_multiply_add |
+| NumericEqual | Binary64 | VERIFIED | 1.7 s | 566562816 bytes | 0.68.0 | native_float_kani_proofs::float64_numeric_equal |
+| TotalOrder | Binary64 | VERIFIED | 1.6 s | 566165504 bytes | 0.68.0 | native_float_kani_proofs::float64_total_order |
+| BitIdentical | Binary64 | VERIFIED | 1.5 s | 565882880 bytes | 0.68.0 | native_float_kani_proofs::float64_bit_identical |
+
+Runner and provenance. The harnesses and native bodies measured are those of commit 6f0d666 (`src/native_float.rs` and `src/native_float/kani_proofs.rs` are unchanged after it). Each row is an executed run of `cargo kani --harness native_float_kani_proofs::<id> --exact --unwind 57 --jobs 1 --solver cadical` (Kani 0.68.0, CBMC 6.11.0), one job at a time under `flock /tmp/cargo-slot.lock` and `systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=0`, with a 600 s `timeout`. The unwind bound is 57 because the square-root digit loop has the constant bound 56 (`SQRT_STEPS`); no other loop exceeds 3 iterations. Peak memory is the scope's cgroup `memory.peak`, read inside the scope after the run; the scope held the whole `cargo kani` invocation, so it includes the build and is an upper bound on the solver's peak. A VERIFIED time is Kani's reported verification time. A timeout row's time is the 600 s limit, at which `timeout` killed the run; its harness reached no verdict, and its peak (22.7 to 23.3 GB, just under the 24 GiB scope limit) is above the 16 GiB ceiling of CG FR-028, so by FR-405-AC-13 it is a non-VERIFIED row and no proof is claimed for it. Every VERIFIED row satisfied all of its cover properties (2 of 2 for each comparison, 1 of 1 for each Negate) and its peak is at most 0.66 GB.
+
+Expected side of the harnesses. Each arithmetic harness checks the native operation against the host language's own `f32`/`f64` operation (`+`, `-`, `*`, `/`, `sqrt`, `mul_add`), which shares no function with the native body and not even the bit-pattern decode. The docstring of `src/native_float/kani_proofs.rs` lists the outputs a harness covers (result bits under `NearestEven` and `Exact`, NaN results under every spelling, the `invalid` flag of NaN-producing operations, that only `Exact` refuses, provenance, the result-unit charge) and the outputs left to the host differential (directed and nearest-away bits, the `overflow`, `underflow`, `inexact` and `divide_by_zero` flags, the `Exact` refusal's would-be flags, charge amounts and meter limits). The comparison harnesses assert the boolean and the result-unit charge against the host `==`, bit equality and a signed-integer fold of the sign-magnitude order. Negate asserts bitwise sign negation with no flag.
+
+Harness mutants (FR-405-AC-12). Each VERIFIED harness fails a buildable mutant of the native body, run under the same runner: NumericEqual with zeros of opposite sign unequal fails `float32_numeric_equal` and `float64_numeric_equal`; BitIdentical comparing numeric value fails both `bit_identical` harnesses; TotalOrder ignoring the sign fails both `total_order` harnesses; Negate quieting its operand fails both `negate` harnesses. All eight reported `VERIFICATION:- FAILED`.
+
+Host mutants (FR-405-AC-10). `scripts/ir1446_native_float_mutants.py` builds 49 mutants in scratch copies (one per row of the table above that has a buildable form, one per charge point of `ieee.rs` including `ieee.exact-intermediate` and `ieee.round` each made on a classification-decided input, and the inspection mutants) and requires the named step's test to fail; all 49 were killed and none survived.
 
 ## Expected Results
 
@@ -84,4 +111,4 @@ Every boundary case yields the owner's bits, flags, provenance and charges, with
 
 ## Status
 
-Not run. No implementation, harness, table row or measurement exists; this case is specified under IR-1446 and is executable once the native operations are delivered.
+Run under IR-1446. The host tests (`tests/ir1446_native_float.rs`, steps 1 to 7 and 9) and the 49 mutants pass; the Kani harnesses of step 8 ran once for every combination of operation and width. Negate, NumericEqual, TotalOrder and BitIdentical are VERIFIED at both widths, with the vacuity covers reached and the harness mutants failing. Add, Subtract, Multiply, Divide, SquareRoot and FusedMultiplyAdd are measured table rows (timeout, peak above 16 GiB) at both widths, including the Binary64 add and multiply probe; no proof is claimed for them. The table rows are not yet loaded into IR-1526's tractability table, which this repository does not own; the evidence record above is the versioned copy.
