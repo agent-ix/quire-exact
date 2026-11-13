@@ -44,17 +44,25 @@ fn ty(profile: TextProfile) -> TextType {
     TextType::new(0, 8 * C as u64, profile).unwrap()
 }
 
-fn owner(profile: TextProfile, text: &str) -> Text {
+fn owner_in(text_type: TextType, text: &str) -> Text {
     let payload = TextPayload::from_utf8(text.as_bytes()).unwrap();
-    admit_text(&payload, &ty(profile), &mut Meter::new(limits(u64::MAX)))
+    admit_text(&payload, &text_type, &mut Meter::new(limits(u64::MAX)))
         .completed()
         .expect("owner admits the sample")
 }
 
-fn native(profile: TextProfile, text: &str) -> NativeText {
-    let retained = owner(profile, text).retained().to_owned();
-    NativeText::from_admitted(ty(profile), text.as_bytes(), retained.as_bytes())
+fn native_in(text_type: TextType, text: &str) -> NativeText {
+    let retained = owner_in(text_type, text).retained().to_owned();
+    NativeText::from_admitted(text_type, text.as_bytes(), retained.as_bytes())
         .expect("native admits the sample")
+}
+
+fn owner(profile: TextProfile, text: &str) -> Text {
+    owner_in(ty(profile), text)
+}
+
+fn native(profile: TextProfile, text: &str) -> NativeText {
+    native_in(ty(profile), text)
 }
 
 fn filler(length: usize, tail: &str) -> String {
@@ -66,7 +74,6 @@ fn filler(length: usize, tail: &str) -> String {
 type ConstructorFn = fn(TextType, &[u8], &[u8]) -> Result<NativeText, NativeTextRefusal>;
 type CompareFn =
     fn(ComparisonOperator, &NativeText, &NativeText, &mut Meter) -> Result<Outcome<bool>, IllTyped>;
-type Expectation = Box<dyn Fn(&Violation) -> bool>;
 
 fn assert_copy<T: Copy>() {}
 
@@ -227,8 +234,13 @@ fn consumed_of(meter: &Meter) -> [u64; 10] {
 
 /// One operand pair, every operator, every budget: native against shipped.
 fn differential(profile: TextProfile, left: &str, right: &str) {
-    let (owner_left, owner_right) = (owner(profile, left), owner(profile, right));
-    let (native_left, native_right) = (native(profile, left), native(profile, right));
+    differential_in(ty(profile), left, right);
+}
+
+fn differential_in(text_type: TextType, left: &str, right: &str) {
+    let profile = text_type.profile();
+    let (owner_left, owner_right) = (owner_in(text_type, left), owner_in(text_type, right));
+    let (native_left, native_right) = (native_in(text_type, left), native_in(text_type, right));
     for operator in ComparisonOperator::ALL {
         let mut generous = Meter::new(limits(u64::MAX));
         let shipped = compare_text(operator, &owner_left, &owner_right, &mut generous).unwrap();
@@ -349,6 +361,85 @@ fn normalizing_profiles_match_shipped_charges_on_samples() {
     }
 }
 
+/// The family of CG FR-052-AC-14 at the operand's declared `max`: the
+/// length-L payload (A = C), the length-L_b payload (the final unit replaced:
+/// the final byte dropped for `binary-utf8`, a three-byte scalar for the
+/// four-byte final scalar of `unicode-scalars`), and per length a final-byte
+/// pair, a length pair and a first-byte pair. Declared types are
+/// `Text[0, max]`. The normalizing profiles are unsupported and have no
+/// family here.
+fn ac14_family(profile: TextProfile) -> (u64, Vec<String>) {
+    const { assert!(C.is_multiple_of(4)) };
+    match profile {
+        TextProfile::BinaryUtf8 => {
+            let body = "a".repeat(C - 2);
+            let family = vec![
+                format!("{body}ab"),
+                format!("{body}ac"),
+                format!("z{}ab", &body[1..]),
+                format!("{body}a"),
+                format!("{body}b"),
+                format!("z{}a", &body[1..]),
+            ];
+            (C as u64, family)
+        }
+        TextProfile::UnicodeScalars => {
+            let unit = "\u{1F980}";
+            let other_last = "\u{1F981}";
+            let other_lead = "\u{5F980}";
+            let head = unit.repeat(C / 4 - 1);
+            let lead_tail = unit.repeat(C / 4 - 2);
+            let family = vec![
+                format!("{head}{unit}"),
+                format!("{head}{other_last}"),
+                format!("{other_lead}{lead_tail}{unit}"),
+                format!("{head}\u{20AC}"),
+                format!("{head}\u{20AD}"),
+                format!("{other_lead}{lead_tail}\u{20AC}"),
+            ];
+            ((C / 4) as u64, family)
+        }
+        _ => panic!("unsupported profile has no family"),
+    }
+}
+
+#[test]
+#[trace("TC-952", "FR-404-AC-4")]
+fn replacement_matches_shipped_compare_over_the_ac14_family() {
+    for profile in [TextProfile::BinaryUtf8, TextProfile::UnicodeScalars] {
+        let (max, family) = ac14_family(profile);
+        let text_type = TextType::new(0, max, profile).unwrap();
+        assert_eq!(family[0].len(), C, "length L");
+        assert_eq!(family[3].len(), C - 1, "length L_b");
+        for left in &family {
+            for right in &family {
+                differential_in(text_type, left, right);
+            }
+        }
+    }
+}
+
+#[test]
+#[trace("TC-952", "FR-404-AC-3")]
+fn parts_that_are_not_utf8_refuse_under_every_profile() {
+    for profile in TextProfile::ALL {
+        let text_type = TextType::new(0, 8, profile).unwrap();
+        for (payload, retained) in [
+            (&b"\xff"[..], &b"\xff"[..]),
+            (&b"a"[..], &b"\xff"[..]),
+            (&b"\xc3"[..], &b"\xc3"[..]),
+        ] {
+            assert_eq!(
+                NativeText::from_admitted(text_type, payload, retained),
+                Err(NativeTextRefusal::NotAdmitted(
+                    TextNotAdmittedCause::RetainedNotNormalForm
+                )),
+                "{profile:?} {payload:?} {retained:?}"
+            );
+        }
+    }
+}
+
 #[test]
 #[trace("TC-952", "FR-404-AC-4")]
 fn distinct_profiles_are_ill_typed_and_consume_nothing() {
@@ -384,6 +475,7 @@ enum Violation {
     LoopHeader(String),
     Callee(String),
     Cycle,
+    SliceComparison,
 }
 
 fn strip_comments(source: &str) -> String {
@@ -458,7 +550,7 @@ fn without_strings(text: &str) -> String {
     out
 }
 
-const ALLOWED_CALLEES: [&str; 19] = [
+const ALLOWED_CALLEES: [&str; 20] = [
     "Ok",
     "Err",
     "Some",
@@ -478,16 +570,26 @@ const ALLOWED_CALLEES: [&str; 19] = [
     "text_type",
     "is_some",
     "NotAdmitted",
+    "are_utf8",
 ];
 const KEYWORDS: [&str; 8] = ["if", "match", "for", "in", "return", "let", "else", "fn"];
-const BANNED_WORDS: [&str; 5] = [
+const BANNED_WORDS: [&str; 14] = [
     "while",
     "loop",
     "from_le_bytes",
+    "from_be_bytes",
+    "from_ne_bytes",
     "read_unaligned",
+    "wrapping_mul",
     "compare_text",
+    "admit_text",
+    "reference_holds",
+    "order",
+    "chars",
+    "from_utf8",
+    "apply",
 ];
-const BANNED_CALLS: [&str; 15] = [
+const BANNED_CALLS: [&str; 14] = [
     "iter",
     "bytes",
     "chars",
@@ -502,7 +604,6 @@ const BANNED_CALLS: [&str; 15] = [
     "chunks",
     "chunks_exact",
     "cmp",
-    "from_be_bytes",
 ];
 
 fn defined_functions(code: &str) -> Vec<(String, String)> {
@@ -556,21 +657,76 @@ fn calls_in(body: &str) -> Vec<String> {
                     .next()
                     .is_some_and(|c| !c.is_numeric())
             {
-                if chars.get(start.wrapping_sub(1)) == Some(&'!') {
-                    continue;
-                }
                 let name: String = chars[start..index].iter().collect();
                 if !KEYWORDS.contains(&name.as_str()) {
                     calls.push(name);
                 }
             }
         }
-        if *ch == '!' && chars.get(index + 1) == Some(&'(') {
-            // a macro call such as `matches!(`: drop the name pushed before it
-            calls.pop();
-        }
     }
     calls
+}
+
+/// Names declared with a slice or array type, so a bare comparison of them is
+/// a memcmp or lexicographic comparison and not an indexed loop.
+fn slice_comparisons(code: &str) -> Vec<Violation> {
+    let chars: Vec<char> = code.chars().collect();
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut slices: Vec<String> = Vec::new();
+    for (at, window) in chars.windows(2).enumerate() {
+        if window[0] == ':' && window[1] == ' ' && at > 0 {
+            let mut end = at;
+            while end > 0 && ident(chars[end - 1]) {
+                end -= 1;
+            }
+            let ty: String = chars[at + 2..].iter().take(8).collect();
+            if end < at && (ty.starts_with("&[u8]") || ty.starts_with("[u8;")) {
+                slices.push(chars[end..at].iter().collect());
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for (at, ch) in chars.iter().enumerate() {
+        if !matches!(ch, '<' | '>' | '=' | '!') {
+            continue;
+        }
+        let two: String = chars[at..(at + 2).min(chars.len())].iter().collect();
+        let width = if matches!(two.as_str(), "==" | "!=" | "<=" | ">=") {
+            2
+        } else if matches!(ch, '<' | '>') && chars.get(at.wrapping_sub(1)) != Some(&'-') {
+            1
+        } else {
+            continue;
+        };
+        if width == 1 && chars.get(at + 1) == Some(&'=') {
+            continue;
+        }
+        let mut left = at;
+        while left > 0 && chars[left - 1] == ' ' {
+            left -= 1;
+        }
+        let mut start = left;
+        while start > 0 && ident(chars[start - 1]) {
+            start -= 1;
+        }
+        let mut right = at + width;
+        while chars.get(right) == Some(&' ') {
+            right += 1;
+        }
+        let mut stop = right;
+        while chars.get(stop).is_some_and(|c| ident(*c)) {
+            stop += 1;
+        }
+        let left_name: String = chars[start..left].iter().collect();
+        let right_name: String = chars[right..stop].iter().collect();
+        let bare = |name: &String, next: Option<&char>| {
+            slices.contains(name) && !matches!(next, Some('[' | '.' | '('))
+        };
+        if bare(&left_name, chars.get(left)) && start < left || bare(&right_name, chars.get(stop)) {
+            found.push(Violation::SliceComparison);
+        }
+    }
+    found
 }
 
 fn scan(source: &str) -> Vec<Violation> {
@@ -594,6 +750,13 @@ fn scan(source: &str) -> Vec<Violation> {
     if code.contains("as u64") || code.contains("as u128") {
         violations.push(Violation::BannedToken("word cast".into()));
     }
+    if word_list
+        .iter()
+        .any(|word| word.starts_with("0x") && word.len() >= 10)
+    {
+        violations.push(Violation::BannedToken("word-sized mask".into()));
+    }
+    violations.extend(slice_comparisons(&code));
     // Every `for` header is `for <index> in 0..<NAME> {` with NAME a const
     // defined in the source.
     let consts: Vec<&str> = word_list
@@ -677,67 +840,147 @@ fn carrier_source_is_clean() {
     assert_eq!(scan(&carrier_source()), vec![]);
 }
 
+/// The one declared exemption: the host-only decisions of the constructor
+/// (std UTF-8 validation and the owner's normalization, for the profiles the
+/// proof path does not support) live in `normal_form.rs`, whose violations
+/// are exactly these and nothing else.
+#[test]
+#[trace("TC-952", "FR-404-AC-5")]
+fn host_only_gate_has_exactly_the_declared_violations() {
+    let source = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/native_text/normal_form.rs"
+    ))
+    .unwrap();
+    let mut found: Vec<String> = scan(&source).iter().map(|v| format!("{v:?}")).collect();
+    found.sort();
+    found.dedup();
+    let mut declared: Vec<String> = [
+        "BannedToken(\"apply\")",
+        "BannedToken(\"chars\")",
+        "BannedToken(\"from_utf8\")",
+        "Callee(\"eq\")",
+        "Callee(\"from_utf8\")",
+        "Callee(\"apply\")",
+        "Callee(\"chars\")",
+        "Callee(\"is_ok\")",
+    ]
+    .map(String::from)
+    .to_vec();
+    declared.sort();
+    assert_eq!(found, declared);
+}
+
+fn seeded(base: &str, seed: &str, expected: &Violation) {
+    let violations = scan(&format!("{base}\n{seed}"));
+    assert!(
+        violations.contains(expected),
+        "seed {seed:?} was not rejected as {expected:?}: {violations:?}"
+    );
+}
+
 #[test]
 #[trace("TC-952", "FR-404-AC-5")]
 fn scanner_rejects_each_seeded_violation() {
     let base = carrier_source();
-    let seeds: [(&str, Expectation); 12] = [
-        (
-            "#[cfg(kani)]\nfn seeded() {}",
-            Box::new(|v| *v == Violation::CfgKani),
-        ),
-        (
-            "fn seeded(a: &str) { let _ = a.chars(); }",
-            Box::new(|v| *v == Violation::BannedToken("chars".into())),
-        ),
-        (
-            "fn seeded(a: &[u8]) { let _ = a.iter().map(|b| *b); }",
-            Box::new(|v| *v == Violation::BannedToken("iter".into())),
-        ),
-        (
-            "fn seeded(a: [u8; 8]) { let _ = u64::from_le_bytes(a); }",
-            Box::new(|v| *v == Violation::BannedToken("from_le_bytes".into())),
-        ),
-        (
-            "fn seeded() { seeded(); }",
-            Box::new(|v| *v == Violation::Cycle),
-        ),
-        (
-            "fn seeded_a() { seeded_b(); }\nfn seeded_b() { seeded_a(); }",
-            Box::new(|v| *v == Violation::Cycle),
-        ),
-        (
-            "fn seeded() { while true {} }",
-            Box::new(|v| *v == Violation::BannedToken("while".into())),
-        ),
-        (
-            "fn seeded() { loop {} }",
-            Box::new(|v| *v == Violation::BannedToken("loop".into())),
-        ),
-        (
-            "fn seeded(a: &[u8]) { for index in 0..a.len() { let _ = index; } }",
-            Box::new(|v| matches!(v, Violation::LoopHeader(_))),
-        ),
-        (
-            "fn seeded(a: &[u8], b: &[u8]) { let _ = a.cmp(b); }",
-            Box::new(|v| *v == Violation::BannedToken("cmp".into())),
-        ),
-        (
-            "fn seeded(a: &Text) { let _ = compare_text(a); }",
-            Box::new(|v| *v == Violation::BannedToken("compare_text".into())),
-        ),
-        (
-            "fn seeded(a: u32) { let _ = unlisted_helper(a); }",
-            Box::new(|v| matches!(v, Violation::Callee(name) if name == "unlisted_helper")),
-        ),
-    ];
-    for (seed, expected) in seeds {
-        let violations = scan(&format!("{base}\n{seed}"));
-        assert!(
-            violations.iter().any(expected),
-            "seed {seed:?} was not rejected: {violations:?}"
+    let token = |name: &str| Violation::BannedToken(name.into());
+    seeded(&base, "#[cfg(kani)]\nfn seeded() {}", &Violation::CfgKani);
+    seeded(&base, "fn seeded() { seeded(); }", &Violation::Cycle);
+    seeded(
+        &base,
+        "fn seeded_a() { seeded_b(); }\nfn seeded_b() { seeded_a(); }",
+        &Violation::Cycle,
+    );
+    seeded(&base, "fn seeded() { while true {} }", &token("while"));
+    seeded(&base, "fn seeded() { loop {} }", &token("loop"));
+    seeded(
+        &base,
+        "fn seeded(a: &[u8]) { for index in 0..a.len() { let _ = index; } }",
+        &Violation::LoopHeader("for index in 0..a.len()".into()),
+    );
+    // Every listed iterator adapter, `chars` and `cmp`, each as a method call.
+    for call in [
+        "iter",
+        "bytes",
+        "chars",
+        "map",
+        "zip",
+        "enumerate",
+        "fold",
+        "all",
+        "any",
+        "position",
+        "windows",
+        "chunks",
+        "chunks_exact",
+        "cmp",
+    ] {
+        seeded(
+            &base,
+            &format!("fn seeded(a: &[u8]) {{ let _ = a.{call}(); }}"),
+            &token(call),
         );
     }
+    // SWAR: word loads, the word cast and the multiply-and-mask step.
+    for load in [
+        "from_le_bytes",
+        "from_be_bytes",
+        "from_ne_bytes",
+        "read_unaligned",
+    ] {
+        seeded(
+            &base,
+            &format!("fn seeded(a: [u8; 8]) {{ let _ = u64::{load}(a); }}"),
+            &token(load),
+        );
+    }
+    seeded(
+        &base,
+        "fn seeded(a: usize) -> u64 { a as u64 }",
+        &token("word cast"),
+    );
+    seeded(
+        &base,
+        "fn seeded(w: usize) -> usize { (w * 0x0101010101010101) & 0x8080808080808080 }",
+        &token("word-sized mask"),
+    );
+    // Slice comparisons by operator.
+    for operator in ["==", "!=", "<", ">", "<=", ">="] {
+        seeded(
+            &base,
+            &format!("fn seeded(a: &[u8], b: &[u8]) -> bool {{ a {operator} b }}"),
+            &Violation::SliceComparison,
+        );
+    }
+    // The shipped function and the expected-side helpers of the differential.
+    for helper in ["compare_text", "admit_text", "reference_holds"] {
+        seeded(
+            &base,
+            &format!("fn seeded(a: u32) {{ let _ = {helper}(a); }}"),
+            &token(helper),
+        );
+    }
+    seeded(
+        &base,
+        "fn seeded(a: u32) { let _ = a.order(a); }",
+        &token("order"),
+    );
+    // An unlisted callee is rejected on its own, before a macro and negated.
+    seeded(
+        &base,
+        "fn seeded(a: u32) { let _ = unlisted_helper(a); }",
+        &Violation::Callee("unlisted_helper".into()),
+    );
+    seeded(
+        &base,
+        "fn seeded(a: u32) { let _ = unlisted_helper(a); assert!(a > 0); }",
+        &Violation::Callee("unlisted_helper".into()),
+    );
+    seeded(
+        &base,
+        "fn seeded(a: u32) -> bool { !unlisted_helper(a) }",
+        &Violation::Callee("unlisted_helper".into()),
+    );
 }
 
 // ---- AC-6 .. AC-9: the evidence record ----
@@ -782,7 +1025,7 @@ fn probe(rows: &[Row], capacity: usize) -> &Row {
 }
 
 #[test]
-#[trace("TC-952", "FR-404-AC-6", "FR-404-AC-8", "FR-404-AC-9")]
+#[trace("TC-952", "FR-404-AC-6", "FR-404-AC-8")]
 fn probe_records_are_executed_and_choose_the_capacity() {
     let rows = evidence_rows();
     assert!(rows
@@ -824,8 +1067,10 @@ fn probe_records_are_executed_and_choose_the_capacity() {
     );
 }
 
+/// Behavior 10's consistency only. It passes on a `NOT RUN` record by design
+/// and is not an AC-7 or AC-9 binder: those criteria need an executed
+/// FR-401 record that does not exist, so no test claims them.
 #[test]
-#[trace("TC-952", "FR-404-AC-7")]
 fn normalizing_profiles_are_supported_only_on_a_verified_record() {
     let rows = evidence_rows();
     let row = rows
@@ -833,6 +1078,7 @@ fn normalizing_profiles_are_supported_only_on_a_verified_record() {
         .find(|row| row.operation == "FR-401 normalization at the chosen C")
         .expect("normalization row");
     assert_ne!(row.cells[1], "PENDING");
+    assert!(row.cells[5].contains("owner pending planner ruling") || row.cells[1] == "VERIFIED");
     let supported = row.cells[1] == "VERIFIED";
     for profile in [
         TextProfile::Nfc,

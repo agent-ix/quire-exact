@@ -73,7 +73,7 @@ A Kani proof over `std` `chars()` or UTF-8 validation is not tractable (measured
 
 ## Status
 
-Implemented (IR-1445): C = 64, the largest candidate VERIFIED by the local probe (TC-952 evidence record). FR-399 (Description, Behaviors 4 and 5, AC-6, AC-7) and FR-401 (Description, Relation, Dependencies) now point to this requirement as the owner of the carrier and carry a `depends_on` edge to it; their criteria are unchanged. The substitution wording of CG FR-052 is CG's to align.
+Implemented except AC-7 and AC-9 (open, owner pending planner ruling): C = 64, the largest candidate VERIFIED by the local probe (TC-952 evidence record). Not Done: no Behavior 10 record exists because the FR-401 normalization is not in the kernel, so the four normalizing profiles are unsupported on the proof path meanwhile. FR-399-AC-6 and FR-399-AC-7 are active now that the carrier exists and are untagged (owner pending planner ruling). The constructor takes UTF-8 parts and refuses anything else with `RetainedNotNormalForm`. The host-only constructor decisions in `src/native_text/normal_form.rs` are outside the AC-5 clean scan and covered by an exact listed-violations assertion (TC-952). FR-399 (Description, Behaviors 4 and 5, AC-6, AC-7) and FR-401 (Description, Relation, Dependencies) now point to this requirement as the owner of the carrier and carry a `depends_on` edge to it; their criteria are unchanged. The substitution wording of CG FR-052 is CG's to align.
 
 ## Dependencies
 

@@ -50,6 +50,10 @@ pub struct NativeText {
 impl NativeText {
     /// Build a carrier from parts that were already admitted.
     ///
+    /// The parts must be UTF-8: a payload or retained sequence that is not
+    /// valid UTF-8 was never produced by admission and refuses with
+    /// `RetainedNotNormalForm` under every profile.
+    ///
     /// A payload or retained sequence longer than the capacity refuses with
     /// [`NativeTextRefusal::PayloadExceedsCapacity`] before any other
     /// decision. Otherwise the retained sequence must be the retained
@@ -66,7 +70,7 @@ impl NativeText {
         let profile = text_type.profile();
         let normal = match profile.normalization() {
             Some(form) => normal_form::is_retained_of(form, payload, retained),
-            None => same_bytes(payload, retained),
+            None => normal_form::are_utf8(payload, retained) && same_bytes(payload, retained),
         };
         if !normal {
             return Err(NativeTextRefusal::NotAdmitted(
@@ -243,5 +247,7 @@ fn compare(
     }
     let ordering = order_bytes(left.retained(), right.retained());
     meter.charge(Charge::new(ChargePoint::TextResultRetain).results(1))?;
+    // `holds` maps an ordering that `order_bytes` already decided to the
+    // operator's truth value; it decides neither equality nor order.
     Ok(operator.holds(ordering))
 }
