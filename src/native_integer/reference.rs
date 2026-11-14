@@ -165,6 +165,7 @@ mod tests {
                         Kind::Subtract => &aa - &bb,
                         Kind::Multiply => &aa * &bb,
                         Kind::Negate => -&aa,
+                        Kind::Divide | Kind::Modulo => unreachable!("not an arithmetic kind"),
                     };
                     let reference = MathematicalInteger::evaluate(kind, a, b);
                     assert_eq!(reference.to_big(), expected);

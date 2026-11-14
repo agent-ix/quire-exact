@@ -52,6 +52,9 @@ fn operation(kind: Kind, left: Range, right: Range) -> Op {
         Kind::Subtract => Op::Subtract { left, right },
         Kind::Multiply => Op::Multiply { left, right },
         Kind::Negate => Op::Negate { operand: left },
+        Kind::Divide | Kind::Modulo => {
+            unreachable!("the arithmetic tests cover the four arithmetic kinds")
+        }
     }
 }
 fn args(kind: Kind, a: i128, b: i128) -> Args {
@@ -76,6 +79,9 @@ fn oracle(kind: Kind, a: &BigInt, b: &BigInt) -> BigInt {
         Kind::Subtract => a - b,
         Kind::Multiply => a * b,
         Kind::Negate => -a,
+        Kind::Divide | Kind::Modulo => {
+            unreachable!("the arithmetic tests cover the four arithmetic kinds")
+        }
     }
 }
 fn general(
@@ -93,6 +99,9 @@ fn general(
         Kind::Subtract => IntegerArithmetic::Subtract(&a, &b),
         Kind::Multiply => IntegerArithmetic::Multiply(&a, &b),
         Kind::Negate => IntegerArithmetic::Negate(&a),
+        Kind::Divide | Kind::Modulo => {
+            unreachable!("the arithmetic tests cover the four arithmetic kinds")
+        }
     };
     evaluate_integer_arithmetic(op, bound.as_ref(), meter)
 }
@@ -428,6 +437,9 @@ fn formula_meter(
                 Kind::Add | Kind::Subtract => abits.max(bbits) + 1,
                 Kind::Multiply => abits + bbits,
                 Kind::Negate => abits,
+                Kind::Divide | Kind::Modulo => {
+                    unreachable!("the arithmetic tests cover the four arithmetic kinds")
+                }
             },
         ),
         Charge::new(ChargePoint::IntegerArithmeticResultRetain).results(1),
@@ -699,6 +711,9 @@ fn operation_derived_exact_and_one_less_limits_preserve_fresh_and_cumulative_pre
             Kind::Add | Kind::Subtract => operand_bits + 1,
             Kind::Multiply => left_bits + right_bits,
             Kind::Negate => left_bits,
+            Kind::Divide | Kind::Modulo => {
+                unreachable!("the arithmetic tests cover the four arithmetic kinds")
+            }
         };
         let occurrences = if kind == Kind::Negate { 1 } else { 2 };
         // Each semantic amount is derived from the independent BigInt size
