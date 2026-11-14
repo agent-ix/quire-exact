@@ -63,3 +63,14 @@ Checked and found correct:
 | src/native_rational/reference.rs | examined | independent reference |
 | src/native_decimal/operations.rs | examined | gcd256 removed, imported |
 | src/native_quantity.rs | examined | coprime removed, is_canonical_pair called |
+
+## Dispositions
+
+Round 1, fix commit 6fcae3f (from c7f5c7b), checked against the code on the branch.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-408 Status now reads "Implemented (IR-258, PR #166)" and keeps AC-11 PLANNED. The stale PR #162 and pub(super) prose is replaced. The TC-956 evidence record lists 25 harness rows (15 VERIFIED, 10 TIMED OUT, no proof claimed), and TC-956 Status matches. |
+| FND-002 | fixed | The harness module doc and TC-956 step 9 and its mutant row now say the Kani rows check only the high-water mark and that host steps 6 and 7 own the normalize amount. The host test `charges_match_the_literal_schedule` asserts normalize 3 for `1/2 + 1/2`; the reduced-parts mutant would give 1. |
+| FND-003 | fixed | Added denial harnesses for subtract, multiply, order and equal (occurrences and result unit), a full-i64 subtract row, and a CG subtract row with from_i64_parts. Their measured outcomes are in TC-956. The equality denial prefixes match `charge_plan`'s result-unit reservation. |
+| FND-004 | fixed | Behavior 6 and AC-10 now name the Behavior 17a width-tiered reduction (`gcd64` for the u64 tier, `gcd256` otherwise). |

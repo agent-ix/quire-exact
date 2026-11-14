@@ -45,3 +45,12 @@ Manual mapping: AC-1 to AC-9 each have at least one tagged test in `tests/ir258_
 | FR-408-AC-9 | examined | CG-domain, boundary-set and 252-step differential tests |
 | FR-408-AC-10 | context_only | inspection item, see the code-review artifact |
 | FR-408-AC-11 | examined | Kani harnesses; PLANNED; no tagged test claims it |
+
+## Dispositions
+
+Round 1, fix commit 6fcae3f (from c7f5c7b), checked against the code on the branch.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The no-refusal loop now covers a 7-value boundary sample plus a seeded xorshift sample of canonical i64 pairs, 96 values in all. The boundary differential asserts the literal `CAPACITY_LISTING` (operation and cause, with counts) and that the completions are the complement. |
+| FND-002 | fixed | Added `ordering_and_equality_agree_with_the_rank_table_over_twenty_five_pairs`, which checks the four orderings and equality over all 25 ordered pairs of the five values against their position ranks. |
