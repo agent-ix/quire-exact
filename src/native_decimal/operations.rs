@@ -12,6 +12,7 @@ use core::cmp::Ordering;
 use super::{NativeDecimal, NativeDecimalType, POWERS_OF_TEN};
 use crate::accounting::{Charge, ChargePoint, Incomplete, LimitKind, Meter};
 use crate::decimal::RoundingMode;
+use crate::native_fraction::gcd256;
 use crate::numeric::OrderingOperator;
 
 /// The largest shift whose power of ten fits signed 128 bits.
@@ -458,61 +459,6 @@ fn reduce_quotient(n: i128, d: i128) -> Admission<(i128, i128)> {
         (Some(numerator), Some(denominator)) => Ok((numerator, denominator)),
         _ => capacity(None, NativeDecimalCapacityQuantity::CanonicalQuotient),
     }
-}
-
-type GcdState = (u128, u128, u128);
-
-/// One step of the binary gcd on `(u, v, g)` (FR-403 Behavior 16).
-fn gcd_step(state: GcdState) -> GcdState {
-    let (u, v, g) = state;
-    let (u_even, v_even) = (u & 1 == 0 && u != 0, v & 1 == 0 && v != 0);
-    if u_even && v_even {
-        (u >> 1, v >> 1, g << 1)
-    } else if u_even && v != 0 {
-        (u >> 1, v, g)
-    } else if v_even && u != 0 {
-        (u, v >> 1, g)
-    } else if u & 1 == 1 && v & 1 == 1 {
-        if u >= v {
-            ((u - v) >> 1, v, g)
-        } else {
-            (u, (v - u) >> 1, g)
-        }
-    } else {
-        state
-    }
-}
-
-fn gcd_steps_2(state: GcdState) -> GcdState {
-    gcd_step(gcd_step(state))
-}
-fn gcd_steps_4(state: GcdState) -> GcdState {
-    gcd_steps_2(gcd_steps_2(state))
-}
-fn gcd_steps_8(state: GcdState) -> GcdState {
-    gcd_steps_4(gcd_steps_4(state))
-}
-fn gcd_steps_16(state: GcdState) -> GcdState {
-    gcd_steps_8(gcd_steps_8(state))
-}
-fn gcd_steps_32(state: GcdState) -> GcdState {
-    gcd_steps_16(gcd_steps_16(state))
-}
-fn gcd_steps_64(state: GcdState) -> GcdState {
-    gcd_steps_32(gcd_steps_32(state))
-}
-pub(super) fn gcd_steps_128(state: GcdState) -> GcdState {
-    gcd_steps_64(gcd_steps_64(state))
-}
-fn gcd_steps_256(state: GcdState) -> GcdState {
-    gcd_steps_128(gcd_steps_128(state))
-}
-
-/// The gcd of two magnitudes, not both zero, by exactly 256 fixed steps. A
-/// zero operand leaves the state unchanged, so `gcd(0, m)` is `m`.
-pub(super) fn gcd256(u: u128, v: u128) -> u128 {
-    let (u, v, g) = gcd_steps_256((u, v, 1));
-    g * (u + v)
 }
 
 fn strip_five(magnitude: u128, count: u64, limit: u64, width: u64, power: u128) -> (u128, u64) {

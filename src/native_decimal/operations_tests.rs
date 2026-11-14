@@ -5,8 +5,7 @@
 use ix_trace_rs::trace;
 
 use super::operations::{
-    gcd256, gcd_steps_128, order_values, power_of_ten_bits, LOG2_10_FRACTION, LOG2_10_LOWER,
-    LOG2_10_UPPER,
+    order_values, power_of_ten_bits, LOG2_10_FRACTION, LOG2_10_LOWER, LOG2_10_UPPER,
 };
 use super::reference::{
     decide, euclid_gcd, native_decision, order_ref, ref_op, ref_type, Decision, RefLoss,
@@ -17,6 +16,7 @@ use crate::decimal::{
     evaluate_decimal, power_of_ten_bits as owner_bits, DecimalLoss, DecimalOperation,
     DecimalRepresentation, DecimalResult,
 };
+use crate::native_fraction::{gcd256, gcd_steps_128};
 use crate::outcome::{Outcome, Refusal, Undefined};
 
 fn big(value: u128) -> Integer {

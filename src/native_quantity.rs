@@ -52,6 +52,7 @@
 
 use crate::integer::{Integer, IntegerInterval};
 use crate::native_decimal::{NativeDecimal, NativeDecimalType};
+use crate::native_fraction::is_canonical_pair;
 use crate::quantity::{CarriedQuantityType, Quantity, QuantityCarrier};
 use crate::rational::Rational;
 
@@ -281,14 +282,7 @@ fn rational(
     if denominator == 0 {
         return Err(Refusal::ZeroDenominator);
     }
-    let canonical = if denominator < 0 {
-        false
-    } else if numerator == 0 {
-        denominator == 1
-    } else {
-        coprime(numerator.unsigned_abs(), denominator.unsigned_abs())
-    };
-    if !canonical {
+    if !is_canonical_pair(numerator, denominator) {
         return Err(Refusal::NonCanonical);
     }
     let (numerator, denominator) = (i128::from(numerator), i128::from(denominator));
@@ -355,63 +349,6 @@ fn strip_fives(magnitude: u128, count: u32, places: u32) -> (u128, u32) {
     } else {
         (magnitude, count)
     }
-}
-
-/// Whether two nonzero magnitudes share no factor above one, by the binary
-/// greatest-common-divisor algorithm unrolled to its worst case (128 steps)
-/// so that it holds no loop. Every step at least halves the product of the
-/// two odd parts, which starts below `2^126`.
-fn coprime(left: u64, right: u64) -> bool {
-    if (left | right) & 1 == 0 {
-        return false;
-    }
-    let (divisor, _) = steps_128((
-        left >> left.trailing_zeros(),
-        right >> right.trailing_zeros(),
-    ));
-    divisor == 1
-}
-
-/// One step on a pair `(small, other)` of odd values or `(value, 0)`: replace
-/// the larger by the odd part of the difference. The divisor ends in the first
-/// slot with the second zero.
-fn step((left, right): (u64, u64)) -> (u64, u64) {
-    if right == 0 {
-        return (left, right);
-    }
-    let (small, large) = if left > right {
-        (right, left)
-    } else {
-        (left, right)
-    };
-    let difference = large - small;
-    if difference == 0 {
-        (small, 0)
-    } else {
-        (small, difference >> difference.trailing_zeros())
-    }
-}
-
-fn steps_2(state: (u64, u64)) -> (u64, u64) {
-    step(step(state))
-}
-fn steps_4(state: (u64, u64)) -> (u64, u64) {
-    steps_2(steps_2(state))
-}
-fn steps_8(state: (u64, u64)) -> (u64, u64) {
-    steps_4(steps_4(state))
-}
-fn steps_16(state: (u64, u64)) -> (u64, u64) {
-    steps_8(steps_8(state))
-}
-fn steps_32(state: (u64, u64)) -> (u64, u64) {
-    steps_16(steps_16(state))
-}
-fn steps_64(state: (u64, u64)) -> (u64, u64) {
-    steps_32(steps_32(state))
-}
-fn steps_128(state: (u64, u64)) -> (u64, u64) {
-    steps_64(steps_64(state))
 }
 
 /// `5^0` through `5^54`, the powers inside signed 128 bits.
