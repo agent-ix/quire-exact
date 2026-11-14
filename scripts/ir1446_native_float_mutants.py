@@ -23,9 +23,6 @@ S3 = ["differential_on_the_boundary_grid", "differential_on_biased_random", "tie
       "flags_and_nan_results", "differential_on_cancellation", "comparisons_equal"]
 S4 = ["charges_denials_and_incomplete_records", "a_cumulative_meter_charges", "comparisons_equal_the_owner_with_charges"]
 S2 = ["every_operation_and_comparison_runs_and_cross_width"]
-S5 = ["the_proof_path_source_names_no_banned_item", "every_loop_has_a_constant_bound"]
-S9 = ["the_harness_expected_side_shares_no_function"]
-S14 = ["no_refusal_variant_path_or_meter_behaviour"]
 
 M = []
 
@@ -140,16 +137,6 @@ m("total-order-nan-payload", "TotalOrder ignores the payload of a NaN",
 m("zero-over-zero-divide-by-zero", "divide_by_zero is raised for zero over zero",
   "        (Operand::Infinite { .. }, Operand::Infinite { .. })\n        | (Operand::Zero { .. }, Operand::Zero { .. }) => invalid(fmt),",
   "        (Operand::Infinite { .. }, Operand::Infinite { .. }) => invalid(fmt),\n        (Operand::Zero { .. }, Operand::Zero { .. }) => Step::Decided(\n            fmt.canonical_nan(),\n            IeeeFlags::EMPTY.with(IeeeFlag::DivideByZero),\n        ),", S3)
-m("loop-operand-exit", "a loop exits on an operand-dependent condition",
-  "while index < N {", "while index < N && !seen {", S5)
-m("cfg-kani-body", "cfg(kani) selects a body",
-  "const WIDE_TOP: u32 = 125;", "const WIDE_TOP: u32 = 125;\n#[cfg(kani)]\nconst KANI_ONLY: u32 = 0;", S5)
-m("calls-the-owner", "a native body calls the owner",
-  "fn same_width(first: IeeeWidth", "fn owner_call() {\n    let _ = crate::ieee::evaluate_ieee::<crate::ieee::IeeeValue>;\n}\n\nfn same_width(first: IeeeWidth", S5)
-m("harness-calls-native-internals", "a Kani harness checks the native body against itself",
-  "fn generous_meter() -> Meter {", "fn plan_add() {}\n\nfn generous_meter() -> Meter {", S9, KP)
-m("refusal-variant-for-table-row", "a refusal variant for the table-row state is defined",
-  "/// The refusal of [`NativeFloat::new`].", "/// x\npub enum NativeFloatTableRowRefusal {\n    /// x\n    TableRow,\n}\n\n/// The refusal of [`NativeFloat::new`].", S14)
 
 
 def run(mutant, only):

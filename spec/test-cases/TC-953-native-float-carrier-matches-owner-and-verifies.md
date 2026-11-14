@@ -21,11 +21,11 @@ The boundary set is fixed before the implementation, from independent literals a
 2. For AC-3, call every supported operation and a cross-width call (asserting `ill_typed` and an unchanged `Meter`).
 3. For AC-4 and AC-5, evaluate every boundary case natively and by the owner and compare bits, flags, provenance and outcome kind, including the `Exact` refusal's would-be flags with no bits, and compare against independently written literals for the tie, overflow-result, exact-zero-sign and NaN cases.
 4. For AC-6, run each case at a sufficient, an exact and a one-less limit natively and by the owner on fresh Meters and on one cumulative Meter, and compare every charge point, limit kind, amount, order, the denied charge and the incomplete record.
-5. For AC-7 and AC-9, inspect the proof-path source for `num_bigint`, `Integer`, `Rational`, `Vec`, `cfg(kani)`, iterator adapters, loops (each loop has a stated constant bound and no operand-dependent `break`, `return` or `?`) and calls from a native body to an owner function; inspect each harness for the functions its expected side shares with the native body (only the decode may be shared) and for its docstring of covered outputs.
+5. For AC-7 and AC-9, code review inspects the proof-path source for `num_bigint`, `Integer`, `Rational`, `Vec`, `cfg(kani)`, iterator adapters, loops (each loop has a stated constant bound and no operand-dependent `break`, `return` or `?`) and calls from a native body to an owner function, and inspects each harness for the functions its expected side shares with the native body (none may be shared) and for its docstring of covered outputs. There is no automated step: a source-text scan is not a test.
 6. For AC-8, run a counting global allocator around the native operations over the boundary set, asserting zero allocations, and call each operation and comparison from a host test.
 7. For AC-10, run each mutant through the differential and assert it fails at the step the table names.
 8. For AC-11, AC-12 and AC-13, run each Kani harness of each operation, comparison and width under the authorized runner with a 10-minute wall-clock limit and record verdict, time, peak memory with its provenance and tool version. The Binary64 add and multiply harnesses are the probe: they are the AC-11 harnesses, not separate ones, and each combination is judged alone. For a non-VERIFIED outcome, record the row in the evidence record below and in the Kani tractability table that IR-1526's seam loads. Confirm each VERIFIED harness's cover is reached and its harness mutant fails, and compare each peak with 16 GiB.
-9. For AC-14, search the kernel source for a refusal variant, refusal path or `Meter` behaviour defined for the table-row state; none may exist, and the seam referenced is IR-1526's.
+9. For AC-14, code review searches the kernel source for a refusal variant, refusal path or `Meter` behaviour defined for the table-row state; none may exist, and the seam referenced is IR-1526's. There is no automated step.
 10. For AC-15, inspect the Status for a per-operation, per-width verdict or table row, including SquareRoot and FusedMultiplyAdd.
 
 A Kani harness checks, per operation: it draws the operands (two, one for Negate and SquareRoot, three for FusedMultiplyAdd) as symbolic bit patterns of the width, a symbolic rounding spelling and a symbolic meter limit, evaluates the native operation, and asserts equality of result bits (NaN payload included), flags, outcome kind and the charge sequence with the independent reference. For a comparison it asserts the boolean and the charge sequence.
@@ -64,11 +64,6 @@ A Kani harness checks, per operation: it draws the operands (two, one for Negate
 | The result charge is dropped or charged at the wrong amount | any completed case at its exact limit and one less | step 4 |
 | The first charge is made after the width check, or the denied charge is followed by a later charge | a cross-width add, and a completed case at one less than its first charge | step 4 |
 | An ill-typed call charges the Meter | a cross-width add | step 2 |
-| A loop exits on an operand-dependent condition | the source inspection | step 5 |
-| `cfg(kani)` selects a body | the source inspection | step 5 |
-| A native body calls the owner | the source inspection | step 5 |
-| A Kani harness checks the native body against itself | the expected-side inspection and a harness mutant that the harness must fail | step 8 |
-| A refusal variant for the table-row state is defined in the kernel | the source search | step 9 |
 
 ## Evidence record
 
