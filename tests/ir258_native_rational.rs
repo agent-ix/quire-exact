@@ -149,12 +149,27 @@ fn carrier_is_copy_without_drop_glue_and_allocation_free() {
     assert!(!std::mem::needs_drop::<NativeRational>());
     assert_eq!(std::mem::size_of::<NativeRational>(), 32);
     let values = [nat(1, 2), nat(-1, 3), nat(i64::MIN, i64::MAX), nat(0, 1)];
+    // Construction and accessors allocate nothing under every feature set.
     let info = allocation_counter::measure(|| {
-        let mut meter = generous();
+        for left in &values {
+            std::hint::black_box(NativeRational::from_i64_parts(3, 7).ok());
+            std::hint::black_box((left.numerator(), left.denominator()));
+        }
+    });
+    assert_eq!(info.count_total, 0);
+}
+
+// The `test-support` charge log is a `Vec` that allocates on each admitted
+// charge, so the operations are measured without it.
+#[cfg(not(feature = "test-support"))]
+#[test]
+#[trace("TC-956", "FR-408-AC-1")]
+fn operations_allocate_nothing() {
+    let values = [nat(1, 2), nat(-1, 3), nat(i64::MIN, i64::MAX), nat(0, 1)];
+    let mut meter = generous();
+    let info = allocation_counter::measure(|| {
         for left in &values {
             for right in &values {
-                std::hint::black_box(NativeRational::from_i64_parts(3, 7).ok());
-                std::hint::black_box((left.numerator(), right.denominator()));
                 std::hint::black_box(native_rational_add(left, right, &mut meter).ok());
                 std::hint::black_box(native_rational_subtract(left, right, &mut meter).ok());
                 std::hint::black_box(native_rational_multiply(left, right, &mut meter).ok());
