@@ -43,9 +43,9 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 
 ### Separation
 
-6. The native operations SHALL be a separate implementation from the owner's `evaluate_ieee` and `compare_ieee`: no native body SHALL call them or any `Rational`-based owner helper. The expected side of each Kani harness of Behavior 19 SHALL share no function with the native body, with one exception allowed by design: the bit-pattern decode, whose defects are left to the host differential (CG FR-053-AC-14).
+6. The native operations SHALL be a separate implementation from the owner's `evaluate_ieee` and `compare_ieee`: no native body SHALL call them or any `Rational`-based owner helper. The expected side of each Kani harness of Behavior 19 SHALL share no function with the native body, the bit-pattern decode included (FR-405-AC-9; CG FR-053-AC-14 inspects the same).
 7. The native operations SHALL be ordinary host code, compiled and callable in a host build, so that a host test of them is a test of what Kani proves and CG's host differential can run them against the shipped owner.
-8. The native operations SHALL be one source for the host and Kani builds, and no body SHALL be selected by `cfg(kani)`. Where CG FR-053 calls the native operations "the carrier's cfg(kani) replacement", the term means this host-callable source and not a Kani-only body.
+8. The native operations SHALL be one source for the host and Kani builds, and no body SHALL be selected by `cfg(kani)`. CG FR-053 calls them "the carrier's native operations" and its generated harness evaluates this host-callable source, as Behavior 7 requires.
 
 ### Operations
 
@@ -65,7 +65,7 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 
 ### Proof evidence
 
-19. For each combination that is VERIFIED under Behavior 15, a Kani harness SHALL prove the native operation over all operand bit patterns of the width, all six rounding spellings and all meter limits against an expected side whose full outcome (result bits including NaN payload, flags, outcome kind and charge sequence) is determined by a separately written reference. A harness whose expected side is a set of properties instead SHALL list in its docstring and in TC-953 exactly which outputs it covers, and the uncovered outputs are left to Behavior 17.
+19. For each combination that is VERIFIED under Behavior 15, a Kani harness SHALL prove the native operation over all operand bit patterns of the width, all six rounding spellings and all meter limits against an expected side whose full outcome (result bits including NaN payload, flags, outcome kind and charge sequence) is determined by a separately written reference. A combination MAY have several harnesses that together cover the six rounding spellings; it is VERIFIED only when every one of them is. A harness whose expected side is a set of properties instead SHALL list in its docstring and in TC-953 exactly which outputs it covers, and the uncovered outputs are left to Behavior 17.
 20. Each harness SHALL have a vacuity check: a cover that the result path is reachable, and a mutant of the native body that the harness fails.
 21. Each harness SHALL run under a 10-minute wall-clock limit and return a terminal verdict within it, and its recorded peak memory SHALL be at most the 16 GiB per-request ceiling of CG FR-028. The record SHALL give the peak, its provenance, the time and the tool version; a configured ceiling or a prediction is not a record. A harness that does not return, returns UNDECIDED or exhausts memory is inconclusive and is the measured row of Behavior 15, never a pass.
 22. The kernel SHALL claim no proof for a combination whose harness has no executed VERIFIED verdict, and its status SHALL record, per operation and width, the verdict or the table row.
@@ -80,19 +80,34 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 | FR-405-AC-4 | For each of the five rounding modes and `Exact`, the native result bits equal the owner's on the tie and one-ulp-off-tie operands of each mode, including the overflow result of each mode (infinity or the largest finite), the exact-zero sum sign, and subnormal results; the `Exact` refusal carries only the would-be flags and no bits. | Test (TC-953) |
 | FR-405-AC-5 | The flag set equals the owner's on the boundary grid, including `invalid` from a NaN-producing operation, `divide_by_zero` from a finite nonzero over zero, `overflow`, `underflow` and `inexact`; and the NaN result equals the owner's in sign, quietness and payload. | Test (TC-953) |
 | FR-405-AC-6 | The charge points, their order, limit kinds and amounts, the denied charge and the incomplete record equal the owner's at a sufficient, an exact and a one-less limit for every boundary case; an ill-typed call charges nothing. | Test (TC-953) |
-| FR-405-AC-7 | The proof-path source contains no `num_bigint` item, no owner `Integer`, `Rational` or `Vec`, no `cfg(kani)` token, no iterator adapter and no data-dependent loop (every loop has a stated constant bound and no operand-dependent `break`, `return` or `?`), and no native body calls `evaluate_ieee`, `compare_ieee` or a `Rational`-based owner helper. | Inspection (TC-953) |
+| FR-405-AC-7 | The proof-path source contains no `num_bigint` item, no owner `Integer`, `Rational` or `Vec`, no `cfg(kani)` token, no iterator adapter and no data-dependent loop (every loop has a stated constant bound and no operand-dependent `break`, `return` or `?`), and no native body calls `evaluate_ieee`, `compare_ieee` or a `Rational`-based owner helper. | Inspection (code review; no automated step) |
 | FR-405-AC-8 | A counting allocator around the native operations over the boundary grid observes zero allocations (the conversions of Behavior 5 are outside that window), and a host test calls each native operation and comparison. | Test (TC-953) |
-| FR-405-AC-9 | The expected side of every Kani harness shares no function with the native body, except the bit-pattern decode, and the harness docstring states the outputs it determines (Behavior 19). | Inspection (TC-953) |
+| FR-405-AC-9 | The expected side of every Kani harness shares no function with the native body and not even the bit-pattern decode, and the harness docstring states the outputs it determines (Behavior 19). | Inspection (code review; no automated step) |
 | FR-405-AC-10 | The host differential passes on the full boundary grid, each of the six rounding spellings and each operation and comparison, and each mutant of TC-953 fails it at the step TC-953 names; a mutant with no distinguishing input is rejected. | Test (TC-953) |
 | FR-405-AC-11 | For each combination of operation and width, either a Kani harness of Behavior 19 returns an executed terminal VERIFIED verdict, or a measured row exists whose outcome is one of timeout, memory exhaustion or unreliable, recorded in TC-953's evidence record with its time, peak memory, tool version and harness id. A FAILED verdict (a counterexample) fails this criterion for that combination. Each combination is gated on its own harness: a non-VERIFIED outcome for one combination does not fail the criterion for any other. A harness that was not run is neither state. | Test (TC-953) |
 | FR-405-AC-12 | Each VERIFIED harness has a vacuity cover that is reached and a harness mutant that it fails, and its expected side determines the full outcome of Behavior 19 or lists exactly the outputs it covers. | Test (TC-953) |
 | FR-405-AC-13 | The peak memory of every executed harness, VERIFIED or not, is recorded with its provenance and is at most the 16 GiB ceiling of CG FR-028; a harness whose peak exceeds it is a non-VERIFIED row under AC-11. | Test (TC-953) |
-| FR-405-AC-14 | The refusal of a combination in the table-row state is that of IR-1526's seam: the kernel defines no refusal variant, no refusal path and no `Meter` behaviour for it, and a source search finds none. | Inspection (TC-953) |
+| FR-405-AC-14 | The refusal of a combination in the table-row state is that of IR-1526's seam: the kernel defines no refusal variant, no refusal path and no `Meter` behaviour for it, and a source search finds none. | Inspection (code review; no automated step) |
 | FR-405-AC-15 | No proof is claimed for a combination whose harness has no executed VERIFIED verdict, and the Status records, per operation and width, the verdict or the table row. FR-405 is Done only when every combination, SquareRoot and FusedMultiplyAdd included, has one or the other. | Inspection (TC-953) |
 
 ## Status
 
-Specified (IR-1446). Not implemented; no Rust accompanies this requirement, no Kani harness has run and no measurement exists.
+Implemented (IR-1446): `src/native_float.rs` (carrier, `evaluate_native_float`, `compare_native_float`), harnesses in `src/native_float/kani_proofs.rs`, tests in `tests/ir1446_native_float.rs`, the host mutants in `scripts/ir1446_native_float_mutants.py` and the harness mutants in `scripts/ir1446_native_float_kani_mutants.py`. Not Done: the table rows below are for IR-1526 (the owner of the refusal seam and of the Kani tractability table) to load, and Behavior 15 is met in this repository by TC-953's evidence record. The verdict or table row per operation and width (TC-953's evidence record has the time, peak memory, tool version and harness id of each of the 44 harnesses, three per rounding operation and one per other operation):
+
+| Operation | Binary32 | Binary64 |
+| --- | --- | --- |
+| Negate | VERIFIED | VERIFIED |
+| NumericEqual | VERIFIED | VERIFIED |
+| TotalOrder | VERIFIED | VERIFIED |
+| BitIdentical | VERIFIED | VERIFIED |
+| Add | table row: timeout | table row: timeout |
+| Subtract | table row: timeout | table row: timeout |
+| Multiply | table row: timeout | table row: timeout |
+| Divide | table row: timeout | table row: timeout |
+| SquareRoot | table row: timeout | table row: timeout |
+| FusedMultiplyAdd | table row: timeout | table row: timeout |
+
+No proof is claimed for a table-row combination. Its `Exact` and directed-spelling harnesses, the `NearestEven` harness of Divide, SquareRoot and FusedMultiplyAdd at both widths and the `NearestEven` harness of Multiply at Binary64 reached no verdict within the 600 s limit (31 harnesses); 18 of the 31 have a peak above the 16 GiB ceiling. The 18 rows above the 16 GiB ceiling ended as timeouts under the 24 GiB scope; under a 16 GiB limit they would likely have ended as memory exhaustion, and their recorded peaks are the data IR-1526's seam needs. The only proofs held for those combinations are the `NearestEven` harnesses of Add and Subtract at both widths and of Multiply at Binary32, each of which is VERIFIED, with its covers reached and a harness mutant it fails, and covers only what the harness docstring lists. The native operations for every combination are host-callable and tested against the owner by the differential (AC-4 to AC-6, AC-10); that is a test, not a proof.
 
 ## Dependencies
 
