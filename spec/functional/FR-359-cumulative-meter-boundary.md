@@ -50,13 +50,19 @@ The 4096-record cap and truncation at admission 4097 belong to FR-358-AC-15, alr
 
 AC-10 expected CG verdicts (a passing CG test means its own assertions hold):
 
-| Consumer test in `tests/it/kani_obligations.rs` | Expected Kani verdict |
+| CG consumer test | Expected Kani verdict |
 | --- | --- |
 | `tc_027_attested_scalar_receipt_binds_real_proof_and_native_result` | `Verified` for both ordinary and zero-result-unit constrained receipts; native outcomes are completed 5 and `Incomplete` at result-retain respectively. |
 | `tc_027_attested_scalar_subtraction_receipts_bind_both_operand_orders` | `Verified` for both operand orders; native outcomes are completed 3 and -3. |
 | `tc_025_scalar_harness_falsifies_a_mutated_oracle_arithmetic` | Healthy sub-run `Verified`; mutated Add-to-Subtract oracle sub-run `Falsified` at its sound assertion with a counterexample. |
-| `tc_027_a_routed_scalar_harness_verifies` | `Verified`, including its completion cover. |
+| `kani_generation::kani_generation_real_v2_scalar_verifies` | `Verified`, including its completion cover. |
 | `tc_027_a_routed_scalar_harness_violating_its_bound_is_falsified` | `Falsified` with a counterexample for the narrowed asserted result bound. |
+
+The unqualified entries are in CG's `tests/it/kani_obligations.rs`. The healthy
+entry is in `tests/it/kani_generation.rs` and calls
+`kani_obligations::verify_routed_scalar_harness_real_kani`, which retained the
+original test body in [CG PR #601](https://github.com/agent-ix/quire-contract-codegen/pull/601).
+This entry-point move changes no domain, oracle or expected verdict.
 
 ## Status
 
