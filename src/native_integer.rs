@@ -102,6 +102,10 @@ pub enum NativeIntegerOperationKind {
     Multiply,
     /// Unary negation.
     Negate,
+    /// `div` or `rem` under a division profile.
+    Divide,
+    /// The Euclidean `mod` remainder.
+    Modulo,
 }
 
 /// Native admission failure; none of these is an evaluator domain refusal.
@@ -183,6 +187,48 @@ pub enum NativeIntegerOperation {
         /// Operand domain.
         operand: NativeIntegerInterval,
     },
+    /// The quotient or remainder of the dividend by the divisor under `profile`.
+    Divide {
+        /// The law that picks the quotient and remainder pair.
+        profile: DivisionProfile,
+        /// Which of the pair the operation exposes.
+        member: DivisionMember,
+        /// Dividend domain.
+        dividend: NativeIntegerInterval,
+        /// Divisor domain; zero is an evaluation outcome, not an admission failure.
+        divisor: NativeIntegerInterval,
+    },
+    /// The Euclidean remainder, whatever law `div` and `rem` use.
+    Modulo {
+        /// Dividend domain.
+        dividend: NativeIntegerInterval,
+        /// Divisor domain; zero is an evaluation outcome, not an admission failure.
+        divisor: NativeIntegerInterval,
+    },
+}
+
+/// The largest endpoint magnitude of `interval`, exact for `i128::MIN`.
+fn magnitude(interval: NativeIntegerInterval) -> u128 {
+    interval
+        .lower
+        .unsigned_abs()
+        .max(interval.upper.unsigned_abs())
+}
+
+/// `max(B, 1) - 1` for the largest divisor magnitude `B`: the largest
+/// remainder magnitude, at most `i128::MAX`.
+fn remainder_reach(divisor: NativeIntegerInterval) -> i128 {
+    clamp_positive(magnitude(divisor).max(1) - 1)
+}
+
+/// `m` as a native upper bound, clamped to `i128::MAX`.
+fn clamp_positive(m: u128) -> i128 {
+    i128::try_from(m).unwrap_or(i128::MAX)
+}
+
+/// `-m` as a native lower bound, clamped to `i128::MIN`.
+fn clamp_negative(m: u128) -> i128 {
+    i128::try_from(m).map_or(i128::MIN, |m| -m)
 }
 
 impl NativeIntegerOperation {
@@ -192,6 +238,8 @@ impl NativeIntegerOperation {
             Self::Subtract { .. } => NativeIntegerOperationKind::Subtract,
             Self::Multiply { .. } => NativeIntegerOperationKind::Multiply,
             Self::Negate { .. } => NativeIntegerOperationKind::Negate,
+            Self::Divide { .. } => NativeIntegerOperationKind::Divide,
+            Self::Modulo { .. } => NativeIntegerOperationKind::Modulo,
         }
     }
     fn capacity(self) -> Option<NativeIntegerInterval> {
@@ -214,6 +262,28 @@ impl NativeIntegerOperation {
             Self::Negate { operand } => {
                 (operand.upper.checked_neg()?, operand.lower.checked_neg()?)
             }
+            Self::Divide {
+                member: DivisionMember::Quotient,
+                dividend,
+                divisor,
+                ..
+            } => {
+                // `i128::MIN / -1` is the one quotient outside the carrier.
+                if dividend.lower == i128::MIN && divisor.lower <= -1 && divisor.upper >= -1 {
+                    return None;
+                }
+                let m = magnitude(dividend);
+                (clamp_negative(m), clamp_positive(m))
+            }
+            Self::Divide {
+                member: DivisionMember::Remainder,
+                divisor,
+                ..
+            } => {
+                let reach = remainder_reach(divisor);
+                (-reach, reach)
+            }
+            Self::Modulo { divisor, .. } => (0, remainder_reach(divisor)),
         };
         Some(NativeIntegerInterval { lower, upper })
     }
@@ -269,7 +339,16 @@ impl NativeIntegerPlan {
             (
                 NativeIntegerOperation::Add { left, right }
                 | NativeIntegerOperation::Subtract { left, right }
-                | NativeIntegerOperation::Multiply { left, right },
+                | NativeIntegerOperation::Multiply { left, right }
+                | NativeIntegerOperation::Divide {
+                    dividend: left,
+                    divisor: right,
+                    ..
+                }
+                | NativeIntegerOperation::Modulo {
+                    dividend: left,
+                    divisor: right,
+                },
                 NativeIntegerOperands::Binary { left: a, right: b },
             ) => {
                 check(a, left, NativeIntegerOperandPosition::Left)?;
@@ -353,12 +432,59 @@ fn native_arithmetic(
     operation: AdmittedNativeIntegerOperation,
     meter: &mut Meter,
 ) -> Result<NativeInteger, Stop> {
+    if let Some(division) = plan_division(operation, meter) {
+        return division;
+    }
     charge_arithmetic_prefix(operation.plan.operation.kind(), operation.operands, meter)?;
     finish_arithmetic(
         operation.calculate(),
         operation.plan.capacity,
         operation.plan.result_domain,
         meter,
+    )
+}
+
+/// The division and modulus operations of an admitted plan, evaluated by the
+/// plan-free body with the plan's result domain; `None` for every other
+/// operation. A completed member always lies in the derived capacity
+/// (FR-409 Behavior 4 and 5); the breach arm is the checked invariant.
+fn plan_division(
+    operation: AdmittedNativeIntegerOperation,
+    meter: &mut Meter,
+) -> Option<Result<NativeInteger, Stop>> {
+    let NativeIntegerOperands::Binary { left, right } = operation.operands else {
+        return None;
+    };
+    let (schedule, profile, member) = match operation.plan.operation {
+        NativeIntegerOperation::Divide {
+            profile, member, ..
+        } => (DivisionSchedule::Division, profile, member),
+        NativeIntegerOperation::Modulo { .. } => (
+            DivisionSchedule::Modulus,
+            DivisionProfile::Euclidean,
+            DivisionMember::Remainder,
+        ),
+        _ => return None,
+    };
+    Some(
+        native_division(
+            schedule,
+            profile,
+            member,
+            left,
+            right,
+            operation.plan.result_domain,
+            meter,
+        )
+        .and_then(|value| {
+            if operation.plan.capacity.contains(value) {
+                Ok(value)
+            } else {
+                Err(Stop::Refused(Refusal::CheckedInvariant {
+                    cause: CheckedInvariantCause::NativeIntegerCapacityBreach,
+                }))
+            }
+        }),
     )
 }
 
@@ -385,6 +511,8 @@ fn charge_arithmetic_prefix(
         }
         NativeIntegerOperationKind::Multiply => (left_bits, right_bits),
         NativeIntegerOperationKind::Negate => (left_bits, 0),
+        // Division plans charge through `plan_division`, never this prefix.
+        NativeIntegerOperationKind::Divide | NativeIntegerOperationKind::Modulo => (0, 0),
     };
     // Native magnitudes are at most 128 bits, so every amount here is at
     // most 256. Retain a units charge directly; no general Integer amount
@@ -658,7 +786,7 @@ fn charge_equality_schedule(meter: &mut Meter) -> Result<(), crate::accounting::
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum NativeIntegerSchedule {
-    /// Add, subtract, multiply or negate an admitted operation.
+    /// Add, subtract, multiply, negate, divide or modulo an admitted operation.
     Arithmetic(AdmittedNativeIntegerOperation),
     /// The i64-wide multiply of [`evaluate_native_integer_multiply_i64`].
     MultiplyI64 {
@@ -710,6 +838,19 @@ pub fn charge_native_integer_schedule(
 fn charge_schedule(schedule: NativeIntegerSchedule, meter: &mut Meter) -> Result<(), Stop> {
     match schedule {
         NativeIntegerSchedule::Arithmetic(operation) => {
+            if let (
+                NativeIntegerOperation::Divide { .. } | NativeIntegerOperation::Modulo { .. },
+                NativeIntegerOperands::Binary { left, right },
+            ) = (operation.plan.operation, operation.operands)
+            {
+                let schedule =
+                    if operation.plan.operation.kind() == NativeIntegerOperationKind::Modulo {
+                        DivisionSchedule::Modulus
+                    } else {
+                        DivisionSchedule::Division
+                    };
+                return charge_division_schedule(schedule, left, right, meter);
+            }
             charge_arithmetic_prefix(operation.plan.operation.kind(), operation.operands, meter)?;
             charge_arithmetic_retain(meter)
         }
@@ -784,6 +925,8 @@ pub fn evaluate_native_integer_ordering(
     )
 }
 
+#[cfg(kani)]
+mod division_proofs;
 #[cfg(kani)]
 mod kani_proofs;
 #[cfg(any(test, kani))]

@@ -80,6 +80,9 @@ impl MathematicalInteger {
                     low,
                 }
             }
+            Kind::Divide | Kind::Modulo => {
+                unreachable!("the abstraction models the four arithmetic operations")
+            }
         }
     }
     pub(super) fn fits_native(self) -> bool {

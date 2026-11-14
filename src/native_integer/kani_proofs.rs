@@ -19,6 +19,9 @@ fn refinement(kind: NativeIntegerOperationKind) {
         NativeIntegerOperationKind::Subtract => NativeIntegerOperation::Subtract { left, right },
         NativeIntegerOperationKind::Multiply => NativeIntegerOperation::Multiply { left, right },
         NativeIntegerOperationKind::Negate => NativeIntegerOperation::Negate { operand: left },
+        NativeIntegerOperationKind::Divide | NativeIntegerOperationKind::Modulo => {
+            unreachable!("division has its own harnesses")
+        }
     };
     let p = Math::evaluate(kind, left.lower, right.lower);
     let q = Math::evaluate(kind, left.lower, right.upper);
@@ -38,7 +41,9 @@ fn refinement(kind: NativeIntegerOperationKind) {
         },
         NativeIntegerOperationKind::Add
         | NativeIntegerOperationKind::Subtract
-        | NativeIntegerOperationKind::Multiply => NativeIntegerOperands::Binary {
+        | NativeIntegerOperationKind::Multiply
+        | NativeIntegerOperationKind::Divide
+        | NativeIntegerOperationKind::Modulo => NativeIntegerOperands::Binary {
             left: NativeInteger::new(x),
             right: NativeInteger::new(y),
         },
