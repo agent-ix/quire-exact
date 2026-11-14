@@ -126,6 +126,20 @@ m("result-charge-amount", "the result charge is at the wrong amount",
 m("ill-typed-charges", "an ill-typed call charges the Meter",
   "    same_width(left.width, right.width)?;\n    Ok(Outcome::from_stop(compare",
   "    let _ = meter.charge(Charge::new(ChargePoint::IeeeOperands));\n    same_width(left.width, right.width)?;\n    Ok(Outcome::from_stop(compare", S2)
+m("charges-reordered", "the charges of ieee.exact-intermediate and ieee.round are reordered",
+  "            charge_width(meter, ChargePoint::IeeeExactIntermediate, fmt)?;\n            charge_width(meter, ChargePoint::IeeeRound, fmt)?;\n",
+  "            charge_width(meter, ChargePoint::IeeeRound, fmt)?;\n            charge_width(meter, ChargePoint::IeeeExactIntermediate, fmt)?;\n", S4)
+m("denied-charge-then-later", "the denied charge is followed by a later charge",
+  "            charge_width(meter, ChargePoint::IeeeRound, fmt)?;\n",
+  "            let _ = charge_width(meter, ChargePoint::IeeeRound, fmt);\n", S4)
+m("negate-raises-flag", "Negate raises a flag",
+  "flags: IeeeFlags::EMPTY,\n            rounding,\n        });", "flags: IeeeFlags::EMPTY.with(IeeeFlag::Inexact),\n            rounding,\n        });", S3)
+m("total-order-nan-payload", "TotalOrder ignores the payload of a NaN",
+  "total_order_key(fmt, left.bits) <= total_order_key(fmt, right.bits)",
+  "{ let clean = |b: u64| if matches!(decode(fmt, b), Operand::Nan { .. }) { (b & !fmt.fraction_mask()) | fmt.quiet_bit() } else { b }; total_order_key(fmt, clean(left.bits)) <= total_order_key(fmt, clean(right.bits)) }", S3)
+m("zero-over-zero-divide-by-zero", "divide_by_zero is raised for zero over zero",
+  "        (Operand::Infinite { .. }, Operand::Infinite { .. })\n        | (Operand::Zero { .. }, Operand::Zero { .. }) => invalid(fmt),",
+  "        (Operand::Infinite { .. }, Operand::Infinite { .. }) => invalid(fmt),\n        (Operand::Zero { .. }, Operand::Zero { .. }) => Step::Decided(\n            fmt.canonical_nan(),\n            IeeeFlags::EMPTY.with(IeeeFlag::DivideByZero),\n        ),", S3)
 m("loop-operand-exit", "a loop exits on an operand-dependent condition",
   "while index < N {", "while index < N && !seen {", S5)
 m("cfg-kani-body", "cfg(kani) selects a body",

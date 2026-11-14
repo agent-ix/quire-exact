@@ -256,11 +256,9 @@ fn grid_operations(width: IeeeWidth) -> Vec<NativeFloatOperation> {
             all.extend(operations(width, [a, b, a])[1..5].iter().copied());
         }
     }
-    // Fused multiply-add over a reduced grid, then the full grid in the host
-    // differential below.
-    let small: Vec<u64> = grid.iter().copied().step_by(3).collect();
-    for &a in &small {
-        for &b in &small {
+    // Fused multiply-add over the full boundary grid in all three operands.
+    for &a in &grid {
+        for &b in &grid {
             for &c in &grid {
                 all.push(NativeFloatOperation::FusedMultiplyAdd(
                     nf(width, a),
@@ -646,11 +644,13 @@ fn differential_on_cancellation_and_ties_near_every_exponent() {
 fn charges_denials_and_incomplete_records_equal_the_owner_at_every_limit() {
     for width in WIDTHS {
         let grid = boundary(width);
-        let picks: Vec<u64> = grid.iter().copied().step_by(2).collect();
-        for &a in &picks {
-            for &b in &picks {
-                for operation in operations(width, [a, b, a ^ 1]) {
-                    for rounding in [RoundingMode::Exact, NearestEven, TowardNegative] {
+        // Every boundary case: the full grid in the first two operands, the
+        // third rotating through the grid, in every rounding spelling.
+        for (i, &a) in grid.iter().enumerate() {
+            for (j, &b) in grid.iter().enumerate() {
+                let c = grid[(i + 2 * j + 1) % grid.len()];
+                for operation in operations(width, [a, b, c]) {
+                    for rounding in RoundingMode::ALL {
                         agree_at_limits(operation, rounding);
                     }
                 }
@@ -745,6 +745,10 @@ fn comparisons_equal_independent_literals() {
     assert!(value(TotalOrder, 0xFFC0_0000, 0x7FC0_0000));
     assert!(!value(TotalOrder, 0x7FC0_0000, 0xFFC0_0000));
     assert!(value(TotalOrder, 0x7FC0_0001, 0x7FC0_0002));
+    assert!(!value(TotalOrder, 0x7FC0_0002, 0x7FC0_0001));
+    // Negative NaNs order in reverse payload order.
+    assert!(value(TotalOrder, 0xFFC0_0002, 0xFFC0_0001));
+    assert!(!value(TotalOrder, 0xFFC0_0001, 0xFFC0_0002));
     assert!(value(TotalOrder, 0x8000_0000, 0));
     assert!(!value(TotalOrder, 0, 0x8000_0000));
     assert!(value(TotalOrder, 0x7F80_0000, 0x7F80_0001));
@@ -950,97 +954,161 @@ fn read_spec(path: &str) -> String {
         .expect("spec readable")
 }
 
-const OPERATIONS: [&str; 10] = [
-    "Negate",
-    "Add",
-    "Subtract",
-    "Multiply",
-    "Divide",
-    "SquareRoot",
-    "FusedMultiplyAdd",
-    "NumericEqual",
-    "TotalOrder",
-    "BitIdentical",
-];
+const TC: &str = "spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md";
+const GIB: u64 = 1 << 30;
 
-/// The rows of TC-953's evidence record: seven cells each.
-fn evidence_rows() -> Vec<Vec<String>> {
-    let tc = read_spec("spec/test-cases/TC-953-native-float-carrier-matches-owner-and-verifies.md");
-    let record = tc
-        .split("## Evidence record")
-        .nth(1)
-        .and_then(|rest| rest.split("\n## ").next())
-        .expect("evidence record present");
-    record
+/// (name in the spec, snake case in the harness id, rounds)
+const OPERATIONS: [(&str, &str, bool); 10] = [
+    ("Negate", "negate", false),
+    ("Add", "add", true),
+    ("Subtract", "subtract", true),
+    ("Multiply", "multiply", true),
+    ("Divide", "divide", true),
+    ("SquareRoot", "square_root", true),
+    ("FusedMultiplyAdd", "fused_multiply_add", true),
+    ("NumericEqual", "numeric_equal", false),
+    ("TotalOrder", "total_order", false),
+    ("BitIdentical", "bit_identical", false),
+];
+const SPELLINGS: [&str; 3] = ["nearest_even", "exact", "directed"];
+
+struct Row {
+    operation: String,
+    width: String,
+    outcome: String,
+    time: String,
+    peak_cell: String,
+    peak: u64,
+    version: String,
+    id: String,
+}
+
+/// The rows of a markdown table under `heading` in `text`: cells, trimmed of
+/// backticks, with the header and separator rows dropped.
+fn table_rows(text: &str, heading: &str) -> Vec<Vec<String>> {
+    let section = text.split(heading).nth(1).expect("heading present");
+    let section = section.split("\n#").next().unwrap();
+    section
         .lines()
-        .filter(|line| {
-            line.starts_with("| ") && !line.starts_with("| Operation") && !line.starts_with("| ---")
-        })
+        .filter(|line| line.starts_with("| ") && !line.starts_with("| ---"))
+        .skip(1)
         .map(|line| {
-            line.trim_matches('|')
+            line.trim()
+                .trim_matches('|')
                 .split('|')
-                .map(|cell| cell.trim().to_owned())
+                .map(|cell| cell.trim().trim_matches('`').to_owned())
                 .collect()
         })
         .collect()
 }
 
-#[test]
-#[trace("TC-953", "FR-405-AC-11")]
-#[trace("TC-953", "FR-405-AC-13")]
-fn every_operation_and_width_has_a_verified_row_or_a_measured_table_row() {
-    let rows = evidence_rows();
-    let harness_source = std::fs::read_to_string(concat!(
+/// One row per executed harness: operation, width, spelling, outcome, time,
+/// peak, Kani version, harness id.
+fn evidence_rows() -> Vec<Row> {
+    table_rows(&read_spec(TC), "## Evidence record")
+        .into_iter()
+        .map(|cells| {
+            assert_eq!(cells.len(), 8, "{cells:?}");
+            Row {
+                operation: cells[0].clone(),
+                width: cells[1].clone(),
+                outcome: cells[3].clone(),
+                time: cells[4].clone(),
+                peak_cell: cells[5].clone(),
+                peak: cells[5]
+                    .split(' ')
+                    .next()
+                    .unwrap()
+                    .parse()
+                    .expect("a byte count first"),
+                version: cells[6].clone(),
+                id: cells[7].clone(),
+            }
+        })
+        .collect()
+}
+
+fn harness_source() -> String {
+    std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/src/native_float/kani_proofs.rs"
     ))
-    .expect("harness source readable");
+    .expect("harness source readable")
+}
+
+/// The harness ids that FR-405 Behavior 19 requires for one combination: one
+/// for an operation that does not round, one per spelling group otherwise.
+fn expected_ids(snake: &str, rounds: bool, width: &str) -> Vec<String> {
+    let prefix = if width == "Binary32" {
+        "float32"
+    } else {
+        "float64"
+    };
+    if rounds {
+        SPELLINGS
+            .iter()
+            .map(|spelling| format!("native_float_kani_proofs::{prefix}_{snake}_{spelling}"))
+            .collect()
+    } else {
+        vec![format!("native_float_kani_proofs::{prefix}_{snake}")]
+    }
+}
+
+#[test]
+#[trace("TC-953", "FR-405-AC-11")]
+#[trace("TC-953", "FR-405-AC-13")]
+fn every_harness_of_every_operation_and_width_has_a_recorded_outcome_and_peak() {
+    let rows = evidence_rows();
+    let source = harness_source();
+    let mut seen = 0;
     for width in ["Binary32", "Binary64"] {
-        for operation in OPERATIONS {
-            let found: Vec<_> = rows
+        for (name, snake, rounds) in OPERATIONS {
+            let mut ids: Vec<String> = rows
                 .iter()
-                .filter(|r| r[0] == operation && r[1] == width)
+                .filter(|r| r.operation == name && r.width == width)
+                .map(|r| r.id.clone())
                 .collect();
-            assert_eq!(found.len(), 1, "{operation} {width}");
-            let row = found[0];
-            assert_eq!(row.len(), 7, "{row:?}");
-            assert!(
-                ["VERIFIED", "timeout", "memory exhaustion", "unreliable"]
-                    .contains(&row[2].as_str()),
-                "{row:?}"
-            );
-            assert!(
-                row[3].ends_with('s') || row[3].contains(" s "),
-                "time: {row:?}"
-            );
-            assert!(row[5] == "0.68.0", "tool version: {row:?}");
-            // The peak is recorded, with its unit, for every executed harness.
-            let peak: u64 = row[4]
-                .split(' ')
-                .next()
-                .unwrap()
-                .parse()
-                .expect("a byte count");
-            assert!(row[4].contains("bytes"));
-            if row[2] == "VERIFIED" {
-                assert!(
-                    peak <= 16 << 30,
-                    "a VERIFIED peak is at most 16 GiB: {row:?}"
-                );
-            } else {
-                assert!(
-                    row[4].contains("above the 16 GiB ceiling") || peak <= 16 << 30,
-                    "{row:?}"
-                );
-            }
-            let id = row[6]
-                .strip_prefix("native_float_kani_proofs::")
-                .expect("harness id");
-            assert!(harness_source
-                .contains(id.split('_').skip(1).collect::<Vec<_>>().join("_").as_str()));
+            ids.sort();
+            let mut expected = expected_ids(snake, rounds, width);
+            expected.sort();
+            assert_eq!(ids, expected, "{name} {width}");
+            seen += ids.len();
         }
     }
-    assert_eq!(rows.len(), 20);
+    assert_eq!(seen, rows.len());
+    for row in &rows {
+        let name = row
+            .id
+            .strip_prefix("native_float_kani_proofs::")
+            .expect("harness id");
+        // The id names a harness the source defines (a macro invocation or a
+        // function), as a whole word.
+        assert!(
+            source.lines().any(|l| mentions(l, name)),
+            "no harness {name}"
+        );
+        assert!(
+            ["VERIFIED", "timeout", "memory exhaustion", "unreliable"]
+                .contains(&row.outcome.as_str()),
+            "{}",
+            row.id
+        );
+        assert_eq!(row.version, "0.68.0", "{}", row.id);
+        let above = row.peak > 16 * GIB;
+        assert_eq!(
+            row.peak_cell.contains("above the 16 GiB ceiling"),
+            above,
+            "{}: the row claims the ceiling status its number has",
+            row.id
+        );
+        if row.outcome == "VERIFIED" {
+            assert!(!above, "a VERIFIED peak is at most 16 GiB: {}", row.id);
+            let seconds: f64 = row.time.trim_end_matches(" s").parse().expect("seconds");
+            assert!(seconds < 600.0, "{}", row.id);
+        } else {
+            assert!(row.time.starts_with("600 s"), "{}", row.id);
+        }
+    }
 }
 
 #[test]
@@ -1052,38 +1120,90 @@ fn the_status_records_a_verdict_or_table_row_for_every_operation_and_width() {
         .nth(1)
         .and_then(|s| s.split("## Dependencies").next())
         .unwrap();
-    let evidence = evidence_rows();
-    for operation in OPERATIONS {
+    let rows = evidence_rows();
+    for (name, _, _) in OPERATIONS {
         let line = status
             .lines()
-            .find(|line| line.starts_with(&format!("| {operation} |")))
-            .unwrap_or_else(|| panic!("{operation} missing from the Status"));
+            .find(|line| line.starts_with(&format!("| {name} |")))
+            .unwrap_or_else(|| panic!("{name} missing from the Status"));
         let cells: Vec<_> = line.trim_matches('|').split('|').map(str::trim).collect();
         for (cell, width) in cells[1..].iter().zip(["Binary32", "Binary64"]) {
-            let row = evidence
+            // A combination is VERIFIED only when all of its harnesses are.
+            let mut outcomes: Vec<&str> = rows
                 .iter()
-                .find(|r| r[0] == operation && r[1] == width)
-                .unwrap();
-            let expected = if row[2] == "VERIFIED" {
+                .filter(|r| r.operation == name && r.width == width && r.outcome != "VERIFIED")
+                .map(|r| r.outcome.as_str())
+                .collect();
+            outcomes.sort_unstable();
+            outcomes.dedup();
+            let expected = if outcomes.is_empty() {
                 "VERIFIED".to_owned()
             } else {
-                format!("table row: {}", row[2])
+                format!("table row: {}", outcomes.join(" + "))
             };
-            assert_eq!(*cell, expected, "{operation} {width}");
+            assert_eq!(*cell, expected, "{name} {width}");
         }
     }
-    // No proof is claimed for a table-row combination.
     assert!(status.contains("No proof is claimed for a table-row combination"));
 }
 
 #[test]
-#[ignore = "builds 49 scratch copies of the crate; run explicitly"]
+#[trace("TC-953", "FR-405-AC-12")]
+fn every_verified_harness_has_reached_covers_and_a_failing_harness_mutant() {
+    let tc = read_spec(TC);
+    let table = table_rows(&tc, "### Vacuity and harness mutants");
+    let script = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/scripts/ir1446_native_float_mutants.py"
+    ))
+    .expect("mutant script readable");
+    let verified: Vec<String> = evidence_rows()
+        .into_iter()
+        .filter(|r| r.outcome == "VERIFIED")
+        .map(|r| r.id)
+        .collect();
+    let mut recorded: Vec<String> = table.iter().map(|cells| cells[0].clone()).collect();
+    recorded.sort();
+    let mut expected = verified.clone();
+    expected.sort();
+    assert_eq!(recorded, expected, "one vacuity row per VERIFIED harness");
+    for cells in &table {
+        assert_eq!(cells.len(), 4, "{cells:?}");
+        // "k of k": every cover property of the harness was reached.
+        let counts: Vec<&str> = cells[1].split(" of ").collect();
+        assert_eq!(counts.len(), 2, "{cells:?}");
+        assert!(
+            counts[0] == counts[1] && counts[0].parse::<u32>().unwrap() > 0,
+            "{cells:?}"
+        );
+        // The mutant is a named, re-runnable edit of the script, and it failed.
+        assert!(script.contains(&format!("m(\"{}\"", cells[2])), "{cells:?}");
+        assert_eq!(cells[3], "FAILED", "{cells:?}");
+    }
+}
+
+#[test]
+#[ignore = "builds 54 scratch copies of the crate; run explicitly"]
 #[trace("TC-953", "FR-405-AC-10")]
 fn every_mutant_of_the_native_bodies_fails_the_step_it_names() {
     let status = std::process::Command::new("python3")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/scripts/ir1446_native_float_mutants.py"
+        ))
+        .status()
+        .expect("python3 runs");
+    assert!(status.success());
+}
+
+#[test]
+#[ignore = "runs Kani on a scratch copy per VERIFIED harness; run under the authorized runner"]
+#[trace("TC-953", "FR-405-AC-12")]
+fn every_harness_mutant_fails_its_harness_under_kani() {
+    let status = std::process::Command::new("python3")
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/scripts/ir1446_native_float_kani_mutants.py"
         ))
         .status()
         .expect("python3 runs");
