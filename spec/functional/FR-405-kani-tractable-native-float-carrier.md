@@ -43,9 +43,9 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 
 ### Separation
 
-6. The native operations SHALL be a separate implementation from the owner's `evaluate_ieee` and `compare_ieee`: no native body SHALL call them or any `Rational`-based owner helper. The expected side of each Kani harness of Behavior 19 SHALL share no function with the native body, with one exception allowed by design: the bit-pattern decode, whose defects are left to the host differential (CG FR-053-AC-14).
+6. The native operations SHALL be a separate implementation from the owner's `evaluate_ieee` and `compare_ieee`: no native body SHALL call them or any `Rational`-based owner helper. The expected side of each Kani harness of Behavior 19 SHALL share no function with the native body, the bit-pattern decode included (FR-405-AC-9; CG FR-053-AC-14 inspects the same).
 7. The native operations SHALL be ordinary host code, compiled and callable in a host build, so that a host test of them is a test of what Kani proves and CG's host differential can run them against the shipped owner.
-8. The native operations SHALL be one source for the host and Kani builds, and no body SHALL be selected by `cfg(kani)`. Where CG FR-053 calls the native operations "the carrier's cfg(kani) replacement", the term means this host-callable source and not a Kani-only body.
+8. The native operations SHALL be one source for the host and Kani builds, and no body SHALL be selected by `cfg(kani)`. CG FR-053 calls them "the carrier's native operations" and its generated harness evaluates this host-callable source, as Behavior 7 requires.
 
 ### Operations
 
@@ -107,7 +107,7 @@ Implemented (IR-1446): `src/native_float.rs` (carrier, `evaluate_native_float`, 
 | SquareRoot | table row: timeout | table row: timeout |
 | FusedMultiplyAdd | table row: timeout | table row: timeout |
 
-No proof is claimed for a table-row combination. Its `Exact` and directed-spelling harnesses, and for Divide, SquareRoot and FusedMultiplyAdd also the `NearestEven` one, reached no verdict within the 600 s limit; 18 of the 31 such rows have a peak above the 16 GiB ceiling. The only proofs held for those combinations are the `NearestEven` harnesses of Add and Subtract at both widths and of Multiply at Binary32, each of which is VERIFIED, with its covers reached and a harness mutant it fails, and covers only what the harness docstring lists. The native operations for every combination are host-callable and tested against the owner by the differential (AC-4 to AC-6, AC-10); that is a test, not a proof.
+No proof is claimed for a table-row combination. Its `Exact` and directed-spelling harnesses, the `NearestEven` harness of Divide, SquareRoot and FusedMultiplyAdd at both widths and the `NearestEven` harness of Multiply at Binary64 reached no verdict within the 600 s limit (31 harnesses); 18 of the 31 have a peak above the 16 GiB ceiling. The 18 rows above the 16 GiB ceiling ended as timeouts under the 24 GiB scope; under a 16 GiB limit they would likely have ended as memory exhaustion, and their recorded peaks are the data IR-1526's seam needs. The only proofs held for those combinations are the `NearestEven` harnesses of Add and Subtract at both widths and of Multiply at Binary32, each of which is VERIFIED, with its covers reached and a harness mutant it fails, and covers only what the harness docstring lists. The native operations for every combination are host-callable and tested against the owner by the differential (AC-4 to AC-6, AC-10); that is a test, not a proof.
 
 ## Dependencies
 

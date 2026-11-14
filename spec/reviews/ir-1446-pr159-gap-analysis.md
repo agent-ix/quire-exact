@@ -39,3 +39,11 @@ One traceability gap that belongs to this PR: AC-12 has no tagged test.
 | --- | --- | --- | --- |
 | FR-405-AC-1..AC-11, AC-13..AC-15 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:77-91 | matrix rows tagged or method-without-symbol (Inspection), bound to tests/ir1446_native_float.rs |
 | FR-405-AC-12 | examined | spec/functional/FR-405-kani-tractable-native-float-carrier.md:88 | Each VERIFIED harness has a vacuity cover that is reached and a harness mutant that it fails, and its expected side determines the full outcome of Behavior 19 or lists exactly the outputs it covers. |
+
+## Dispositions
+
+Disposition pass 1, at 6986f4fd (branch rebased on main since the reviewed 62fefed0; `src/` unchanged since c7ea531, the commit the Kani record measured). `quire matrix --scope .` at 6986f4fd: FR-405-AC-12 is `tagged` (tests/ir1446_native_float.rs:977, and :1027 ignored); AC-7, AC-9 and AC-14 are `method-without-symbol` (Inspection by code review, no test); every other row as before.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-12 is tagged on `every_verified_harness_has_reached_covers_and_a_failing_harness_mutant` (record check: one vacuity row per VERIFIED evidence row, "k of k" covers, the mutant is a named `m("...")` edit of the host mutant script, verdict FAILED) and on the ignored `every_harness_mutant_fails_its_harness_under_kani`, which runs `scripts/ir1446_native_float_kani_mutants.py` (exact-text edit in a scratch copy, `cargo kani --harness <id> --exact --jobs 1 --solver cadical`, requires `VERIFICATION:- FAILED`). The 13 harness mutants are re-runnable. After: `#[trace("TC-953", "FR-405-AC-12")] fn every_verified_harness_has_reached_covers_and_a_failing_harness_mutant() { ... assert_eq!(recorded, expected, "one vacuity row per VERIFIED harness"); ... assert!(script.contains(&format!("m(\"{}\"", cells[2])), "{cells:?}"); assert_eq!(cells[3], "FAILED", "{cells:?}"); }` |

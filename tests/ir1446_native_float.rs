@@ -972,6 +972,31 @@ fn the_status_records_a_verdict_or_table_row_for_every_operation_and_width() {
     assert!(status.contains("No proof is claimed for a table-row combination"));
 }
 
+/// The number of `kani::cover!` properties the harness `id` carries: the
+/// negation checker, the comparison macro or the shared arithmetic checker.
+fn cover_count(id: &str) -> usize {
+    let source = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/native_float/kani_proofs.rs"
+    ))
+    .expect("harness source readable");
+    let between = |from: &str, to: &str| {
+        let start = source.find(from).expect("start marker");
+        let end = start + source[start..].find(to).expect("end marker");
+        source[start..end].matches("kani::cover!").count()
+    };
+    if id.ends_with("_negate") {
+        between("fn check_negate(", "pub(super) fn check(")
+    } else if ["_numeric_equal", "_total_order", "_bit_identical"]
+        .iter()
+        .any(|s| id.ends_with(s))
+    {
+        between("macro_rules! comparison_harness", "fn total_order_32")
+    } else {
+        between("pub(super) fn check(", "mod w32")
+    }
+}
+
 #[test]
 #[trace("TC-953", "FR-405-AC-12")]
 fn every_verified_harness_has_reached_covers_and_a_failing_harness_mutant() {
@@ -997,10 +1022,14 @@ fn every_verified_harness_has_reached_covers_and_a_failing_harness_mutant() {
         // "k of k": every cover property of the harness was reached.
         let counts: Vec<&str> = cells[1].split(" of ").collect();
         assert_eq!(counts.len(), 2, "{cells:?}");
-        assert!(
-            counts[0] == counts[1] && counts[0].parse::<u32>().unwrap() > 0,
-            "{cells:?}"
+        let covers = cover_count(&cells[0]);
+        assert!(covers > 0, "{cells:?}");
+        assert_eq!(
+            counts[0].parse::<usize>().unwrap(),
+            covers,
+            "{cells:?}: reached covers"
         );
+        assert_eq!(counts[1].parse::<usize>().unwrap(), covers, "{cells:?}");
         // The mutant is a named, re-runnable edit of the script, and it failed.
         assert!(script.contains(&format!("m(\"{}\"", cells[2])), "{cells:?}");
         assert_eq!(cells[3], "FAILED", "{cells:?}");
@@ -1008,7 +1037,7 @@ fn every_verified_harness_has_reached_covers_and_a_failing_harness_mutant() {
 }
 
 #[test]
-#[ignore = "builds 54 scratch copies of the crate; run explicitly"]
+#[ignore = "builds 49 scratch copies of the crate; run explicitly"]
 #[trace("TC-953", "FR-405-AC-10")]
 fn every_mutant_of_the_native_bodies_fails_the_step_it_names() {
     let status = std::process::Command::new("python3")
