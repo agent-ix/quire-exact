@@ -100,6 +100,24 @@ Harness mutants (FR-405-AC-12). Each VERIFIED harness fails a buildable mutant o
 
 Host mutants (FR-405-AC-10). `scripts/ir1446_native_float_mutants.py` builds 49 mutants in scratch copies (one per row of the table above that has a buildable form, one per charge point of `ieee.rs` including `ieee.exact-intermediate` and `ieee.round` each made on a classification-decided input, and the inspection mutants) and requires the named step's test to fail; all 49 were killed and none survived.
 
+### Vacuity and harness mutants
+
+| Harness id | Covers reached | Mutant | Verdict |
+| --- | --- | --- | --- |
+| `native_float_kani_proofs::float32_negate` | 1 of 1 | negate-quiets | FAILED |
+| `native_float_kani_proofs::float64_negate` | 1 of 1 | negate-quiets | FAILED |
+| `native_float_kani_proofs::float32_numeric_equal` | 2 of 2 | numeric-equal-zeros | FAILED |
+| `native_float_kani_proofs::float64_numeric_equal` | 2 of 2 | numeric-equal-zeros | FAILED |
+| `native_float_kani_proofs::float32_total_order` | 2 of 2 | total-order-sign | FAILED |
+| `native_float_kani_proofs::float64_total_order` | 2 of 2 | total-order-sign | FAILED |
+| `native_float_kani_proofs::float32_bit_identical` | 2 of 2 | bit-identical-numeric | FAILED |
+| `native_float_kani_proofs::float64_bit_identical` | 2 of 2 | bit-identical-numeric | FAILED |
+| `native_float_kani_proofs::float32_add_nearest_even` | 3 of 3 | tie-even-is-away | FAILED |
+| `native_float_kani_proofs::float64_add_nearest_even` | 3 of 3 | tie-even-is-away | FAILED |
+| `native_float_kani_proofs::float32_subtract_nearest_even` | 3 of 3 | tie-even-is-away | FAILED |
+| `native_float_kani_proofs::float64_subtract_nearest_even` | 3 of 3 | tie-even-is-away | FAILED |
+| `native_float_kani_proofs::float32_multiply_nearest_even` | 3 of 3 | tie-even-is-away | FAILED |
+
 ## Expected Results
 
 Every boundary case yields the owner's bits, flags, provenance and charges, with independent literals for the cases named. Every mutant fails as named. Each combination of operation and width ends as an executed VERIFIED verdict or a measured table row, judged alone, with its peak recorded and at most 16 GiB; a combination with neither is inconclusive and no proof is claimed.
