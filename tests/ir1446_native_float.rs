@@ -922,7 +922,13 @@ fn every_harness_of_every_operation_and_width_has_a_recorded_outcome_and_peak() 
         );
         if row.outcome == "VERIFIED" {
             assert!(!above, "a VERIFIED peak is at most 16 GiB: {}", row.id);
-            let seconds: f64 = row.time.trim_end_matches(" s").parse().expect("seconds");
+            let seconds: f64 = row
+                .time
+                .split(' ')
+                .next()
+                .unwrap()
+                .parse()
+                .expect("seconds");
             assert!(seconds < 600.0, "{}", row.id);
         } else if row.outcome == "timeout" {
             assert!(row.time.starts_with("600 s"), "{}", row.id);

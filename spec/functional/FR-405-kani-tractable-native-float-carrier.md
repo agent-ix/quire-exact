@@ -65,7 +65,7 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 
 ### Proof evidence
 
-19. For each combination that is VERIFIED under Behavior 15, a Kani harness SHALL prove the native operation over all operand bit patterns of the width, all six rounding spellings and all meter limits against an expected side whose full outcome (result bits including NaN payload, flags, outcome kind and charge sequence) is determined by a separately written reference. A harness whose expected side is a set of properties instead SHALL list in its docstring and in TC-953 exactly which outputs it covers, and the uncovered outputs are left to Behavior 17.
+19. For each combination that is VERIFIED under Behavior 15, a Kani harness SHALL prove the native operation over all operand bit patterns of the width, all six rounding spellings and all meter limits against an expected side whose full outcome (result bits including NaN payload, flags, outcome kind and charge sequence) is determined by a separately written reference. A combination MAY have several harnesses that together cover the six rounding spellings; it is VERIFIED only when every one of them is. A harness whose expected side is a set of properties instead SHALL list in its docstring and in TC-953 exactly which outputs it covers, and the uncovered outputs are left to Behavior 17.
 20. Each harness SHALL have a vacuity check: a cover that the result path is reachable, and a mutant of the native body that the harness fails.
 21. Each harness SHALL run under a 10-minute wall-clock limit and return a terminal verdict within it, and its recorded peak memory SHALL be at most the 16 GiB per-request ceiling of CG FR-028. The record SHALL give the peak, its provenance, the time and the tool version; a configured ceiling or a prediction is not a record. A harness that does not return, returns UNDECIDED or exhausts memory is inconclusive and is the measured row of Behavior 15, never a pass.
 22. The kernel SHALL claim no proof for a combination whose harness has no executed VERIFIED verdict, and its status SHALL record, per operation and width, the verdict or the table row.
@@ -92,7 +92,7 @@ A generated harness for `a + b` over two `float32` operands calls `kani::any::<u
 
 ## Status
 
-Implemented (IR-1446): `src/native_float.rs` (carrier, `evaluate_native_float`, `compare_native_float`), harnesses in `src/native_float/kani_proofs.rs`, tests in `tests/ir1446_native_float.rs`, the host mutants in `scripts/ir1446_native_float_mutants.py`. The verdict or table row per operation and width (TC-953's evidence record has the time, peak memory, tool version and harness id of each):
+Implemented (IR-1446): `src/native_float.rs` (carrier, `evaluate_native_float`, `compare_native_float`), harnesses in `src/native_float/kani_proofs.rs`, tests in `tests/ir1446_native_float.rs`, the host mutants in `scripts/ir1446_native_float_mutants.py` and the harness mutants in `scripts/ir1446_native_float_kani_mutants.py`. Not Done: the table rows below are for IR-1526 (the owner of the refusal seam and of the Kani tractability table) to load, and Behavior 15 is met in this repository by TC-953's evidence record. The verdict or table row per operation and width (TC-953's evidence record has the time, peak memory, tool version and harness id of each of the 44 harnesses, three per rounding operation and one per other operation):
 
 | Operation | Binary32 | Binary64 |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ Implemented (IR-1446): `src/native_float.rs` (carrier, `evaluate_native_float`, 
 | SquareRoot | table row: timeout | table row: timeout |
 | FusedMultiplyAdd | table row: timeout | table row: timeout |
 
-No proof is claimed for a table-row combination: its harness reached no verdict within 600 s and its peak memory (22.7 to 23.3 GB) is above the 16 GiB ceiling. The native operations for those combinations are host-callable and tested against the owner by the differential (AC-4 to AC-6, AC-10); that is a test, not a proof. The rows are for IR-1526's seam to load.
+No proof is claimed for a table-row combination. Its `Exact` and directed-spelling harnesses, and for Divide, SquareRoot and FusedMultiplyAdd also the `NearestEven` one, reached no verdict within the 600 s limit; 18 of the 31 such rows have a peak above the 16 GiB ceiling. The only proofs held for those combinations are the `NearestEven` harnesses of Add and Subtract at both widths and of Multiply at Binary32, each of which is VERIFIED, with its covers reached and a harness mutant it fails, and covers only what the harness docstring lists. The native operations for every combination are host-callable and tested against the owner by the differential (AC-4 to AC-6, AC-10); that is a test, not a proof.
 
 ## Dependencies
 
