@@ -372,6 +372,41 @@ fn ordering_and_equality_follow_the_numeric_order() {
     assert!(!equal(nat(0, 1), nat(1, 1)));
 }
 
+/// The five values in increasing order; a pair's expected comparison is the
+/// comparison of the positions, written without arithmetic.
+fn ranked() -> [NativeRational; 5] {
+    [nat(-1, 2), nat(0, 1), nat(1, 3), nat(1, 2), nat(2, 3)]
+}
+
+#[test]
+#[trace("TC-956", "FR-408-AC-5")]
+fn ordering_and_equality_agree_with_the_rank_table_over_twenty_five_pairs() {
+    let values = ranked();
+    for (i, left) in values.iter().enumerate() {
+        for (j, right) in values.iter().enumerate() {
+            use OrderingOperator as O;
+            let table = [
+                (O::Less, i < j),
+                (O::LessOrEqual, i <= j),
+                (O::Greater, i > j),
+                (O::GreaterOrEqual, i >= j),
+            ];
+            for (operator, expected) in table {
+                let mut meter = generous();
+                assert_eq!(
+                    completed(native_rational_order(operator, left, right, &mut meter)),
+                    expected,
+                    "{operator:?} {left:?} {right:?}"
+                );
+            }
+            let equal = native_rational_equal(left, right, &mut generous())
+                .completed()
+                .unwrap();
+            assert_eq!(equal, i == j, "{left:?} = {right:?}");
+        }
+    }
+}
+
 // ---- AC-6 ----
 
 fn capacity_of(result: Result<Outcome<impl std::fmt::Debug>, Refusal>) -> Capacity {
@@ -448,15 +483,32 @@ fn capacity_names_the_first_failing_quantity_and_charges_nothing() {
         native_rational_equal(&max, &big(i128::MIN), &mut generous()).completed(),
         Some(false)
     );
-    // Inside signed 64 bits nothing refuses.
-    let wide = [
+    // Inside signed 64 bits nothing refuses: the boundary sample and a
+    // deterministic seeded sample of canonical pairs.
+    let mut sample = vec![
         nat(i64::MIN, i64::MAX),
         nat(i64::MAX, 1),
         nat(1, i64::MAX),
         nat(i64::MIN, 1),
+        nat(-1, i64::MAX),
+        nat(i64::MAX, i64::MAX - 1),
+        nat(0, 1),
     ];
-    for left in &wide {
-        for right in &wide {
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut next = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    while sample.len() < 96 {
+        let (numerator, denominator) = (next() as i64, next() as i64);
+        if let Ok(value) = NativeRational::from_i64_parts(numerator, denominator) {
+            sample.push(value);
+        }
+    }
+    for left in &sample {
+        for right in &sample {
             let mut meter = generous();
             assert!(native_rational_add(left, right, &mut meter).is_ok());
             assert!(native_rational_subtract(left, right, &mut meter).is_ok());
@@ -873,22 +925,55 @@ fn native_path_equals_the_owner_route_over_the_cg_domain() {
 #[trace("TC-956", "FR-408-AC-9")]
 fn native_path_equals_the_owner_route_over_the_boundary_set() {
     let set = boundary();
-    let mut capacity_cases = 0;
+    let mut listed: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut completions = 0;
     for left in &set {
         for right in &set {
             for op in OPS {
                 match differ(op, left, right) {
-                    Some(_) => capacity_cases += 1,
+                    Some(cause) => {
+                        let name = match op {
+                            Op::Add => "add",
+                            Op::Subtract => "subtract",
+                            Op::Multiply => "multiply",
+                            Op::Order(_) => "order",
+                            Op::Equal => "equal",
+                        };
+                        *listed.entry(format!("{name} {cause:?}")).or_default() += 1;
+                    }
                     None => completions += 1,
                 }
             }
         }
     }
-    // Both branches of the width-tiered reduction and the capacity set are
-    // exercised.
-    assert!(capacity_cases > 0 && completions > 0);
+    let listed: Vec<_> = listed.into_iter().collect();
+    assert_eq!(
+        listed,
+        CAPACITY_LISTING.map(|(k, n)| (k.to_string(), n)),
+        "{listed:?}"
+    );
+    assert_eq!(
+        completions,
+        21 * 21 * 8 - listed.iter().map(|(_, n)| n).sum::<usize>()
+    );
 }
+
+/// The capacity inputs of the boundary set, by operation and first failing
+/// quantity: the exhaustive listing Behavior 19 asks for.
+const CAPACITY_LISTING: [(&str, usize); 12] = [
+    ("add Combination", 24),
+    ("add Denominator", 23),
+    ("add LeftProduct", 63),
+    ("add RightProduct", 58),
+    ("multiply Denominator", 59),
+    ("multiply LeftProduct", 72),
+    ("order LeftProduct", 252),
+    ("order RightProduct", 232),
+    ("subtract Combination", 25),
+    ("subtract Denominator", 23),
+    ("subtract LeftProduct", 63),
+    ("subtract RightProduct", 58),
+];
 
 #[test]
 #[trace("TC-956", "FR-408-AC-9")]

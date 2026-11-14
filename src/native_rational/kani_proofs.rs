@@ -9,6 +9,13 @@
 //! variant undecided and CBMC unwound drop glue without end. Each outcome is
 //! held in `ManuallyDrop` and matched by reference, as in the enum
 //! carrier's harnesses. No verdict is recorded here.
+//!
+//! The arithmetic harnesses check the aggregate `integer_bits` high-water of
+//! the whole charge sequence, the occurrence, work and result counters and the
+//! admission count. They do not observe the `rational-arithmetic.normalize`
+//! amount on its own: it never exceeds the arithmetic amount, so the
+//! high-water hides it. That amount is owned by the host tests, which compare
+//! every charge event against literals and the owner route.
 use super::reference::{self, Op};
 use super::{
     native_rational_add, native_rational_equal, native_rational_multiply, native_rational_order,
@@ -357,4 +364,160 @@ fn native_rational_add_is_commutative_over_cg_domain() {
         }
         _ => panic!("a sufficient meter completes"),
     }
+}
+
+/// One denied charge of `op` over the CG domain, with carriers built by field.
+fn denied_arithmetic(
+    op: Op,
+    limits: ScalarLimits,
+    point: ChargePoint,
+    kind: LimitKind,
+    prefix: u64,
+) {
+    let (left, right) = (cg_reference_carrier(), cg_reference_carrier());
+    let mut meter = Meter::new(limits);
+    let outcome = operate(op, &left, &right, &mut meter);
+    match &*outcome {
+        Ok(Outcome::Incomplete(record)) => {
+            kani::cover!(true, "denied path");
+            assert_eq!(record.charge_point, point);
+            assert_eq!(record.limit_kind, kind);
+        }
+        _ => panic!("the limit denies the charge"),
+    }
+    assert_eq!(meter.admission_count(), prefix);
+    assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+}
+
+#[kani::proof]
+fn native_rational_subtract_denies_the_operands_occurrences() {
+    denied_arithmetic(
+        Op::Subtract,
+        limits(u64::MAX, 1, u64::MAX, u64::MAX),
+        ChargePoint::RationalArithmeticOperands,
+        LimitKind::ValueOccurrences,
+        0,
+    );
+}
+
+#[kani::proof]
+fn native_rational_subtract_denies_the_result_unit() {
+    denied_arithmetic(
+        Op::Subtract,
+        limits(u64::MAX, u64::MAX, u64::MAX, 0),
+        ChargePoint::RationalArithmeticResultRetain,
+        LimitKind::ResultUnits,
+        3,
+    );
+}
+
+#[kani::proof]
+fn native_rational_multiply_denies_the_operands_occurrences() {
+    denied_arithmetic(
+        Op::Multiply,
+        limits(u64::MAX, 1, u64::MAX, u64::MAX),
+        ChargePoint::RationalArithmeticOperands,
+        LimitKind::ValueOccurrences,
+        0,
+    );
+}
+
+#[kani::proof]
+fn native_rational_multiply_denies_the_result_unit() {
+    denied_arithmetic(
+        Op::Multiply,
+        limits(u64::MAX, u64::MAX, u64::MAX, 0),
+        ChargePoint::RationalArithmeticResultRetain,
+        LimitKind::ResultUnits,
+        3,
+    );
+}
+
+fn denied_order(limits: ScalarLimits, point: ChargePoint, kind: LimitKind, prefix: u64) {
+    let (left, right) = (cg_reference_carrier(), cg_reference_carrier());
+    let mut meter = Meter::new(limits);
+    let outcome = ManuallyDrop::new(native_rational_order(
+        symbolic_ordering(),
+        &left,
+        &right,
+        &mut meter,
+    ));
+    match &*outcome {
+        Ok(Outcome::Incomplete(record)) => {
+            kani::cover!(true, "denied path");
+            assert_eq!(record.charge_point, point);
+            assert_eq!(record.limit_kind, kind);
+        }
+        _ => panic!("the limit denies the charge"),
+    }
+    assert_eq!(meter.admission_count(), prefix);
+    assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+}
+
+#[kani::proof]
+fn native_rational_order_denies_the_operands_occurrences() {
+    denied_order(
+        limits(u64::MAX, 1, u64::MAX, u64::MAX),
+        ChargePoint::OrderingOperands,
+        LimitKind::ValueOccurrences,
+        0,
+    );
+}
+
+#[kani::proof]
+fn native_rational_order_denies_the_result_unit() {
+    denied_order(
+        limits(u64::MAX, u64::MAX, u64::MAX, 0),
+        ChargePoint::OrderingResultRetain,
+        LimitKind::ResultUnits,
+        2,
+    );
+}
+
+fn denied_equal(limits: ScalarLimits, point: ChargePoint, kind: LimitKind, prefix: u64) {
+    let (left, right) = (cg_reference_carrier(), cg_reference_carrier());
+    let mut meter = Meter::new(limits);
+    let outcome = ManuallyDrop::new(native_rational_equal(&left, &right, &mut meter));
+    match &*outcome {
+        Outcome::Incomplete(record) => {
+            kani::cover!(true, "denied path");
+            assert_eq!(record.charge_point, point);
+            assert_eq!(record.limit_kind, kind);
+        }
+        _ => panic!("the limit denies the charge"),
+    }
+    assert_eq!(meter.admission_count(), prefix);
+    assert_eq!(meter.consumed(LimitKind::ResultUnits), 0);
+}
+
+#[kani::proof]
+fn native_rational_equal_denies_the_plan_form_occurrence() {
+    denied_equal(
+        limits(u64::MAX, 0, u64::MAX, u64::MAX),
+        ChargePoint::EqualityPlanForm,
+        LimitKind::ValueOccurrences,
+        0,
+    );
+}
+
+#[kani::proof]
+fn native_rational_equal_denies_the_plan_result_unit() {
+    denied_equal(
+        limits(u64::MAX, u64::MAX, u64::MAX, 0),
+        ChargePoint::EqualityPlan,
+        LimitKind::ResultUnits,
+        1,
+    );
+}
+
+#[kani::proof]
+fn native_rational_subtract_full_i64_matches_reference() {
+    arithmetic_completes(Op::Subtract, full_carrier(), full_carrier(), true);
+}
+
+/// Subtract over the CG domain with carriers drawn through `from_i64_parts`,
+/// as the CG row builds them.
+#[kani::proof]
+fn native_rational_subtract_cg_domain_from_i64_parts_matches_reference() {
+    arithmetic_completes(Op::Subtract, cg_carrier(), cg_carrier(), false);
 }
