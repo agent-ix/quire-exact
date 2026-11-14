@@ -43,6 +43,7 @@ def table():
 
 
 def run(harness, mutant_id):
+    harness = harness.removeprefix("native_float_kani_proofs::")
     mid, site, file, old, new, _ = MUTANTS[mutant_id]
     work = tempfile.mkdtemp(prefix=f"ir1446-kani-{harness}-")
     try:
@@ -55,7 +56,7 @@ def run(harness, mutant_id):
         open(path, "w").write(text.replace(old, new))
         proc = subprocess.run(
             ["cargo", "kani", "--harness", f"native_float_kani_proofs::{harness}", "--exact",
-             "--unwind", "57", "--jobs", "1", "--solver", "cadical"],
+             "--jobs", "1", "--solver", "cadical"],
             cwd=work, capture_output=True, text=True, timeout=700)
         verdict = re.search(r"VERIFICATION:- (\w+)", proc.stdout + proc.stderr)
         return verdict.group(1) if verdict else "NO-VERDICT"
@@ -67,7 +68,7 @@ def main():
     only = set(sys.argv[1:])
     bad = 0
     for harness, _covers, mutant_id, _verdict in table():
-        if only and harness not in only:
+        if only and harness.removeprefix("native_float_kani_proofs::") not in only:
             continue
         verdict = run(harness, mutant_id)
         print(f"{harness:48} {mutant_id:28} {verdict}", flush=True)

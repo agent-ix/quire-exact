@@ -28,10 +28,9 @@
 //! signalling or no operand is a NaN; that only `Exact` refuses; the width and
 //! rounding provenance; the result-unit charge.
 //!
-//! Square root. Kani's model of the host `sqrt` is not bit-exact, so its
-//! expected side is an exact-integer bracket of the correctly rounded root. The
-//! divide expected side computes the infinite-operand quotients analytically
-//! because CBMC's `--nan-check` over-reports a division by infinity.
+//! Square root and divide. Kani's model of the host `sqrt` and `/` is not
+//! bit-exact, so their expected sides are exact-integer brackets of the
+//! correctly rounded root and quotient (zero and infinite operands analytically).
 //!
 //! Left to the host differential: result bits under the four directed and
 //! nearest-away spellings, the `overflow`, `underflow`, `inexact` and
@@ -80,7 +79,7 @@ fn any_directed() -> RoundingMode {
 }
 
 macro_rules! width_checks {
-    ($bits:ty, $float:ty, $width:expr, $fraction:expr) => {
+    ($bits:ty, $wide:ty, $float:ty, $width:expr, $fraction:expr) => {
         const EXPONENT_ONES: $bits = ((1 as $bits) << (<$bits>::BITS - 1 - $fraction)) - 1;
         const FRACTION_MASK: $bits = ((1 as $bits) << $fraction) - 1;
         const SIGN: $bits = (1 as $bits) << (<$bits>::BITS - 1);
@@ -165,33 +164,40 @@ macro_rules! width_checks {
         }
 
         /// The significand and exponent of a finite value: `m * 2^e`.
-        fn decode(bits: $bits) -> (u128, i32) {
-            let fraction = (bits & FRACTION_MASK) as u128;
+        fn decode(bits: $bits) -> ($wide, i32) {
+            let fraction = (bits & FRACTION_MASK) as $wide;
             let field = ((bits >> $fraction) & EXPONENT_ONES) as i32;
             let bias = (EXPONENT_ONES >> 1) as i32;
             if field == 0 {
                 (fraction, 1 - bias - $fraction)
             } else {
-                (fraction | (1u128 << $fraction), field - bias - $fraction)
+                (
+                    fraction | ((1 as $wide) << $fraction),
+                    field - bias - $fraction,
+                )
+            }
+        }
+
+        /// Orders `m1 * 2^e1` against `m2 * 2^e2` in exact integers.
+        fn compare_scaled(m1: $wide, e1: i32, m2: $wide, e2: i32) -> core::cmp::Ordering {
+            use core::cmp::Ordering;
+            let shift = e1 - e2;
+            if shift >= 0 {
+                if shift as u32 > m1.leading_zeros() {
+                    Ordering::Greater
+                } else {
+                    (m1 << shift).cmp(&m2)
+                }
+            } else if (-shift) as u32 > m2.leading_zeros() {
+                Ordering::Less
+            } else {
+                m1.cmp(&(m2 << (-shift)))
             }
         }
 
         /// Orders `mx * 2^ex` against `b^2 * 2^(2 eb)` in exact integers.
-        fn compare_to_square(mx: u128, ex: i32, b: u128, eb: i32) -> core::cmp::Ordering {
-            use core::cmp::Ordering;
-            let square = b * b;
-            let shift = ex - 2 * eb;
-            if shift >= 0 {
-                if shift as u32 > mx.leading_zeros() {
-                    Ordering::Greater
-                } else {
-                    (mx << shift).cmp(&square)
-                }
-            } else if (-shift) as u32 > square.leading_zeros() {
-                Ordering::Less
-            } else {
-                mx.cmp(&(square << (-shift)))
-            }
+        fn compare_to_square(mx: $wide, ex: i32, b: $wide, eb: i32) -> core::cmp::Ordering {
+            compare_scaled(mx, ex, b * b, 2 * eb)
         }
 
         /// Whether `r` is the nearest-even square root of the positive finite
@@ -205,7 +211,7 @@ macro_rules! width_checks {
                 return false;
             }
             let emin = 1 - (EXPONENT_ONES >> 1) as i32 - $fraction;
-            let (lower, lower_exp) = if mr == (1u128 << $fraction) && er > emin {
+            let (lower, lower_exp) = if mr == ((1 as $wide) << $fraction) && er > emin {
                 (4 * mr - 1, er - 2)
             } else {
                 (2 * mr - 1, er - 1)
@@ -231,6 +237,55 @@ macro_rules! width_checks {
                 r == x
             } else {
                 square_root_is_nearest_even(x, r)
+            }
+        }
+
+        /// Whether `r` is the nearest-even quotient of the positive finite
+        /// nonzero `x` and `y`: `x / y` lies between the midpoints that bound
+        /// `r` (a midpoint belonging to `r` only when `r` is even). An infinite
+        /// `r` is the unbounded binade above the largest finite value and has
+        /// only the lower bound; a zero `r` has only the upper bound.
+        fn quotient_is_nearest_even(x: $bits, y: $bits, r: $bits) -> bool {
+            use core::cmp::Ordering;
+            let (mx, ex) = decode(x);
+            let (my, ey) = decode(y);
+            let (mr, er) = decode(r);
+            let emin = 1 - (EXPONENT_ONES >> 1) as i32 - $fraction;
+            let (lower, lower_exp) = if mr == ((1 as $wide) << $fraction) && er > emin {
+                (4 * mr - 1, er - 2)
+            } else {
+                ((2 * mr).saturating_sub(1), er - 1)
+            };
+            let even = mr % 2 == 0;
+            let above = mr == 0
+                || match compare_scaled(mx, ex, lower * my, lower_exp + ey) {
+                    Ordering::Greater => true,
+                    Ordering::Equal => even,
+                    Ordering::Less => false,
+                };
+            let below = is_infinite(r)
+                || match compare_scaled(mx, ex, (2 * mr + 1) * my, er - 1 + ey) {
+                    Ordering::Less => true,
+                    Ordering::Equal => even,
+                    Ordering::Greater => false,
+                };
+            above && below
+        }
+
+        /// The quotient's reference for non-NaN operands: the sign is the xor
+        /// of the signs; a zero or infinite operand gives zero or infinity;
+        /// finite nonzero operands are bracketed by `quotient_is_nearest_even`.
+        pub(super) fn divide_reference_holds(x: $bits, y: $bits, r: $bits) -> bool {
+            let negative = is_negative(x) != is_negative(y);
+            if is_negative(r) != negative {
+                return false;
+            }
+            if is_infinite(x) || is_zero(y) {
+                is_infinite(r)
+            } else if is_infinite(y) || is_zero(x) {
+                is_zero(r)
+            } else {
+                quotient_is_nearest_even(x & !SIGN, y & !SIGN, r & !SIGN)
             }
         }
 
@@ -315,12 +370,12 @@ macro_rules! width_checks {
 
 mod w32 {
     use super::*;
-    width_checks!(u32, f32, IeeeWidth::Binary32, 23);
+    width_checks!(u32, u64, f32, IeeeWidth::Binary32, 23);
 }
 
 mod w64 {
     use super::*;
-    width_checks!(u64, f64, IeeeWidth::Binary64, 52);
+    width_checks!(u64, u128, f64, IeeeWidth::Binary64, 52);
 }
 
 macro_rules! arithmetic_harness {
@@ -384,6 +439,57 @@ macro_rules! square_root_harness {
             };
             $module::check(rounding, outcome, &meter, &[a], expected);
         }
+    };
+}
+
+/// The divide harness: Kani's own model of the host `/` is not bit-exact
+/// (it differs from the hardware quotient for `0x800000A9 / 0x9C873333` under
+/// symbolic operands), so the expected side is the exact-integer bracket of
+/// the correctly rounded quotient.
+macro_rules! divide_harness {
+    ($name:ident, $module:ident, $bits:ty, $carrier:ident, $rounding:expr) => {
+        #[kani::proof]
+        #[kani::unwind(57)]
+        fn $name() {
+            let (a, b): ($bits, $bits) = (kani::any(), kani::any());
+            let rounding: RoundingMode = $rounding;
+            let mut meter = generous_meter();
+            let outcome = evaluate_native_float(
+                NativeFloatOperation::Divide(NativeFloat::$carrier(a), NativeFloat::$carrier(b)),
+                rounding,
+                &mut meter,
+            );
+            let expected: Option<$bits> = if $module::nan_divide(a, b) {
+                None
+            } else {
+                Some(match &outcome {
+                    Ok(Outcome::Completed(result)) => {
+                        let r = result.value.bits() as $bits;
+                        if rounding == RoundingMode::NearestEven || rounding == RoundingMode::Exact
+                        {
+                            assert!($module::divide_reference_holds(a, b, r));
+                        }
+                        r
+                    }
+                    _ => 0,
+                })
+            };
+            $module::check(rounding, outcome, &meter, &[a, b], expected);
+        }
+    };
+}
+
+macro_rules! divide_trio {
+    ($nearest_even:ident, $exact:ident, $directed:ident, $module:ident, $bits:ty, $carrier:ident) => {
+        divide_harness!(
+            $nearest_even,
+            $module,
+            $bits,
+            $carrier,
+            RoundingMode::NearestEven
+        );
+        divide_harness!($exact, $module, $bits, $carrier, RoundingMode::Exact);
+        divide_harness!($directed, $module, $bits, $carrier, any_directed());
     };
 }
 
@@ -451,33 +557,13 @@ arithmetic_trio!(
     |a, b| NativeFloatOperation::Multiply(a, b),
     a * b
 );
-arithmetic_trio!(
+divide_trio!(
     float32_divide_nearest_even,
     float32_divide_exact,
     float32_divide_directed,
     w32,
     u32,
-    f32,
-    binary32,
-    nan_divide,
-    |a, b| NativeFloatOperation::Divide(a, b),
-    {
-        if a.is_infinite() {
-            if a.is_sign_negative() != b.is_sign_negative() {
-                -f32::INFINITY
-            } else {
-                f32::INFINITY
-            }
-        } else if b.is_infinite() {
-            if a.is_sign_negative() != b.is_sign_negative() {
-                -0.0f32
-            } else {
-                0.0f32
-            }
-        } else {
-            a / b
-        }
-    }
+    binary32
 );
 square_root_trio!(
     float32_square_root_nearest_even,
@@ -535,33 +621,13 @@ arithmetic_trio!(
     |a, b| NativeFloatOperation::Multiply(a, b),
     a * b
 );
-arithmetic_trio!(
+divide_trio!(
     float64_divide_nearest_even,
     float64_divide_exact,
     float64_divide_directed,
     w64,
     u64,
-    f64,
-    binary64,
-    nan_divide,
-    |a, b| NativeFloatOperation::Divide(a, b),
-    {
-        if a.is_infinite() {
-            if a.is_sign_negative() != b.is_sign_negative() {
-                -f64::INFINITY
-            } else {
-                f64::INFINITY
-            }
-        } else if b.is_infinite() {
-            if a.is_sign_negative() != b.is_sign_negative() {
-                -0.0f64
-            } else {
-                0.0f64
-            }
-        } else {
-            a / b
-        }
-    }
+    binary64
 );
 square_root_trio!(
     float64_square_root_nearest_even,
