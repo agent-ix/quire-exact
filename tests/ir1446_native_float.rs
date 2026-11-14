@@ -972,28 +972,24 @@ fn the_status_records_a_verdict_or_table_row_for_every_operation_and_width() {
     assert!(status.contains("No proof is claimed for a table-row combination"));
 }
 
-/// The number of `kani::cover!` properties the harness `id` carries: the
-/// negation checker, the comparison macro or the shared arithmetic checker.
+/// The number of `kani::cover!` properties TC-953 states for the harness `id`:
+/// one for negation, two for a comparison, three for an arithmetic harness.
 fn cover_count(id: &str) -> usize {
-    let source = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/native_float/kani_proofs.rs"
-    ))
-    .expect("harness source readable");
-    let between = |from: &str, to: &str| {
-        let start = source.find(from).expect("start marker");
-        let end = start + source[start..].find(to).expect("end marker");
-        source[start..end].matches("kani::cover!").count()
-    };
     if id.ends_with("_negate") {
-        between("fn check_negate(", "pub(super) fn check(")
+        1
     } else if ["_numeric_equal", "_total_order", "_bit_identical"]
         .iter()
         .any(|s| id.ends_with(s))
     {
-        between("macro_rules! comparison_harness", "fn total_order_32")
+        2
     } else {
-        between("pub(super) fn check(", "mod w32")
+        assert!(
+            ["_nearest_even", "_exact", "_directed"]
+                .iter()
+                .any(|s| id.ends_with(s)),
+            "{id}"
+        );
+        3
     }
 }
 
