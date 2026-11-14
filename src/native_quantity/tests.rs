@@ -287,14 +287,17 @@ fn coprime_agrees_with_the_reference_gcd_on_worst_cases() {
         for &b in &samples {
             if a != 0 && b != 0 {
                 assert_eq!(
-                    super::coprime(a, b),
+                    crate::native_fraction::coprime(a, b),
                     reference::gcd(a, b) == 1,
                     "({a}, {b})"
                 );
             }
         }
     }
-    assert!(super::coprime(fibonacci[92], fibonacci[91]));
+    assert!(crate::native_fraction::coprime(
+        fibonacci[92],
+        fibonacci[91]
+    ));
 }
 
 /// The whole domain of the bounded Kani companions, enumerated.

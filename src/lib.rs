@@ -109,8 +109,10 @@ mod native_float;
 #[cfg(kani)]
 #[path = "native_float/kani_proofs.rs"]
 mod native_float_kani_proofs;
+mod native_fraction;
 mod native_integer;
 mod native_quantity;
+mod native_rational;
 mod native_text;
 #[cfg(kani)]
 #[path = "native_text/kani_proofs.rs"]
@@ -206,6 +208,10 @@ pub use native_integer::{
     NativeIntegerSchedule,
 };
 pub use native_quantity::{NativeQuantity, NativeQuantityRefusal, QuantityBindings};
+pub use native_rational::{
+    native_rational_add, native_rational_equal, native_rational_multiply, native_rational_order,
+    native_rational_subtract, NativeRational, NativeRationalCapacity, NativeRationalRefusal,
+};
 pub use native_text::{
     compare_native_text, normalize_text, unwind_bound, NativeText, NativeTextRefusal,
     NormalizeRefusal, NormalizedSize, NATIVE_TEXT_CAPACITY,
