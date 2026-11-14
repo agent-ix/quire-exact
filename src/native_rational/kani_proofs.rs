@@ -56,6 +56,21 @@ fn cg_carrier() -> NativeRational {
     }
 }
 
+/// The same carriers as [`cg_carrier`], built by field and constrained
+/// canonical by the reference Euclid instead of by `from_i64_parts`, whose
+/// 128-step test is proved against the reference separately and would
+/// otherwise be unrolled twice more into every arithmetic proof.
+fn cg_reference_carrier() -> NativeRational {
+    let numerator: i64 = kani::any();
+    let denominator: i64 = kani::any();
+    kani::assume((-9..=9).contains(&numerator) && (1..=9).contains(&denominator));
+    kani::assume(reference::canonical_small(numerator, denominator));
+    NativeRational {
+        numerator: i128::from(numerator),
+        denominator: i128::from(denominator),
+    }
+}
+
 /// A canonical carrier over the full `i64` domain.
 fn full_carrier() -> NativeRational {
     let numerator: i64 = kani::any();
@@ -135,17 +150,32 @@ fn native_rational_from_i64_parts_matches_reference() {
 
 #[kani::proof]
 fn native_rational_add_cg_domain_matches_reference() {
-    arithmetic_completes(Op::Add, cg_carrier(), cg_carrier(), false);
+    arithmetic_completes(
+        Op::Add,
+        cg_reference_carrier(),
+        cg_reference_carrier(),
+        false,
+    );
 }
 
 #[kani::proof]
 fn native_rational_subtract_cg_domain_matches_reference() {
-    arithmetic_completes(Op::Subtract, cg_carrier(), cg_carrier(), false);
+    arithmetic_completes(
+        Op::Subtract,
+        cg_reference_carrier(),
+        cg_reference_carrier(),
+        false,
+    );
 }
 
 #[kani::proof]
 fn native_rational_multiply_cg_domain_matches_reference() {
-    arithmetic_completes(Op::Multiply, cg_carrier(), cg_carrier(), false);
+    arithmetic_completes(
+        Op::Multiply,
+        cg_reference_carrier(),
+        cg_reference_carrier(),
+        false,
+    );
 }
 
 #[kani::proof]
@@ -310,7 +340,7 @@ fn native_rational_add_denies_the_result_unit() {
 /// The composed predicate `add(a, b) == add(b, a)` over the CG domain.
 #[kani::proof]
 fn native_rational_add_is_commutative_over_cg_domain() {
-    let (left, right) = (cg_carrier(), cg_carrier());
+    let (left, right) = (cg_reference_carrier(), cg_reference_carrier());
     let mut meter = sufficient();
     let forward = ManuallyDrop::new(native_rational_add(&left, &right, &mut meter));
     let backward = ManuallyDrop::new(native_rational_add(&right, &left, &mut meter));

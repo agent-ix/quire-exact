@@ -65,6 +65,17 @@ pub(super) fn reduce(n: i128, d: i128, wide: bool) -> (i128, i128) {
     }
 }
 
+/// Whether `n / d` is canonical for `|n| <= 9`-sized magnitudes, where 16
+/// Euclid steps end the algorithm.
+pub(super) fn canonical_small(n: i64, d: i64) -> bool {
+    d > 0
+        && if n == 0 {
+            d == 1
+        } else {
+            small_16((n.unsigned_abs(), d.unsigned_abs())).0 == 1
+        }
+}
+
 /// The expected outcome of `from_i64_parts`: Euclid over `u64` ends within 92
 /// steps, and 128 are taken.
 pub(super) fn from_parts(n: i64, d: i64) -> Result<(i128, i128), Refusal> {
